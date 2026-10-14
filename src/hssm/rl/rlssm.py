@@ -91,9 +91,13 @@ class _RLSSM(HSSMBase):
     lapse : dict | bmb.Prior | None, optional
         Lapse distribution. Defaults to ``None``.
     link_settings : Literal["log_logit"] | None, optional
-        Link-function preset. Defaults to ``None``.
+        Link-function preset for regression parameters without an explicit link.
+        Accepts ``"log_logit"`` or ``None``. Defaults to ``None``.
     prior_settings : Literal["safe"] | None, optional
-        Prior preset. Defaults to ``"safe"``.
+        Generated regression-term prior preset. ``"safe"`` uses HSSM defaults;
+        ``None`` delegates missing regression-term priors to Bambi. Parameters without
+        regressions retain their explicit, model-config, or bounds-derived priors.
+        Defaults to ``"safe"``.
     extra_namespace : dict | None, optional
         Extra variables for formula evaluation. Defaults to ``None``.
     missing_data : bool | float, optional
@@ -360,6 +364,8 @@ class _RLSSM(HSSMBase):
             extra_fields=extra_fields_data,
             params_is_trialwise=params_is_trialwise,
             is_choice_only=self.model_config.is_choice_only,
+            # __init__ takes an RLSSMConfig, which is where ndt_edge_shift lives.
+            ndt_edge_shift=cast("RLSSMConfig", self.model_config).ndt_edge_shift,
         )
 
 
@@ -447,9 +453,13 @@ class RLSSM(_RLSSM):
     lapse : dict | bmb.Prior | None, optional
         Lapse distribution. Defaults to ``None``.
     link_settings : Literal["log_logit"] | None, optional
-        Link-function preset. Defaults to ``None``.
+        Link-function preset for regression parameters without an explicit link.
+        Accepts ``"log_logit"`` or ``None``. Defaults to ``None``.
     prior_settings : Literal["safe"] | None, optional
-        Prior preset. Defaults to ``"safe"``.
+        Generated regression-term prior preset. ``"safe"`` uses HSSM defaults;
+        ``None`` delegates missing regression-term priors to Bambi. Parameters without
+        regressions retain their explicit, model-config, or bounds-derived priors.
+        Defaults to ``"safe"``.
     extra_namespace : dict | None, optional
         Extra variables for formula evaluation. Defaults to ``None``.
     process_initvals : bool, optional

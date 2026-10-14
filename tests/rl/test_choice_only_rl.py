@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import bambi as bmb
 import jax.numpy as jnp
 import numpy as np
@@ -230,6 +232,33 @@ def test_choice_only_rlssm_warns_for_missing_declared_choices():
             p_outlier=None,
             prior_settings=None,
         )
+
+
+@pytest.mark.parametrize(
+    ("setting_name", "invalid_value", "preset"),
+    [
+        ("prior_settings", "SAFE", "safe"),
+        ("link_settings", "LOG_LOGIT", "log_logit"),
+    ],
+)
+def test_choice_only_rlssm_rejects_invalid_setting_presets(
+    setting_name, invalid_value, preset
+):
+    """Choice-only RLSSM uses the shared preset validation path."""
+    with patch("hssm.base.Params.from_user_specs") as make_params:
+        with pytest.raises(
+            ValueError,
+            match=rf"`{setting_name}` must be either '{preset}' or None",
+        ):
+            hssm.RLSSM(
+                data=_fake_choice_only_data([0, 1, 0, 1]),
+                model_config=_fake_choice_only_config(),
+                p_outlier=None,
+                process_initvals=False,
+                **{setting_name: invalid_value},
+            )
+
+    make_params.assert_not_called()
 
 
 def _make_shell_rlssm(config, lapse):

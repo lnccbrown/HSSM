@@ -191,6 +191,20 @@ class TestRLSSMConfigCreation:
         assert config.choices == expected_choices
         assert config.learning_process == expected_learning_process
 
+    def test_from_rlssm_dict_round_trips_ndt_edge_shift(self):
+        """The optional ndt_edge_shift key lands on the config as given."""
+        config_dict = create_config_dict(
+            model_name="ndt_rlssm",
+            list_params=["alpha", "t", "st"],
+            params_default=[0.5, 0.3, 0.1],
+            bounds={"alpha": (0.0, 1.0), "t": (0.0, 2.0), "st": (0.0, 1.0)},
+        )
+        config_dict["ndt_edge_shift"] = {"param": "st", "scale": 1.0}
+
+        config = RLSSMConfig.from_rlssm_dict(config_dict)
+
+        assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}
+
 
 class TestRLSSMConfigValidation:
     """Tests for RLSSMConfig validation behavior."""
@@ -292,6 +306,45 @@ class TestRLSSMConfigValidation:
         config = RLSSMConfig(**kwargs)
         with pytest.raises(ValueError, match="Missing bounds for parameter"):
             config.validate()
+
+    @pytest.mark.parametrize(
+        ("list_params", "ndt_edge_shift", "match"),
+        [
+            (["alpha", "t"], {"param": "st", "scale": 1.0}, "names the parameter"),
+            (["alpha", "st"], {"param": "st", "scale": 1.0}, "`t` is not in"),
+            (["alpha", "t", "st"], {"param": "st", "scale": float("nan")}, "scale"),
+            (["alpha", "t", "st"], {"scale": 1.0}, "keys 'param' and 'scale'"),
+        ],
+        ids=["param_not_in_list_params", "no_t", "nan_scale", "no_param"],
+    )
+    def test_validate_rejects_bad_ndt_edge_shift(
+        self, valid_rlssmconfig_kwargs, list_params, ndt_edge_shift, match
+    ):
+        """The shared declaration rules apply to the sampled parameters."""
+        config = RLSSMConfig(
+            **{
+                **valid_rlssmconfig_kwargs,
+                "list_params": list_params,
+                "params_default": [0.5] * len(list_params),
+                "bounds": {p: (0.0, 1.0) for p in list_params},
+                "ndt_edge_shift": ndt_edge_shift,
+            }
+        )
+        with pytest.raises(ValueError, match=match):
+            config.validate()
+
+    def test_validate_accepts_ndt_edge_shift(self, valid_rlssmconfig_kwargs):
+        """A declaration that names sampled parameters validates."""
+        config = RLSSMConfig(
+            **{
+                **valid_rlssmconfig_kwargs,
+                "list_params": ["alpha", "t", "st"],
+                "params_default": [0.5, 0.3, 0.1],
+                "bounds": {"alpha": (0.0, 1.0), "t": (0.0, 2.0), "st": (0.0, 1.0)},
+                "ndt_edge_shift": {"param": "st", "scale": 1.0},
+            }
+        )
+        config.validate()
 
     def test_from_defaults_raises(self):
         """RLSSMConfig.from_defaults() must raise NotImplementedError."""
@@ -514,6 +567,42 @@ class TestRLSSMConfigEdgeCases:
             learning_process={},
         )
 
+    def test_modelconfig_decision_process_brings_its_ndt_edge_shift(self):
+        """A ModelConfig decision process hands its declaration to the RLSSM config."""
+        decision_config = ModelConfig(
+            response=["rt", "response"],
+            list_params=["v", "a", "z", "t", "st"],
+            choices=[0, 1],
+            ndt_edge_shift={"param": "st", "scale": 1.0},
+        )
+        config = RLSSMConfig(
+            model_name="test_model",
+            list_params=["alpha", "t", "st"],
+            params_default=[0.0, 0.5, 0.1],
+            decision_process=decision_config,
+            response=["rt", "response"],
+            choices=[0, 1],
+            decision_process_loglik_kind="analytical",
+            learning_process_kind="blackbox",
+            learning_process={},
+        )
+        assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}
+        assert config.ndt_edge_shift is not decision_config.ndt_edge_shift
+        # An explicit declaration on the RLSSM config wins.
+        explicit = RLSSMConfig(
+            model_name="test_model",
+            list_params=["alpha", "t", "st"],
+            params_default=[0.0, 0.5, 0.1],
+            decision_process=decision_config,
+            response=["rt", "response"],
+            choices=[0, 1],
+            decision_process_loglik_kind="analytical",
+            learning_process_kind="blackbox",
+            learning_process={},
+            ndt_edge_shift={"param": "st", "scale": 2.0},
+        )
+        assert explicit.ndt_edge_shift == {"param": "st", "scale": 2.0}
+
 
 class TestRLSSMConfigDefaultWarnings:
     """Warnings are emitted when 'response' or 'choices' are missing from config_dict."""
@@ -568,6 +657,15 @@ class TestRLSSMConfigDefaultWarnings:
         with caplog.at_level("WARNING", logger="hssm"):
             RLSSMConfig.from_rlssm_dict(_base_config_dict)
         assert not any("not specified" in m for m in caplog.messages)
+
+    def test_no_warning_when_ndt_edge_shift_missing(self, _base_config_dict, caplog):
+        """A config dict without ndt_edge_shift gets None, silently."""
+        _base_config_dict["response"] = ["rt", "response"]
+        _base_config_dict["choices"] = (0, 1)
+        with caplog.at_level("WARNING", logger="hssm"):
+            config = RLSSMConfig.from_rlssm_dict(_base_config_dict)
+        assert config.ndt_edge_shift is None
+        assert not caplog.messages
 
 
 # region ssms.rl bridge (from_ssms_model)
@@ -764,6 +862,52 @@ class TestRLSSMConfigFromSSMSModel:
         ]
         assert config._ssms_response_to_choice == {-1: 0, 1: 1}
         assert config._ssms_assembled_model is not None
+
+    def test_from_ssms_model_carries_decision_process_ndt_edge_shift(self, monkeypatch):
+        """The backbone's declaration reaches the config through the spec lookup.
+
+        The learning kernel (ssms) knows nothing of the support edge; it comes
+        from HSSM's decision-process spec, here a fake ``angle`` modelconfig
+        entry with non-decision-time variability that declares its edge.
+        """
+        import hssm.modelconfig as mc_module
+
+        class _NdtAssembled(_FakeSSMSAssembledModel):
+            def __init__(self, config, *, backend, gradient):
+                super().__init__(config, backend=backend, gradient=gradient)
+                self.list_params = [*self.list_params, "st"]
+                self.bounds = {**self.bounds, "st": (0.0, 1.0)}
+                self.params_default = [*self.params_default, 0.1]
+
+        class _NdtConfig(_FakeSSMSModelConfig):
+            def assemble(self, backend="auto"):
+                return _NdtAssembled(self, backend=backend, gradient=self.gradient)
+
+        def _fake_get(name):
+            return {
+                "list_params": ["v", "a", "z", "t", "theta", "st"],
+                "response": ["rt", "response"],
+                "likelihoods": {
+                    "approx_differentiable": {
+                        "loglik": "angle_st.onnx",
+                        "bounds": {},
+                        "backend": "jax",
+                        "ndt_edge_shift": {"param": "st", "scale": 1.0},
+                    },
+                },
+            }
+
+        fake_rl = types.SimpleNamespace(
+            ModelConfig=_NdtConfig, resolve_model=lambda model: _NdtConfig()
+        )
+        monkeypatch.setitem(sys.modules, "ssms.rl", fake_rl)
+        monkeypatch.setattr(mc_module, "get_default_model_config", _fake_get)
+        _install_fake_decision_logp(monkeypatch)
+
+        config = RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+
+        assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}
+        config.validate()
 
     def test_computed_function_uses_ssms_response_to_choice(self, monkeypatch):
         """Check computed functions map raw SSM responses to ssms choices."""

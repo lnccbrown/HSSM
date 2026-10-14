@@ -61,10 +61,11 @@ class HSSM(HSSMBase):
         columns "rt" and "response".
     model
         The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
-        "full_ddm", "angle", "levy", "ornstein", "weibull", "race_no_bias_angle_4",
-        "ddm_seq2_no_bias". If any other string is passed, the model will be considered
-        custom, in which case all `model_config`, `loglik`, and `loglik_kind` have to be
-        provided by the user.
+        "full_ddm", "angle", "angle_extended", "levy", "ornstein", "weibull",
+        "race_no_bias_angle_4",
+        "ddm_seq2_no_bias", "gamma_drift", "gamma_drift_angle". If any other string
+        is passed, the model will be considered custom, in which case all
+        `model_config`, `loglik`, and `loglik_kind` have to be provided by the user.
     choices : optional
         When an `int`, the number of choices that the participants can make. If `2`, the
         choices are [-1, 1] by default. If anything greater than `2`, the choices are
@@ -104,6 +105,10 @@ class HSSM(HSSMBase):
         - `"default_priors"`: A `dict` indicating the default priors for each parameter.
         - `"bounds"`: A `dict` indicating the boundaries for each parameter. In the case
             of LAN, these bounds are training boundaries.
+        - `"ndt_edge_shift"`: Optional. A `dict` with keys `"param"` and `"scale"`
+            declaring that the likelihood's support starts at `t - scale * param`
+            rather than at `t`, so that only response times at or below that edge
+            are floored. Overrides the declaration bundled with the likelihood.
         - `"rv"`: Optional. Can be a `RandomVariable` class containing the user's own
             `rng_fn` function for sampling from the distribution that the user is
             supplying. If not supplied, HSSM will automatically generate a
@@ -158,25 +163,35 @@ class HSSM(HSSMBase):
         parameters. If you specify parameter-wise regressions in addition, these will
         override the global regression for the respective parameter.
     link_settings : optional
-        An optional string literal that indicates the link functions to use for each
-        parameter. Helpful for hierarchical models where sampling might get stuck/
-        very slow. Can be one of the following:
+        A preset for regression parameters whose link is not specified explicitly.
+        Helpful for hierarchical models where sampling might get stuck or become very
+        slow. Can be one of the following:
 
-        - `"log_logit"`: applies log link functions to positive parameters and
-        generalized logit link functions to parameters that have explicit bounds.
-        - `None`: unless otherwise specified, the `"identity"` link functions will be
-        used.
-        The default value is `None`.
+        - `"log_logit"`: uses identity for bounds `(-inf, inf)`, log for
+        `(0, inf)`, and generalized logit when both bounds are finite.
+        - `None`: uses the `"identity"` link unless a regression parameter specifies
+        another link. A bounded parameter used in a regression with the identity link
+        does not have its bounds built into the parameterization: a draw that puts any
+        observation's value outside them is penalised by the likelihood rather than
+        mapped back inside. This is usually harmless when the parameter sits well
+        inside its bounds. If you see divergences, `"log_logit"` composes the
+        regression on the link scale (it also changes the generated default priors).
+
+        Explicit per-parameter links take precedence. Parameters without a regression
+        formula have no linear predictor and are unaffected. Defaults to `None`.
     prior_settings : optional
-        An optional string literal that indicates the prior distributions to use for
-        each parameter. Helpful for hierarchical models where sampling might get stuck/
-        very slow. Can be one of the following:
+        A preset for generated regression-term priors. Helpful for hierarchical models
+        where sampling might get stuck or become very slow. Can be one of the
+        following:
 
-        - `"safe"`: HSSM will scan all parameters in the model and apply safe priors to
-        all parameters that do not have explicit bounds.
-        - None: HSSM will use bambi to provide default priors for all parameters. Not
-        recommended when you are using hierarchical models.
-        The default value is `"safe"`.
+        - `"safe"`: fills eligible missing common and group-specific regression-term
+        priors with HSSM's weakly informative defaults.
+        - `None`: leaves missing regression-term priors to Bambi. This is not
+        recommended for hierarchical models.
+
+        Explicit regression-term priors take precedence. This setting does not alter
+        explicit, model-configuration, or bounds-derived priors for parameters without
+        a regression formula. Defaults to `"safe"`.
     extra_namespace : optional
         Additional user supplied variables with transformations or data to include in
         the environment where the formula is evaluated. Defaults to `None`.
@@ -199,14 +214,19 @@ class HSSM(HSSMBase):
         either `missing_data` or `deadline` is not `False`. Defaults to `None`.
     process_initvals : optional
         If `True`, the model will process the initial values. Defaults to `True`.
+        Processing also clamps a default initial value that falls outside its
+        parameter's declared `bounds` to a point just inside them; initial values
+        you supply yourself are used as given.
     initval_jitter : optional
         The jitter value for the initial values. Defaults to `0.01`.
     **kwargs
         Additional arguments passed to the `bmb.Model` object. Most notably
         ``noncentered``, which controls the centered vs. non-centered
         parameterization of group-specific (hierarchical) terms: ``True``
-        (bambi's default) uses the non-centered parameterization everywhere,
-        ``False`` uses centered. A ``dict`` keyed by HSSM parameter name
+        (bambi's default) requests non-centering and ``False`` requests centered.
+        Safe generated group-only terms that own a population location may be
+        centered term by term, with a warning, when current bambi cannot preserve
+        that location under non-centering. A ``dict`` keyed by HSSM parameter name
         (e.g. ``{"v": False, "a": True}``) sets it per parameter; an unknown
         key raises at construction. A per-prior ``noncentered`` field (inside
         a prior ``dict`` or on an ``hssm.Prior``) overrides the model-level
@@ -445,6 +465,8 @@ class HSSM(HSSMBase):
         _list_params = self.model_config.list_params
         assert _list_params is not None, "list_params should be set"  # for type checker
         rv_name = getattr(self.model_config, "rv", None) or self.model_config.model_name
+        # HSSM.__init__ always builds a Config, which is where ndt_edge_shift lives.
+        ndt_edge_shift = typing_cast("Config", self.model_config).ndt_edge_shift
 
         return make_distribution(
             rv=rv_name,
@@ -464,4 +486,5 @@ class HSSM(HSSMBase):
             params_is_trialwise=params_is_trialwise_base,
             # TODO: add to HSSMBase
             is_choice_only=self.is_choice_only,
+            ndt_edge_shift=ndt_edge_shift,
         )

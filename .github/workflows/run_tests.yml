@@ -5,7 +5,7 @@ on:
   workflow_call:
     inputs:
       run_slow_tests:
-        description: "Whether to run slow tests"
+        description: "Whether to run only the slow tests instead of the fast suite"
         required: false
         default: false
         type: boolean
@@ -20,7 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      PYTENSOR_FLAGS: "blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack"
       HSSM_TEST_ARGS: ${{ inputs.test_args }}
 
     strategy:
@@ -40,9 +39,9 @@ jobs:
         if: ${{ !inputs.run_slow_tests }}
         run: uv run pytest -m "not slow" $HSSM_TEST_ARGS
 
-      - name: Run all tests
+      - name: Run slow tests
         if: ${{ inputs.run_slow_tests }}
-        run: uv run pytest $HSSM_TEST_ARGS
+        run: uv run pytest -m slow $HSSM_TEST_ARGS
         env:
           # Log per-test RSS to diagnose slow-test memory leaks. This step only
           # runs on the slow-test path (run_slow_tests.yml), so it stays scoped.

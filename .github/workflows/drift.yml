@@ -22,6 +22,11 @@ on:
         description: "Also run the (expensive) notebook suite"
         type: boolean
         default: false
+      notebook_path:
+        description: "Run one tracked non-archive docs notebook instead of the suite"
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -46,8 +51,13 @@ jobs:
     uses: ./.github/workflows/run_slow_tests.yml
 
   notebooks:
-    if: (github.event_name == 'workflow_dispatch' && inputs.run_notebooks) || github.event.schedule == '0 3 * * 2'
+    if: >-
+      (github.event_name == 'workflow_dispatch' &&
+      (inputs.run_notebooks || inputs.notebook_path != '')) ||
+      github.event.schedule == '0 3 * * 2'
     uses: ./.github/workflows/check_notebooks.yml
+    with:
+      notebook_path: ${{ inputs.notebook_path || '' }}
 
   report:
     needs: [lint, fast, slow, notebooks]
@@ -101,9 +111,18 @@ jobs:
             FAILED_JOBS="$FAILED_JOBS (force_fail rehearsal)"
           fi
 
-          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label drift \
-            --state open --search "in:body \"$KEY\"" \
-            --json number --jq '.[0].number // empty')
+          # Match the exact marker this job writes, not GitHub's full-text
+          # search. `--search 'in:body "drift-key: HSSM-scheduled"'` tokenizes
+          # and drops punctuation, so an issue that merely *quotes* the key in
+          # prose scores as a match. #1220 — a hand-filed report *about* this
+          # workflow, which necessarily quotes the key — was picked up that way
+          # and silently absorbed every "Still failing" comment for two weeks,
+          # while the real drift issue was never filed. Filtering the labelled
+          # set locally on the literal HTML comment makes that impossible.
+          MARKER="<!-- $KEY -->"
+          EXISTING=$(MARKER="$MARKER" gh issue list --repo "$GITHUB_REPOSITORY" \
+            --label drift --state open --limit 100 --json number,body \
+            --jq 'map(select(.body // "" | contains(env.MARKER))) | .[0].number // empty')
 
           if [ -z "$FAILED_JOBS" ]; then
             if [ -n "$SUCCEEDED" ] && [ -z "$CANCELLED_JOBS" ]; then

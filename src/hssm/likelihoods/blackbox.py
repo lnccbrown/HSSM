@@ -1,4 +1,4 @@
-"""Black box likelihoods written in Cython for "ddm" and "ddm_sdv" models."""
+"""Black box likelihoods written in Cython for "ddm", "ddm_sdv" and "full_ddm"."""
 
 import numpy as np
 from hddm_wfpt import wfpt
@@ -62,7 +62,12 @@ def logp_ddm_sdv_bbox(data: np.ndarray, v, a, z, t, sv) -> np.ndarray:
 
 @hddm_to_hssm
 def logp_full_ddm(data: np.ndarray, v, a, z, t, sz, sv, st):
-    """Compute blackbox log-likelihoods for full_ddm models."""
+    """Compute blackbox log-likelihoods for full_ddm models.
+
+    hddm_wfpt reads ``st`` as the full width of the uniform non-decision-time
+    distribution, so the density is non-zero from ``t - st / 2``; the registry
+    entry for ``full_ddm`` declares that edge via ``ndt_edge_shift``.
+    """
     return wfpt.wiener_logp_array(
         x=data,
         v=v,

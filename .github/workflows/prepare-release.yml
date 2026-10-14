@@ -115,10 +115,10 @@ jobs:
       - name: Setup environment
         uses: ./.github/setup-env
         with:
-          python-version: "3.13"
+          python-version: "3.12"
 
       - name: Build docs
-        run: uv run --group notebook --group docs mkdocs build
+        run: ./scripts/docs.sh build
 
   create-draft-release:
     name: Create draft GitHub release

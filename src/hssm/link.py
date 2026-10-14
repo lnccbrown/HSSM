@@ -25,19 +25,45 @@ class Link(bmb.Link):
         any other arguments because functions are already defined internally. If not
         known, all of `link``, ``linkinv`` and ``linkinv_backend`` must be specified.
     link : optional
-        A function that maps the response to the linear predictor. Known as the
-        :math:`g` function in GLM jargon. Does not need to be specified when ``name``
-        is a known name.
+        A numerical function that maps the response to the linear predictor. Known as
+        the :math:`g` function in GLM jargon. This function operates outside the PyMC
+        graph and does not need to support PyTensor tensors. It does not need to be
+        specified when ``name`` is a known name.
     linkinv : optional
-        A function that maps the linear predictor to the response. Known as the
-        :math:`g^{-1}` function in GLM jargon. Does not need to be specified when
-        ``name`` is a known name.
+        A numerical function that maps the linear predictor to the response. Known as
+        the :math:`g^{-1}` function in GLM jargon, it is used for operations such as
+        posterior prediction outside the PyMC graph. It does not need to be specified
+        when ``name`` is a known name.
     linkinv_backend : optional
-        Same than ``linkinv`` but must be something that works with PyMC backend
-        (i.e. it must work with PyTensor tensors). Does not need to be specified when
-        ``name`` is a known name.
+        The symbolic inverse link used to build the PyMC graph. It must accept PyTensor
+        tensors and return a symbolic PyTensor expression. It does not need to be
+        specified when ``name`` is a known name because Bambi supplies the backend
+        implementation for built-in links.
     bounds : optional
         Bounds of the response scale. Only needed when ``name`` is ``gen_logit``.
+
+    Examples
+    --------
+    Use any link name supported by Bambi:
+
+    >>> import hssm
+    >>> identity_link = hssm.Link("identity")
+
+    A custom link requires forward, inverse, and PyTensor-compatible inverse
+    functions:
+
+    >>> import numpy as np
+    >>> import pytensor.tensor as pt
+    >>> custom_log = hssm.Link(
+    ...     "custom_log",
+    ...     link=np.log,  # Numerical: response -> linear predictor
+    ...     linkinv=np.exp,  # Numerical: predictions outside the PyMC graph
+    ...     linkinv_backend=pt.exp,  # Symbolic: used inside the PyMC graph
+    ... )
+
+    HSSM also provides a generalized logit for bounded response scales:
+
+    >>> bounded_link = hssm.Link("gen_logit", bounds=(0.1, 0.9))
     """
 
     def __init__(
@@ -59,7 +85,12 @@ class Link(bmb.Link):
                 self.linkinv = self._make_generalized_sigmoid_simple(*bounds)
                 self.linkinv_backend = self._make_generalized_sigmoid_simple(*bounds)
         else:
-            bmb.Link.__init__(name, link, linkinv, linkinv_backend)
+            super().__init__(
+                name=name,
+                link=link,
+                linkinv=linkinv,
+                linkinv_backend=linkinv_backend,
+            )
 
         self.bounds = bounds
 

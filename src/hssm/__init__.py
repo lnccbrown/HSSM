@@ -13,7 +13,7 @@ import sys
 
 from .addm import aDDM, aDDMConfig
 from .config import ModelConfig
-from .datasets import load_data
+from .datasets import list_data, load_data
 from .defaults import show_defaults
 from .hssm import HSSM
 from .link import Link
@@ -38,6 +38,7 @@ __all__ = [
     "aDDM",
     "aDDMConfig",
     "Link",
+    "list_data",
     "list_models",
     "load_data",
     "ModelConfig",

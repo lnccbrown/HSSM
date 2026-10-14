@@ -39,6 +39,56 @@ pip install hssm[cuda12]  # CUDA 12
 pip install hssm[cuda13]  # CUDA 13
 ```
 
+## Optional: a faster simulator backend (GSL + OpenMP)
+
+HSSM simulates through [`ssm-simulators`](https://github.com/lnccbrown/ssm-simulators),
+whose prebuilt wheels ship a portable, single-threaded build. If the package is
+instead compiled on your machine with the GNU Scientific Library present, it
+gains a multithreaded (OpenMP) backend with a validated parallel random-number
+generator — useful when simulation is the bottleneck, for example in
+posterior-predictive sampling.
+
+First install the system libraries (a one-time step):
+
+```bash
+# macOS
+brew install gsl libomp
+
+# Debian / Ubuntu
+sudo apt-get install libgsl-dev build-essential
+```
+
+Then tell your installer to build `ssm-simulators` from source while keeping
+wheels for everything else. With `uv`, add one line to your project and every
+`uv sync` does the right thing from then on:
+
+```toml
+[tool.uv]
+no-binary-package = ["ssm-simulators"]
+```
+
+Or as a one-off install (the flag names the dependency to compile; `hssm` is
+what you are installing):
+
+```bash
+uv pip install --no-binary ssm-simulators hssm
+```
+
+```bash
+pip install hssm --no-binary ssm-simulators
+```
+
+**Verify it worked.** If GSL is not found at build time, the build still
+succeeds and silently produces the same single-threaded backend as the wheel —
+so check:
+
+```bash
+python -c "from cssm._openmp_status import is_gsl_available, is_openmp_available; print('GSL:', is_gsl_available(), '| OpenMP:', is_openmp_available())"
+```
+
+Both should print `True`. If not, confirm the system libraries above are
+installed and reinstall with the same flag.
+
 !!! note
 
     JAX's CUDA wheels are Linux-only and require a compatible NVIDIA driver

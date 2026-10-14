@@ -1,10 +1,11 @@
 """Tests for the HSSM public model interface."""
 
 from copy import deepcopy
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pymc as pm
+import pytensor
 import pytest
 import xarray as xr
 from pymc.variational import Approximation
@@ -26,6 +27,13 @@ param_v = {
 }
 
 param_a = param_v | dict(name="a", formula="a ~ 1 + x + y")
+
+
+class _EqualitySpoof:
+    """Object that compares equal to every preset string."""
+
+    def __eq__(self, other):
+        return True
 
 
 @pytest.mark.slow
@@ -70,7 +78,10 @@ param_a = param_v | dict(name="a", formula="a ~ 1 + x + y")
                     "formula": "invalid_formula",
                 }
             ],
-            IndexError,
+            # RHS-only shorthand is normalised to ``v ~ invalid_formula`` before
+            # the design matrices are built, so the unknown column surfaces as a
+            # pandas ``KeyError`` from formulae (pandas 2 and 3 alike).
+            KeyError,
         ),
     ],
 )
@@ -287,17 +298,31 @@ def test_add_likelihood_parameters_to_data(data_ddm):
     )
 
 
-def test_log_likelihood_uses_attached_traces_and_returns_copy(data_ddm, monkeypatch):
-    """Attached traces are the default input without being mutated."""
+@pytest.mark.parametrize(
+    ("loglik_kind", "backend", "expected_compile_mode"),
+    [
+        ("analytical", None, None),
+        ("approx_differentiable", "pytensor", None),
+        ("approx_differentiable", "jax", "JAX"),
+        ("blackbox", None, "cvm"),
+    ],
+)
+def test_log_likelihood_uses_likelihood_compile_mode(
+    data_ddm, monkeypatch, loglik_kind, backend, expected_compile_mode
+):
+    """Attached traces stay immutable and use the likelihood's compiler."""
     model = HSSM(data=data_ddm)
+    model.loglik_kind = loglik_kind
+    model.model_config.backend = backend
     traces = xr.DataTree.from_dict(
         {"posterior": xr.Dataset({"v": (("chain", "draw"), np.array([[0.5]]))})}
     )
     model._inference_obj = traces
     calls = []
 
-    def fake_compute_log_likelihood(bambi_model, dt, data, inplace):
-        calls.append((bambi_model, dt, data, inplace))
+    def fake_compute_log_likelihood(bambi_model, dt, data, inplace, *, compile_mode):
+        """Record the compiler forwarded by the public method."""
+        calls.append((bambi_model, dt, data, inplace, compile_mode))
         result = dt.copy(deep=True)
         result["log_likelihood"] = xr.Dataset(
             {"rt,response": (("chain", "draw"), np.array([[-1.0]]))}
@@ -318,6 +343,7 @@ def test_log_likelihood_uses_attached_traces_and_returns_copy(data_ddm, monkeypa
     assert calls[0][1] is traces
     assert calls[0][2] is None
     assert calls[0][3] is False
+    assert calls[0][4] == expected_compile_mode
     assert result is not traces
     assert isinstance(result, xr.DataTree)
     assert "log_likelihood" in result
@@ -400,6 +426,110 @@ def test_model_creation_all_parameters_constant(data_ddm):
 
 
 # Prior settings
+@pytest.mark.parametrize(
+    ("setting_name", "preset"),
+    [("prior_settings", "safe"), ("link_settings", "log_logit")],
+)
+@pytest.mark.parametrize(
+    "invalid_value",
+    [
+        pytest.param("SAFE", id="wrong-case-safe"),
+        pytest.param("LOG_LOGIT", id="wrong-case-log-logit"),
+        pytest.param("banana", id="arbitrary-string"),
+        pytest.param(False, id="false"),
+        pytest.param(True, id="true"),
+        pytest.param(0, id="zero"),
+        pytest.param(1, id="one"),
+        pytest.param(1.5, id="float"),
+        pytest.param({}, id="mapping"),
+        pytest.param([], id="sequence"),
+        pytest.param((), id="tuple"),
+        pytest.param(np.array(["safe"]), id="array"),
+        pytest.param(_EqualitySpoof(), id="equality-spoof"),
+        pytest.param(object(), id="object"),
+    ],
+)
+def test_invalid_setting_presets_fail_before_model_preparation(
+    cavanagh_test, setting_name, preset, invalid_value
+):
+    """Reject invalid presets before parameter or Bambi model construction."""
+    with patch("hssm.base.Params.from_user_specs") as make_params:
+        with pytest.raises(
+            ValueError,
+            match=rf"`{setting_name}` must be either '{preset}' or None",
+        ):
+            HSSM(
+                data=cavanagh_test,
+                p_outlier=0.0,
+                process_initvals=False,
+                **{setting_name: invalid_value},
+            )
+
+    make_params.assert_not_called()
+
+
+def test_valid_prior_settings_preserve_regression_and_simple_prior_scope(
+    cavanagh_test,
+):
+    """None delegates regression terms while simple HSSM defaults remain."""
+    model_kwargs = {
+        "data": cavanagh_test.iloc[:12],
+        "include": [{"name": "v", "formula": "v ~ 1 + theta"}],
+        "p_outlier": 0.0,
+        "process_initvals": False,
+        "initval_jitter": 0.0,
+    }
+
+    delegated_model = HSSM(**model_kwargs, prior_settings=None)
+    safe_model = HSSM(**model_kwargs, prior_settings="safe")
+
+    assert delegated_model.params["v"].prior is None
+    assert delegated_model.model.components["v"].intercept_term.prior is not None
+    assert isinstance(safe_model.params["v"].prior, dict)
+
+    for name in ("a", "z", "t"):
+        delegated_prior = delegated_model.params[name].prior
+        safe_prior = safe_model.params[name].prior
+        assert delegated_prior is not None
+        assert safe_prior is not None
+        assert delegated_prior == safe_prior
+
+
+def test_valid_link_settings_preserve_links_precedence_and_repr(cavanagh_test):
+    """Valid link presets retain assignment, explicit precedence, and repr behavior."""
+    model_kwargs = {
+        "data": cavanagh_test.iloc[:12],
+        "include": [{"name": "a", "formula": "a ~ 1 + theta"}],
+        "v": 0.0,
+        "z": 0.5,
+        "t": 0.2,
+        "p_outlier": 0.0,
+        "prior_settings": None,
+        "process_initvals": False,
+        "initval_jitter": 0.0,
+    }
+
+    identity_model = HSSM(**model_kwargs, link_settings=None)
+    transformed_model = HSSM(**model_kwargs, link_settings="log_logit")
+    explicit_model = HSSM(
+        **(
+            model_kwargs
+            | {
+                "include": [
+                    {"name": "a", "formula": "a ~ 1 + theta", "link": "identity"}
+                ]
+            }
+        ),
+        link_settings="log_logit",
+    )
+
+    assert identity_model.params["a"].link == "identity"
+    assert transformed_model.params["a"].link == "log"
+    assert explicit_model.params["a"].link == "identity"
+    assert "(ignored due to link function)" not in repr(identity_model)
+    assert "(ignored due to link function)" in repr(transformed_model)
+
+
 @pytest.mark.slow
 def test_prior_settings_basic(cavanagh_test):
     """Apply requested prior-setting modes."""
@@ -690,3 +820,70 @@ def test_is_choice_only_and_deadline(data_ddm):
     assert len(model_with_deadline.response) == 2
     assert model_with_deadline.response_c == "c(response, deadline)"
     assert model_with_deadline.response_str == "response,deadline"
+
+
+@pytest.mark.parametrize("mode", [None, "JAX"], ids=["default", "jax_linker"])
+def test_jax_callable_non_trialwise_params_logp(data_ddm, mode):
+    """A custom JAX likelihood must see non-trialwise params as scalars (#1092).
+
+    ``v`` is the parent (trialwise); ``a``, ``z`` and ``t`` are fixed, so PyMC
+    hands them to the Op as ``(1,)``-shaped tensors. Before #1092 those reached
+    the single-trial callable un-squeezed, so each trial produced a ``(1,)``
+    value and the vmapped result was ``(n_obs, 1)`` instead of ``(n_obs,)``.
+    Nothing caught it: the default backend read the oversized buffer back as
+    uninitialised memory, and the JAX linker broadcast it to ``(n_obs, n_obs)``
+    -- both silently wrong. This pins the values against a NumPy reference on
+    both linkers.
+    """
+    import jax.numpy as jnp
+
+    a_fixed, z_fixed, t_fixed = 1.3, 0.5, 0.2
+
+    def single_trial_logp(data, v, a, z, t):
+        rt = data[0]
+        mu = jnp.log(a) - jnp.log(v**2 + 0.25) + t + z
+        log_rt = jnp.log(jnp.maximum(rt, 1e-6))
+        return -log_rt - 0.5 * ((log_rt - mu) / 0.45) ** 2 - 0.8
+
+    model = HSSM(
+        data=data_ddm,
+        model="ddm",
+        loglik=single_trial_logp,
+        loglik_kind="approx_differentiable",
+        model_config={"backend": "jax"},
+        p_outlier=0,
+        a=a_fixed,
+        z=z_fixed,
+        t=t_fixed,
+    )
+
+    pymc_model = model.pymc_model
+    value_vars = list(pymc_model.value_vars)
+    assert [v.name for v in value_vars] == ["v_interval__"], (
+        "only the parent should be free; the rest are fixed constants"
+    )
+
+    # Evaluate at an arbitrary point in the unconstrained space, then map it
+    # back through the model's own transform to build the reference.
+    unconstrained_v = np.array(0.3, dtype=pytensor.config.floatX)
+    rv = pymc_model.values_to_rvs[value_vars[0]]
+    transform = pymc_model.rvs_to_transforms[rv]
+    v = float(np.asarray(transform.backward(unconstrained_v, *rv.owner.inputs).eval()))
+
+    rt = data_ddm["rt"].to_numpy()
+    mu = np.log(a_fixed) - np.log(v**2 + 0.25) + t_fixed + z_fixed
+    log_rt = np.log(np.maximum(rt, 1e-6))
+    expected = -log_rt - 0.5 * ((log_rt - mu) / 0.45) ** 2 - 0.8
+    # HSSM replaces the log-likelihood with LOGP_LB where rt <= t.
+    expected = np.where(rt - t_fixed <= 1e-15, -66.1, expected)
+
+    observed_logp = pymc_model.logp(sum=False)[-1]
+    fn = pytensor.function(
+        value_vars, observed_logp, mode=mode, on_unused_input="ignore"
+    )
+    actual = np.asarray(fn(unconstrained_v))
+
+    assert actual.shape == (len(data_ddm),)
+    # Loose rtol so the test is valid under either floatX; the pre-fix failures
+    # it guards against are off by ~300 orders of magnitude or a whole axis.
+    np.testing.assert_allclose(actual, expected, rtol=1e-4)

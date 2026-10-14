@@ -98,3 +98,8 @@ pre-commit
 uv.lock
 
 .claude/CLAUDE.local.md
+
+# Generated per-checkout by HSSMSpine's cross-editor sync
+# (scripts/sync_agent_config.py materializes these from .claude/).
+.cursor/
+.agents/
