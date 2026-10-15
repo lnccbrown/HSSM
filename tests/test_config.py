@@ -204,8 +204,9 @@ class TestConfigBuildModelConfigExtraLogic:
     def test_build_model_config_int_choices(self, n_choices, expected):
         """An int `choices` is expanded to the default labels for that count.
 
-        The `np.int64` case covers a count computed from data, such as
-        `df["response"].max() + 1`, which is a numpy integer, not a Python `int`.
+        The `np.int64` case guards the `np.integer` branch: numpy integers are not
+        `int` subclasses, and a count computed from data, such as
+        `df["response"].max() + 1`, is a numpy integer.
         """
         mc = ModelConfig(response=("rt", "response"), list_params=["v"])
         cfg = Config._build_model_config(

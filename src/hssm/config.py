@@ -341,7 +341,7 @@ class Config(BaseModelConfig):
         model: SupportedModels | str,
         loglik_kind: LoglikKind | None,
         model_config: ModelConfig | dict | None,
-        choices: int | list[int] | tuple[int, ...] | None,
+        choices: int | np.integer | list[int] | tuple[int, ...] | None,
         loglik: Any = None,
     ) -> Config:
         """Build and return a validated Config for standard HSSM models.

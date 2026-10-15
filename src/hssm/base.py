@@ -133,14 +133,14 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         is passed, the model will be considered custom, in which case all
         `model_config`, `loglik`, and `loglik_kind` have to be provided by the user.
     choices : optional
-        The choices that participants can make. An `int` gives the number of
-        choices: `2` means [-1, 1] and any `n > 2` means [0, 1, ..., n - 1]. A `list`
-        or `tuple` gives the choice values directly. Ignored for supported models
-        unless `model_config` is also passed, and choices set in `model_config` take
-        precedence. Defaults to `None`, which uses the model's default choices (from
-        ssm-simulators for custom models it knows). If any value other than the
-        choices provided is found in the "response" column of the data, an error will
-        be raised.
+        The choices that participants can make. An integer (Python `int` or numpy
+        integer) gives the number of choices: `2` means [-1, 1] and any `n > 2`
+        means [0, 1, ..., n - 1]. A `list` or `tuple` gives the choice values
+        directly. Ignored for supported models unless `model_config` is also passed,
+        and choices set in `model_config` take precedence. Defaults to `None`, which
+        uses the model's default choices (from ssm-simulators for custom models it
+        knows). If any value other than the choices provided is found in the
+        "response" column of the data, an error will be raised.
     include : optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
