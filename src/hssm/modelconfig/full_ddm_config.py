@@ -35,6 +35,8 @@ def get_full_ddm_config() -> DefaultConfig:
                     },
                 },
                 "extra_fields": None,
+                # hddm_wfpt reads st as the full width; its support starts at t - st/2.
+                "ndt_edge_shift": {"param": "st", "scale": 0.5},
             }
         },
     }
