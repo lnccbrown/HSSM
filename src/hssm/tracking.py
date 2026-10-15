@@ -105,6 +105,10 @@ REBUILD_ARTIFACTS = frozenset({"data.parquet", "model_spec.json"})
 #: Tag set to ``"true"`` once a run has stored :data:`REBUILD_ARTIFACTS`.
 REBUILD_TAG = "rebuild_artifacts"
 
+#: Tag naming the dataset HSSM registered, so :func:`list_runs` can tell it
+#: apart from any input the caller logged to the same run.
+DATASET_TAG = "dataset_name"
+
 #: How many runs :func:`list_runs` asks the server for per request.
 RUNS_PAGE_SIZE = 1000
 
@@ -605,6 +609,7 @@ class Tracker:
             # dataset without the link to the stored copy rather than lose it.
             dataset = from_pandas(data, name=self._dataset_name)
         self._mlflow.log_input(dataset)
+        self._mlflow.set_tag(DATASET_TAG, self._dataset_name)
 
     def _claim_fit(self, call: str) -> bool:
         """Whether this block may log a fit; only the first one is recorded.
@@ -1154,9 +1159,12 @@ def _n_trials(run: Run) -> int | None:
 
 
 def _dataset_name(run: Run) -> str | None:
-    """Return the name given to ``track(dataset_name=...)``, or None."""
-    datasets = run.inputs.dataset_inputs if run.inputs else []
-    return datasets[0].dataset.name if datasets else None
+    """Return the name given to ``track(dataset_name=...)``, or None.
+
+    Read from HSSM's own tag: the run's inputs may also hold datasets the
+    caller logged, in any order.
+    """
+    return run.data.tags.get(DATASET_TAG)
 
 
 def _is_rebuildable(run: Run) -> bool:

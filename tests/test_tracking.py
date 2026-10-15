@@ -7,6 +7,7 @@ import math
 import shutil
 import threading
 
+import onnx
 import pandas as pd
 import pytest
 
@@ -1078,6 +1079,30 @@ class TestRunFieldReaders:
         run = mlflow.tracking.MlflowClient().get_run(t.run_id)
         assert tracking._dataset_name(run) == "ddm-sim"
 
+    def test_dataset_name_ignores_inputs_the_user_logged(self, data_ddm):
+        """Another MLflow input logged first is not mistaken for HSSM's dataset."""
+        import mlflow.data
+
+        other = mlflow.data.from_pandas(data_ddm.head(), name="user-logged")
+        with hssm.track(lineage_id="lin", dataset_name="ddm-sim") as t:
+            mlflow.log_input(other)
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+        run = mlflow.tracking.MlflowClient().get_run(t.run_id)
+        assert tracking._dataset_name(run) == "ddm-sim"
+
+    def test_dataset_name_is_none_when_only_the_user_logged_one(self):
+        """No `dataset_name=`: a user's own input does not fill the column."""
+        import mlflow.data
+
+        with hssm.track(lineage_id="lin") as t:
+            mlflow.log_input(
+                mlflow.data.from_pandas(pd.DataFrame({"x": [1]}), name="user-logged")
+            )
+        run = mlflow.tracking.MlflowClient().get_run(t.run_id)
+        assert tracking._dataset_name(run) is None
+
     def test_dataset_name_is_none_without_a_dataset(self):
         """No `dataset_name=`, no dataset registered."""
         run = mlflow.tracking.MlflowClient().get_run(_empty_hssm_run())
@@ -1369,6 +1394,54 @@ class TestRevisionPinning:
             ("ddm.onnx", "aaa"),
             ("ddm.onnx", None),
         ]
+
+    def test_pin_beats_a_same_named_local_file(
+        self, fixture_path, tmp_path, monkeypatch
+    ):
+        """A pinned file comes from the hub even when the cwd has one by that name.
+
+        Without a pin the local file still wins, as before.
+        """
+        from hssm.distribution_utils.onnx_utils import model as onnx_model
+
+        hub = _FakeHub(fixture_path, tmp_path / "hub", {"ddm.onnx": "bbb"})
+        monkeypatch.setattr(onnx_model, "hf_hub_download", hub)
+        cwd = tmp_path / "cwd"
+        cwd.mkdir()
+        shutil.copy(fixture_path / "angle.onnx", cwd / "ddm.onnx")
+        monkeypatch.chdir(cwd)
+
+        with tracking.pinned_revisions({"ddm.onnx": "aaa"}):
+            pinned = onnx_model.load_onnx_model("ddm.onnx")
+        assert hub.requests == [("ddm.onnx", "aaa")]
+        assert pinned == onnx.load(fixture_path / "ddm.onnx")
+
+        local = onnx_model.load_onnx_model("ddm.onnx")
+        assert hub.requests == [("ddm.onnx", "aaa")]
+        assert local == onnx.load(fixture_path / "angle.onnx")
+
+    def test_rebuild_ignores_a_same_named_local_file(
+        self, data_ddm, fixture_path, tmp_path, monkeypatch
+    ):
+        """`load_run` from a directory holding another `ddm.onnx` keeps the fit's."""
+        from hssm.distribution_utils.onnx_utils import model as onnx_model
+
+        hub = _FakeHub(fixture_path, tmp_path / "hub", {"ddm.onnx": "aaa"})
+        monkeypatch.setattr(onnx_model, "hf_hub_download", hub)
+        model = hssm.HSSM(data_ddm, model="ddm", loglik_kind="approx_differentiable")
+        with hssm.track(lineage_id="lin") as t:
+            t.log_model(model)
+
+        cwd = tmp_path / "cwd"
+        cwd.mkdir()
+        shutil.copy(fixture_path / "angle.onnx", cwd / "ddm.onnx")
+        monkeypatch.chdir(cwd)
+        loaded = hssm.load_run(t.run_id)
+        assert hub.requests[-1] == ("ddm.onnx", "aaa")
+        assert loaded._tracking_network == {
+            "network_file": "ddm.onnx",
+            "hf_revision": "aaa",
+        }
 
     def test_rebuild_uses_the_fitted_network_not_the_latest(
         self, data_ddm, fixture_path, tmp_path, monkeypatch
