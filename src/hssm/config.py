@@ -357,6 +357,7 @@ class Config(BaseModelConfig):
 
         config = cls.from_defaults(model, loglik_kind)
 
+        final_config: ModelConfig | None = None
         if model_config is not None:
             final_config = _normalize_model_config_with_choices(model_config, choices)
             config.update_config(final_config)
@@ -372,9 +373,11 @@ class Config(BaseModelConfig):
                 "Model string is in SupportedModels. Ignoring choices arguments."
             )
 
-        # If model is not a supported built-in, prefer explicit choices or
-        # fall back to ssms-simulators lookup when available.
-        if model not in get_args(SupportedModels):
+        # If model is not a supported built-in and `model_config` did not set
+        # choices, prefer explicit choices or fall back to ssms-simulators lookup.
+        if model not in get_args(SupportedModels) and (
+            final_config is None or final_config.choices is None
+        ):
             if choices is not None:
                 config.update_choices(choices)
             elif model in ssms_model_config:

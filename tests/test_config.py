@@ -223,6 +223,19 @@ class TestConfigBuildModelConfigExtraLogic:
                 "custom", "analytical", mc, choices=n_choices, loglik=lambda *a: None
             )
 
+    @pytest.mark.parametrize(
+        ("model", "choices"),
+        [("custom", (-1, 1)), ("custom", 2), ("race_no_bias_2", None)],
+        ids=["explicit_arg", "int_arg", "ssms_fallback"],
+    )
+    def test_build_model_config_custom_model_config_choices_win(self, model, choices):
+        """Choices in `model_config` beat the argument and the ssms fallback."""
+        mc = {"list_params": ["v"], "choices": (5, 6, 7)}
+        cfg = Config._build_model_config(
+            model, "analytical", mc, choices=choices, loglik=lambda *a: None
+        )
+        assert cfg.choices == (5, 6, 7)
+
     def test_build_model_config_uses_ssms_model_config(self, monkeypatch):
         # High-level view of the test: ensures that when a model name is not in the built-in
         # SupportedModels and no choices argument is passed, _build_model_config will consult
