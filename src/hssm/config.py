@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from numbers import Real
 from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
 
+import numpy as np
 from bambi import Prior
 
 from ._types import LogLik, LoglikKind, NDTEdgeShift, SupportedModels
@@ -340,7 +341,7 @@ class Config(BaseModelConfig):
         model: SupportedModels | str,
         loglik_kind: LoglikKind | None,
         model_config: ModelConfig | dict | None,
-        choices: list[int] | tuple[int, ...] | None,
+        choices: int | list[int] | tuple[int, ...] | None,
         loglik: Any = None,
     ) -> Config:
         """Build and return a validated Config for standard HSSM models.
@@ -348,6 +349,12 @@ class Config(BaseModelConfig):
         Resolves defaults, normalizes dict/ModelConfig overrides, applies
         choices and loglik precedence rules, then validates before returning.
         """
+        # An int is the number of choices: 2 -> (-1, 1), n > 2 -> (0, ..., n - 1).
+        if isinstance(choices, (int, np.integer)):
+            if choices < 2:
+                raise ValueError(f"`choices` must be at least 2, got {choices}.")
+            choices = (-1, 1) if choices == 2 else tuple(range(choices))
+
         config = cls.from_defaults(model, loglik_kind)
 
         if model_config is not None:
