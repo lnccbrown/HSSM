@@ -202,7 +202,11 @@ class TestConfigBuildModelConfigExtraLogic:
         ids=["two", "three", "np_int64"],
     )
     def test_build_model_config_int_choices(self, n_choices, expected):
-        """An int `choices` is expanded to the default labels for that count."""
+        """An int `choices` is expanded to the default labels for that count.
+
+        The `np.int64` case covers a count computed from data, such as
+        `df["response"].max() + 1`, which is a numpy integer, not a Python `int`.
+        """
         mc = ModelConfig(response=("rt", "response"), list_params=["v"])
         cfg = Config._build_model_config(
             "custom", "analytical", mc, choices=n_choices, loglik=lambda *a: None
