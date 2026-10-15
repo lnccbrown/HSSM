@@ -46,7 +46,8 @@ jobs:
           COVERAGE_CORE: sysmon
 
       - name: Upload coverage to Codecov
-        # A late test failure must not throw away a 40-min report.
+        # A late test failure must not throw away a 40-min report. Needs #1075:
+        # under --exitfirst, pytest-cov writes no coverage.xml at all.
         if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v7
         with:
