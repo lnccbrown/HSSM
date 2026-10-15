@@ -45,7 +45,8 @@ def _slow_test_memory(request):
     end-of-test RSS (the leak-hunting signal) is sampled first, then cleanup
     runs, then post-cleanup RSS is sampled to show how much was freed. RSS
     logging is opt-in via ``HSSM_TEST_RSS_LOG`` because JAX and pytensor allocate
-    outside the Python heap, which allocation-only profilers miss.
+    outside the Python heap, which allocation-only profilers miss. The lines are
+    INFO, so also pass ``--log-cli-level=INFO`` (CI's slow step does).
     """
     global _PSUTIL_AVAILABLE
 

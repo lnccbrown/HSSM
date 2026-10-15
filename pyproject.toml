@@ -234,6 +234,8 @@ log_cli = true
 # the per-test RSS lines (run_tests.yml). Coverage is opt-in: pass --cov=src/hssm
 # explicitly (coverage.yml does), so plain runs are not instrumented.
 log_cli_level = "WARNING"
+# Reruns are untimed: pytest-timeout arms one timer per test, not per attempt.
+# Add --rerun-except=pytest-timeout once test_addm_waic_loo is well under 600 s (#1074).
 addopts = [
     "--durations=50",
     "--durations-min=1",
