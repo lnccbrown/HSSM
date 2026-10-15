@@ -30,6 +30,7 @@ import jax.numpy as jnp
 from jax import config as jax_config
 from jax.scipy.special import logsumexp
 
+from hssm.config import _validate_ndt_edge_shift
 from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.utils import annotate_function
@@ -42,6 +43,8 @@ DEFAULT_RLSSM_MODEL = "2AB_RW_DDM"
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
+
+    from hssm._types import NDTEdgeShift
 
 
 @dataclass
@@ -170,6 +173,8 @@ _compute_v_annotated = annotate_function(
 #   bounds_ssm          - bounds for all SSM params
 #   params_default_ssm  - default values aligned with list_params_ssm
 #   response            - data column names
+#   ndt_edge_shift      - the SSM's support-edge declaration, or None (entries
+#                         written before the key existed may lack it)
 
 _SSM_REGISTRY: dict[str, dict[str, Any]] = {}
 
@@ -302,6 +307,8 @@ def _build_ssm_spec_from_modelconfig(name: str) -> dict[str, Any]:
         "params_default_ssm": params_default_ssm,
         "response": response,
         "name": name,
+        # The backbone's support-edge declaration travels with the spec.
+        "ndt_edge_shift": deepcopy(ad.get("ndt_edge_shift")),
     }
 
 
@@ -567,6 +574,23 @@ def get_rlssm_model_config(
     ssm_base = _get_ssm_logp(dp)
     lp: dict[str, Any] = dict(learning_metadata.learning_process)
 
+    # The support-edge declaration travels with the decision process. Specs
+    # written before the key existed (and user-supplied dict specs) may lack it.
+    ndt_edge_shift: NDTEdgeShift | None = ssm_entry.get("ndt_edge_shift")
+    if ndt_edge_shift is not None:
+        _validate_ndt_edge_shift(ndt_edge_shift, ssm_entry["list_params_ssm"])
+        # A parameter the learning process computes per trial is not among the
+        # distribution's parameters, so the edge cannot be resolved from it.
+        computed = sorted({"t", ndt_edge_shift["param"]} & set(lp))
+        if computed:
+            raise ValueError(
+                f"Decision process '{dp}' declares ndt_edge_shift="
+                f"{ndt_edge_shift!r}, but the learning process computes "
+                f"{computed}. A parameter computed per trial by the learning "
+                "process is not among the distribution's parameters, so the "
+                "support edge cannot be resolved from it."
+            )
+
     # Compose the full ssm_logp_func with .computed = learning_process.
     ssm_logp_func = _build_ssm_logp_func(ssm_base, lp)
 
@@ -614,6 +638,7 @@ def get_rlssm_model_config(
         extra_fields=list(learning_metadata.extra_fields)
         if learning_metadata.extra_fields is not None
         else None,
+        ndt_edge_shift=ndt_edge_shift,
     )
 
 
@@ -731,6 +756,7 @@ def register_ssm(
     bounds_ssm: dict[str, tuple[float, float]],
     params_default_ssm: list[float],
     response: list[str] | None = None,
+    ndt_edge_shift: NDTEdgeShift | None = None,
 ) -> None:
     """Register an SSM base log-likelihood function in the SSM registry.
 
@@ -752,6 +778,14 @@ def register_ssm(
         Default values aligned with *list_params_ssm*.
     response:
         Data column names. Defaults to ``["rt", "response"]``.
+    ndt_edge_shift:
+        The decision process's support-edge declaration: a dict with the keys
+        ``"param"`` and ``"scale"`` saying that the likelihood admits response
+        times from ``t - scale * <param>`` upwards, so that only response times
+        at or below that edge are floored (see ``NDTEdgeShift`` and
+        ``Config.ndt_edge_shift``). Both ``t`` and the named parameter must be
+        in *list_params_ssm*. Defaults to ``None``, which keeps the edge at
+        ``t``.
     """
     if not callable(ssm_base_logp_func):
         raise ValueError(
@@ -787,6 +821,7 @@ def register_ssm(
             "get_rlssm_model_config() when composing the learning process. "
             "Pass the raw base function instead."
         )
+    _validate_ndt_edge_shift(ndt_edge_shift, list(list_params_ssm))
     if name in _SSM_REGISTRY:
         _logger.warning(
             "SSM '%s' is already in the SSM registry and will be overwritten.", name
@@ -797,6 +832,7 @@ def register_ssm(
         "bounds_ssm": dict(bounds_ssm),
         "params_default_ssm": list(params_default_ssm),
         "response": list(response) if response is not None else ["rt", "response"],
+        "ndt_edge_shift": deepcopy(ndt_edge_shift),
     }
     # Pre-built: cache immediately so _get_ssm_logp never calls a factory.
     _SSM_LOGP_CACHE[name] = ssm_base_logp_func
