@@ -109,7 +109,7 @@ Two separate skip mechanisms for notebooks:
 | `run_slow_tests.yml` | Slow tests (`@pytest.mark.slow`) |
 | `linting_and_type_checking.yml` | ruff + pyrefly + mypy |
 | `check_notebooks.yml` | Execute all non-skipped notebooks |
-| `coverage.yml` | Code coverage |
+| `coverage.yml` | Full suite + coverage on main pushes — the only per-push slow run (`run_slow_tests.yml` is opt-in via `[run slow]` or weekly from `drift.yml`) |
 | `docs.yml` | Build documentation |
 | `build_and_publish.yml` | Release to PyPI (triggered on release publish) |
 | `prepare-release.yml` | Release preparation automation |
