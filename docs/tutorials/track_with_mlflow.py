@@ -75,7 +75,7 @@ def _(mo):
     # Track fits with MLflow
 
     `hssm.track` records each fit as an [MLflow](https://mlflow.org) run. This
-    notebook shows the three things that gives you:
+    notebook shows the three things this gives you:
 
     1. **Tracked runs**: the model, its settings and diagnostics, recorded
        without extra code, and easy to find again;
