@@ -230,15 +230,15 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 log_cli = true
-log_cli_level = "INFO" # set minimum log level for console output
+# WARNING keeps the live log readable; the slow CI path raises it to INFO for
+# the per-test RSS lines (run_tests.yml). Coverage is opt-in: pass --cov=src/hssm
+# explicitly (coverage.yml does), so plain runs are not instrumented.
+log_cli_level = "WARNING"
 addopts = [
-    "--cov=.",
-    "--cov-report=term-missing",
-    "--cov-report=xml",
-    "--exitfirst",
-    "--capture=no",
-    "--timeout=360",
-    "--reruns=2",
+    "--durations=50",
+    "--durations-min=1",
+    "--timeout=600",
+    "--reruns=1",
     "--reruns-delay=5",
 ]
 markers = [
