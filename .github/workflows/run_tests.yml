@@ -41,7 +41,9 @@ jobs:
 
       - name: Run slow tests
         if: ${{ inputs.run_slow_tests }}
-        run: uv run pytest -m slow $HSSM_TEST_ARGS
+        # --log-cli-level=INFO (the ini default is WARNING) so the RSS lines
+        # below actually show up in the log.
+        run: uv run pytest -m slow --log-cli-level=INFO $HSSM_TEST_ARGS
         env:
           # Log per-test RSS to diagnose slow-test memory leaks. This step only
           # runs on the slow-test path (run_slow_tests.yml), so it stays scoped.

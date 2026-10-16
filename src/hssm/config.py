@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from numbers import Real
 from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
 
+import numpy as np
 from bambi import Prior
 
 from ._types import LogLik, LoglikKind, NDTEdgeShift, SupportedModels
@@ -340,7 +341,7 @@ class Config(BaseModelConfig):
         model: SupportedModels | str,
         loglik_kind: LoglikKind | None,
         model_config: ModelConfig | dict | None,
-        choices: list[int] | tuple[int, ...] | None,
+        choices: int | np.integer | list[int] | tuple[int, ...] | None,
         loglik: Any = None,
     ) -> Config:
         """Build and return a validated Config for standard HSSM models.
@@ -348,8 +349,15 @@ class Config(BaseModelConfig):
         Resolves defaults, normalizes dict/ModelConfig overrides, applies
         choices and loglik precedence rules, then validates before returning.
         """
+        # An int is the number of choices: 2 -> (-1, 1), n > 2 -> (0, ..., n - 1).
+        if isinstance(choices, (int, np.integer)):
+            if choices < 2:
+                raise ValueError(f"`choices` must be at least 2, got {choices}.")
+            choices = (-1, 1) if choices == 2 else tuple(range(choices))
+
         config = cls.from_defaults(model, loglik_kind)
 
+        final_config: ModelConfig | None = None
         if model_config is not None:
             final_config = _normalize_model_config_with_choices(model_config, choices)
             config.update_config(final_config)
@@ -365,9 +373,11 @@ class Config(BaseModelConfig):
                 "Model string is in SupportedModels. Ignoring choices arguments."
             )
 
-        # If model is not a supported built-in, prefer explicit choices or
-        # fall back to ssms-simulators lookup when available.
-        if model not in get_args(SupportedModels):
+        # If model is not a supported built-in and `model_config` did not set
+        # choices, prefer explicit choices or fall back to ssms-simulators lookup.
+        if model not in get_args(SupportedModels) and (
+            final_config is None or final_config.choices is None
+        ):
             if choices is not None:
                 config.update_choices(choices)
             elif model in ssms_model_config:

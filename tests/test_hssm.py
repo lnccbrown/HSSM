@@ -147,6 +147,29 @@ def test_custom_model(data_ddm):
     assert model.model_config.list_params == ["v", "a", "z", "t", "p_outlier"]
 
 
+def test_custom_model_int_choices(data_ddm):
+    """`choices=2` reaches the model as the (-1, 1) labels."""
+    model = HSSM(
+        data=data_ddm,
+        model="custom",
+        model_config={
+            "list_params": ["v", "a", "z", "t"],
+            "bounds": {
+                "v": (-3.0, 3.0),
+                "a": (0.3, 2.5),
+                "z": (0.1, 0.9),
+                "t": (0.0, 2.0),
+            },
+        },
+        choices=2,
+        loglik=logp_ddm,
+        loglik_kind="analytical",
+    )
+
+    assert model.choices == (-1, 1)
+    assert model.n_choices == 2
+
+
 @pytest.mark.slow
 def test_model_definition_outside_include(data_ddm):
     """Accept parameter definitions outside include and reject duplicates."""
