@@ -59,6 +59,9 @@ uv run pytest tests/
 # Skip slow tests (what CI's fast job runs)
 uv run pytest tests/ -m "not slow"
 
+# Coverage is opt-in (not in addopts); this is what CI's coverage.yml runs
+uv run pytest tests/ --cov=src/hssm --cov-report=term-missing
+
 # Build docs
 uv run --group notebook --group docs mkdocs build
 
