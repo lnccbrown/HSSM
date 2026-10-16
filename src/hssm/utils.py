@@ -14,9 +14,10 @@ import functools
 import itertools
 import logging
 import os
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Hashable, Literal
 
 import bambi as bmb
+import formulae as fm
 import jax
 import numpy as np
 import pandas as pd
@@ -25,46 +26,41 @@ import pytensor
 import pytensor.tensor as pt
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
-from bambi.utils import get_aliased_name, response_evaluate_new_data
 
 from .param.param import Param
 
 _logger = logging.getLogger("hssm")
 
 
-def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
-    """Make aliases from the parent parameter.
+def _response_evaluate_new_data(model: bmb.Model, data: pd.DataFrame) -> np.ndarray:
+    """Evaluate a model's response term against a new dataframe.
 
-    From a Param object that represents a parent parameter in Bambi,
-    returns a dict that represents how Bambi should alias its parameters to
-    make it more HSSM-friendly.
+    Replaces ``bambi.utils.response_evaluate_new_data``, which was removed in the
+    bambi 0.20 rewrite. The logic is unchanged: rebuild the response side of the
+    formula against ``data`` using the environment the model was created in.
 
     Parameters
     ----------
-    parent: A Param object that represents a parent parameter.
+    model
+        The bambi model whose response term is to be evaluated.
+    data
+        The dataframe to evaluate the response term against.
 
     Returns
     -------
-        A dict that indicates how Bambi should alias its parameters.
+    np.ndarray
+        The evaluated response.
     """
-    assert parent.is_parent, "This Param object should be a parent!"
-    assert parent.name is not None
+    # `full_name` is the response term as formulae wrote it, which is what has to go
+    # back into a formula. `name` is bambi's friendlier, transformation-stripped name.
+    name = model.response_term.full_name
+    # The parent parameter holds the model's full design matrices; going through it
+    # avoids the deprecated `response_component` adapter.
+    env = model.parameters[model.family.likelihood.parent].design.response.env
 
-    result_dict = {"c(rt, response)": "rt,response"}
-
-    # The easy case. We will just alias "Intercept" as the actual name of the
-    # parameter
-    if not parent.is_regression:
-        result_dict |= {"Intercept": parent.name}
-
-        return result_dict
-
-    # The regression case:
-    # In this case, the name of the response variable should actually be
-    # the name of the parent parameter
-    result_dict["c(rt, response)"] = parent.name
-
-    return result_dict
+    # We add an intercept to have a valid formula, but it's not used
+    design = fm.design_matrices(name + " ~ 1", data, env=env)
+    return np.asarray(design.response)
 
 
 def _get_alias_dict(
@@ -94,14 +90,14 @@ def _get_alias_dict(
     parent_name = parent.name
     alias_dict: dict[str, Any] = {response_c: response_str}
 
-    if len(model.distributional_components) == 1:
+    if len(model.conditional_parameters) == 1:
         if not parent.is_regression or (
             parent.is_regression and parent.formula is None
         ):
             alias_dict[parent_name] = f"{parent_name}_mean"
             alias_dict["Intercept"] = parent_name
         else:
-            for name, term in model.components[parent_name].terms.items():
+            for name, term in model.parameters[parent_name].terms.items():
                 if isinstance(
                     term, (CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm)
                 ):
@@ -109,7 +105,7 @@ def _get_alias_dict(
 
         return alias_dict
 
-    for component_name, component in model.distributional_components.items():
+    for component_name, component in model.conditional_parameters.items():
         if component_name == parent_name:
             alias_dict[component_name] = {}
             if not parent.is_regression:
@@ -132,6 +128,7 @@ def _compute_log_likelihood(
     data: pd.DataFrame | None,
     inplace: bool = True,
     compile_mode: str | None = None,
+    random_seed: int | np.random.Generator | None = None,
 ) -> xr.DataTree | None:
     """Compute the model's log-likelihood.
 
@@ -152,34 +149,31 @@ def _compute_log_likelihood(
         PyTensor compilation mode for the response log-probability graph. JAX-backed
         HSSM models pass ``"JAX"`` so their custom likelihood Ops use their
         ``jax_funcify`` registrations instead of PyMC's default Numba linker.
+    random_seed : optional
+        Seed for the coefficients generated for new or unidentified groups in
+        ``data``. See ``_compute_likelihood_params``.
 
     Returns
     -------
     xr.DataTree | None
     """
-    # These are not formal parameters because it does not make sense to...
-    #   1. compute the log-likelihood omitting
-    #      the group-specific components of the model.
-    #   2. compute the log-likelihood on unseen groups.
-    include_group_specific = True
-    sample_new_groups = False
-
     # Get the aliased response name
-    response_aliased_name = get_aliased_name(model.response_component.term)
+    response_aliased_name = model.response_term.label
 
     if not inplace:
         dt = dt.copy(deep=True)
 
-    # # Populate the posterior in the DataTree object
-    # with the likelihood parameters
-    dt = model._compute_likelihood_params(  # pylint: disable=protected-access
-        dt, data, include_group_specific, sample_new_groups
+    # Populate `dt` with the likelihood parameters and collect them into one
+    # posterior-like dataset. It does not make sense to compute the
+    # log-likelihood omitting the group-specific components of the model, so
+    # they are always included.
+    posterior = _compute_likelihood_params(
+        model, dt, data=data, include_group_specific=True, random_seed=random_seed
     )
 
     required_kwargs = {
         "model": model,
-        # `.children[...]` is typed as DataTree; `dt[...]` is DataTree | DataArray
-        "posterior": dt.children["posterior"],
+        "posterior": posterior,
         "data": data,
         "compile_mode": compile_mode,
     }
@@ -204,10 +198,148 @@ def _compute_log_likelihood(
     return dt
 
 
+def _compute_likelihood_params(
+    model: bmb.Model,
+    dt: xr.DataTree,
+    data: pd.DataFrame | None = None,
+    include_group_specific: bool = True,
+    random_seed: int | np.random.Generator | None = None,
+) -> xr.Dataset:
+    """Evaluate the likelihood parameters and gather them into one dataset.
+
+    bambi no longer stores the (trial-wise) likelihood parameters while sampling;
+    they are evaluated on demand with ``Model.predict(kind="response_params")``.
+    In sample, bambi adds them to the ``posterior`` group of ``dt``. Out of sample
+    (``data`` given), bambi writes them to a ``predictions`` group instead, while
+    the marginal parameters stay in ``posterior``; that group is only an
+    intermediate here, so it is removed from ``dt`` again.
+
+    Parameters
+    ----------
+    model : bmb.Model
+        The fitted bambi model.
+    dt : xr.DataTree
+        The trace returned by ``.fit()``. Modified in place.
+    data : pandas.DataFrame or None
+        Optional data frame on which to evaluate the likelihood parameters. If
+        omitted, the original dataset is used.
+    include_group_specific : bool
+        Whether the group-specific effects contribute to the parameters.
+    random_seed : optional
+        Seed for bambi's prediction machinery. It fixes the coefficients that are
+        generated for new or unidentified groups in ``data``; fitted groups are
+        deterministic given the posterior.
+
+    Returns
+    -------
+    xr.Dataset
+        A dataset with every posterior variable, where the trial-wise likelihood
+        parameters have been evaluated on ``data`` (or on the original dataset).
+    """
+    model.predict(
+        dt,
+        kind="response_params",
+        data=data,
+        inplace=True,
+        include_group_specific=include_group_specific,
+        random_seed=random_seed,
+    )
+    posterior = dt["posterior"].to_dataset()
+
+    if data is None:
+        return posterior
+
+    predictions = dt["predictions"].to_dataset()
+    for group in ("predictions", "predictions_constant_data"):
+        if group in dt:
+            del dt[group]
+
+    # The posterior may still carry in-sample versions of the trial-wise
+    # parameters (from a previous `predict`); those have the wrong `__obs__`
+    # length, so they are replaced by the out-of-sample ones.
+    posterior = posterior.drop_dims("__obs__", errors="ignore")
+    return posterior.merge(predictions, compat="override")
+
+
+def _expand_array(x: np.ndarray, ndim: int) -> np.ndarray:
+    """Append trailing axes to ``x`` until it has ``ndim`` dimensions.
+
+    Draws of a trial-wise parameter have shape ``(chain, draw, n_obs)`` while
+    draws of a scalar parameter have shape ``(chain, draw)``. Appending a trailing
+    axis to the latter makes both broadcast inside ``pm.logp``.
+    """
+    if x.ndim >= ndim:
+        return x
+    return np.expand_dims(x, tuple(range(x.ndim, ndim)))
+
+
+def _make_dist_kwargs_and_coords(
+    family: bmb.Family,
+    model: bmb.Model,
+    posterior: xr.Dataset,
+    **kwargs,
+) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
+    """Map the likelihood parameters to posterior draws, plus the response coords.
+
+    A port of the ``Family._make_dist_kwargs_and_coords`` helper that bambi
+    removed in 0.20; HSSM still evaluates the log-likelihood draw by draw and
+    needs the parameters as plain arrays.
+
+    Parameters
+    ----------
+    family : bmb.Family
+        The model family; its likelihood lists the parameters to collect.
+    model : bmb.Model
+        The bambi model, used to resolve parameter aliases and fixed values.
+    posterior : xr.Dataset
+        Posterior draws, including the evaluated trial-wise parameters (see
+        ``_compute_likelihood_params``).
+    kwargs :
+        Extra distribution arguments that do not appear in the posterior.
+
+    Returns
+    -------
+    tuple[dict[str, np.ndarray], dict[str, Any]]
+        The keyword arguments for the response distribution, each broadcast to
+        ``(chain, draw, ...)``, and the ``chain``, ``draw`` and ``__obs__``
+        coordinates of the response.
+    """
+    kwargs.pop("data", None)
+    dont_reshape = kwargs.pop("dont_reshape", [])
+
+    params_coords: dict[Hashable, Any] = {}
+
+    for param in family.likelihood.params:
+        # The posterior uses aliases, but the PyMC distribution wants the
+        # parameter names.
+        parameter = model.parameters[param]
+        var_name = parameter.label
+
+        if var_name in posterior:
+            kwargs[param] = posterior[var_name].to_numpy()
+            params_coords.update(posterior[var_name].coords)
+        elif isinstance(getattr(parameter, "prior", None), (int, float)):
+            kwargs[param] = np.asarray(parameter.prior)
+        else:
+            raise ValueError(
+                f"Likelihood parameter '{param}' ('{var_name}') was not found in the "
+                "posterior. This error shouldn't have happened!"
+            )
+
+    ndims_max = max(x.ndim for x in kwargs.values())
+    for key, values in kwargs.items():
+        if key not in dont_reshape:
+            kwargs[key] = _expand_array(values, ndims_max)
+
+    coords = {name: params_coords[name] for name in ("chain", "draw", "__obs__")}
+
+    return kwargs, coords
+
+
 def log_likelihood(
     family: bmb.Family,
     model: bmb.Model,
-    posterior: xr.Dataset | xr.DataTree,
+    posterior: xr.Dataset,
     data: pd.DataFrame | None = None,
     compile_mode: str | None = None,
     **kwargs,
@@ -222,9 +354,9 @@ def log_likelihood(
     ----------
     model : bambi.Model
         The model
-    posterior : xr.Dataset | xr.DataTree
-        The xarray dataset (or the `posterior` group of a DataTree) that
-        contains the draws for all the parameters in the posterior.
+    posterior : xr.Dataset
+        The xarray dataset that contains the draws for
+        all the parameters in the posterior.
         It must contain the parameters that are needed
         in the distribution of the response, or
         the parameters that allow to derive them.
@@ -248,13 +380,13 @@ def log_likelihood(
     # Get the values of the outcome variable
     if y_values is None:  # when it's not handled by the specific family
         if data is None:
-            y_values = np.squeeze(model.response_component.term.data)
+            y_values = np.squeeze(model.response_term.data)
         else:
-            y_values = response_evaluate_new_data(model, data)
+            y_values = _response_evaluate_new_data(model, data)
 
     response_dist = get_response_dist(model.family)
-    response_term = model.response_component.term
-    kwargs, coords = family._make_dist_kwargs_and_coords(model, posterior, **kwargs)
+    response_term = model.response_term
+    kwargs, coords = _make_dist_kwargs_and_coords(family, model, posterior, **kwargs)
 
     # If it's multivariate, it's going to have a fourth coord,
     # but we actually don't need it. We just need "chain", "draw", "__obs__"

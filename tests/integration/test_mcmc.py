@@ -290,6 +290,8 @@ def test_post_processing_simple(fitted_analytical):
     # associated with an actual regression
     deterministics = model._get_deterministic_var_names(model.traces)
     assert f"~{model._parent}_mean" not in deterministics
+    # The constant `p_outlier` bambi 0.20 traces is dropped too (#1330).
+    assert "p_outlier" not in model.traces.posterior.data_vars
     # test summary:
     summary = az.summary(model.traces)
     assert summary.shape[0] == 4
@@ -306,13 +308,19 @@ def test_post_processing_reg(fitted_analytical):
     model = fitted_analytical
 
     assert model._get_deterministic_var_names(model.traces) == ["~v"]
+    # The constant `p_outlier` bambi 0.20 traces is dropped by post-processing,
+    # but the `v_Intercept_centered` free RV it keeps alongside the uncentered
+    # `v_Intercept` deterministic stays (#1330): v_Intercept_centered,
+    # v_Intercept, v_x, v_y, a, z, t.
+    assert "p_outlier" not in model.traces.posterior.data_vars
+    assert "v_Intercept_centered" in model.traces.posterior.data_vars
     # test summary:
     summary = az.summary(model.traces)
-    assert summary.shape[0] == 6
+    assert summary.shape[0] == 7
 
     az.plot_trace_dist(model.traces)
     fig = plt.gcf()
-    assert len(fig.axes) // 2 == 6
+    assert len(fig.axes) // 2 == 7
 
 
 @pytest.mark.slow
@@ -323,34 +331,38 @@ def test_post_processing_reg_v_a(fitted_analytical):
 
     assert len(model._get_deterministic_var_names(model.traces)) == len(["~a", "~v"])
     assert set(model._get_deterministic_var_names(model.traces)) == set(["~a", "~v"])
+    # As in `test_post_processing_reg`, each regression keeps its
+    # `*_Intercept_centered` free RV (#1330): 2 x (Intercept_centered, Intercept,
+    # 2 slopes) + z + t.
+    assert "p_outlier" not in model.traces.posterior.data_vars
     # test summary:
     summary = az.summary(model.traces)
-    assert summary.shape[0] == 8
+    assert summary.shape[0] == 10
 
     summary = az.summary(model.traces, var_names=["~a"])
-    assert summary.shape[0] == 8
+    assert summary.shape[0] == 10
 
     summary = az.summary(model.traces, var_names=["~t"])
-    assert summary.shape[0] == 7
+    assert summary.shape[0] == 9
 
     summary = az.summary(model.traces, var_names=["~a", "~t"])
-    assert summary.shape[0] == 7
+    assert summary.shape[0] == 9
 
     az.plot_trace_dist(model.traces)
     fig = plt.gcf()
-    assert len(fig.axes) // 2 == 8
+    assert len(fig.axes) // 2 == 10
 
     az.plot_trace_dist(model.traces, var_names=["~a"])
     fig = plt.gcf()
-    assert len(fig.axes) // 2 == 8
+    assert len(fig.axes) // 2 == 10
 
     az.plot_trace_dist(model.traces, var_names=["~t"])
     fig = plt.gcf()
-    assert len(fig.axes) // 2 == 7
+    assert len(fig.axes) // 2 == 9
 
     az.plot_trace_dist(model.traces, var_names=["~a", "~t"])
     fig = plt.gcf()
-    assert len(fig.axes) // 2 == 7
+    assert len(fig.axes) // 2 == 9
 
 
 # Basic tests for LBA likelihood

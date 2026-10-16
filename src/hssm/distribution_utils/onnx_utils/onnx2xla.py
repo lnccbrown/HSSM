@@ -46,8 +46,7 @@ def _asarray(proto):
 
 
 # pylint: disable=E1101
-# protobuf generates the enum wrapper at runtime, so `.items()` is real but
-# invisible to static analysis.
+# The protobuf enum wrapper has `items()` at runtime; the stubs do not declare it.
 # pyrefly: ignore[missing-attribute]
 attr_types = dict(onnx.AttributeProto.AttributeType.items())
 attribute_handlers = {

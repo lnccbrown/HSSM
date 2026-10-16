@@ -96,17 +96,26 @@ def _check_initval_defaults_correctness(model) -> None:
         else:
             param_link_setting = None
 
+        # bambi >= 0.20 names the free intercept RV `*_Intercept_centered` when
+        # the formula has common predictors; the defaults are keyed by the
+        # uncentered name.
+        settings_key = (
+            name_.removesuffix("_centered")
+            if name_.endswith("_Intercept_centered")
+            else name_
+        )
+
         # Go through parameters that are specified in the initial value defaults
         # If not specified in there, we won't touch the parameter during post-processing
         # anyways
-        if name_ in hssm.defaults.INITVAL_SETTINGS[param_link_setting]:
+        if settings_key in hssm.defaults.INITVAL_SETTINGS[param_link_setting]:
             # Figure out if user specified a custom initial value for the parameter
 
             # If yes, we need to check it this custom value successfully overrode our
             # global defaults
             # If not, we want to check if our defaults where successfully applied
             user_initval = model._check_if_initval_user_supplied(
-                name_, return_value=True
+                settings_key, return_value=True
             )
 
             if user_initval is not None:
@@ -126,7 +135,7 @@ def _check_initval_defaults_correctness(model) -> None:
                 model_initial_point = model._initvals[name_]
                 default_initial_point = hssm.defaults.INITVAL_SETTINGS[
                     param_link_setting
-                ][name_]
+                ][settings_key]
 
                 assert np.allclose(
                     model_initial_point,
@@ -161,7 +170,13 @@ def test_valid_link_settings_preserve_regression_initvals(
     )
 
     assert model.params["a"].link == expected_link
-    np.testing.assert_allclose(model._initvals["a_Intercept"], expected_initval)
+    # `a ~ 1 + theta` has a common predictor, so bambi >= 0.20 centers it and
+    # the free intercept RV is `a_Intercept_centered` (`a_Intercept` is a
+    # Deterministic). It carries the default that used to land on `a_Intercept`.
+    assert "a_Intercept" not in model._initvals
+    np.testing.assert_allclose(
+        model._initvals["a_Intercept_centered"], expected_initval
+    )
 
 
 @pytest.mark.slow
@@ -313,6 +328,85 @@ def test_process_no_process(caplog):
     initval processing is turned off vs. turned on."""
 
 
+def test_user_initval_on_centered_regression_intercept(cavanagh_test):
+    """A user `initval` on a centered intercept prior survives postprocessing."""
+    model = hssm.HSSM(
+        data=cavanagh_test.iloc[:12],
+        include=[
+            {
+                "name": "a",
+                "formula": "a ~ 1 + theta",
+                "prior": {
+                    "Intercept": {
+                        "name": "Normal",
+                        "mu": 1.0,
+                        "sigma": 0.5,
+                        "initval": 0.8,
+                    },
+                    "theta": {"name": "Normal", "mu": 0.0, "sigma": 0.5},
+                },
+            }
+        ],
+        v=0.0,
+        z=0.5,
+        t=0.2,
+        p_outlier=0.0,
+        process_initvals=True,
+        initval_jitter=0.0,
+    )
+
+    assert "a_Intercept" not in model._initvals
+    np.testing.assert_allclose(model._initvals["a_Intercept_centered"], 0.8)
+    _check_initval_defaults_correctness(model)
+
+
+class _FitCalled(Exception):
+    pass
+
+
+def test_user_sample_initval_on_intercept_deterministic_is_remapped(
+    cavanagh_test, monkeypatch
+):
+    """`sample(initvals={"a_Intercept": ...})` reaches `a_Intercept_centered`.
+
+    PyMC silently drops initvals keyed on a Deterministic, which `a_Intercept`
+    is once `a` has a common predictor.
+    """
+    model = hssm.HSSM(
+        data=cavanagh_test.iloc[:12],
+        include=[
+            {"name": "a", "formula": "a ~ 1 + theta"},
+            {"name": "v", "formula": "v ~ 1 + theta"},
+        ],
+        z=0.5,
+        t=0.2,
+        p_outlier=0.0,
+    )
+    captured = {}
+
+    def fake_fit(**kwargs):
+        captured.update(kwargs["initvals"])
+        raise _FitCalled
+
+    monkeypatch.setattr(model.model, "fit", fake_fit)
+    with pytest.raises(_FitCalled):
+        model.sample(
+            initvals={
+                "a_Intercept": 1.2,
+                "v_Intercept": 0.3,
+                "v_Intercept_centered": 0.5,  # explicit centered key wins
+                "a_theta": 0.1,
+            }
+        )
+
+    assert captured == {
+        "a_Intercept_centered": 1.2,
+        "v_Intercept": 0.3,
+        "v_Intercept_centered": 0.5,
+        "a_theta": 0.1,
+    }
+
+
 def test_default_initval_clamped_into_bounds():
     """A default initval outside the declared bounds is moved inside them."""
     # Below the lower bound -> moved inside by 5% of the bound width.
@@ -443,7 +537,7 @@ def test_identity_link_override_clamps_into_bounds(caplog, cavanagh_test):
         ],
     )
     assert getattr(model.params["t"].link, "name", model.params["t"].link) == "identity"
-    initval = float(np.asarray(model._initvals["t_Intercept"]))
+    initval = float(np.asarray(model._initvals["t_Intercept_centered"]))
     # the link-space default of -4.0 would be far outside these bounds
     assert 0.25 < initval < 2.0
     assert initval == pytest.approx(0.25 + 0.05 * (2.0 - 0.25))
@@ -481,5 +575,5 @@ def test_explicit_log_link_keeps_default_start(
     )
 
     assert model.params[name].link == "log"
-    initval = model._initvals[f"{name}_Intercept"]
+    initval = model._initvals[f"{name}_Intercept_centered"]
     assert initval == np.array(expected_initval).astype(initval.dtype)

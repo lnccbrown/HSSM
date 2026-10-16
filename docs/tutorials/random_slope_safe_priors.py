@@ -1,14 +1,10 @@
 # /// script
 # requires-python = ">=3.12,<3.15"
 # dependencies = [
-#     "bambi==0.20.0",
-#     "formulae==0.6.2",
+#     "bambi @ git+https://github.com/bambinos/bambi.git@dev",
 #     "graphviz==0.21",
-#     "hssm @ git+https://github.com/lnccbrown/HSSM.git@6af7e8784609f5cb2e59506624e32303d2086351",
+#     "hssm @ git+https://github.com/lnccbrown/HSSM.git@main",
 #     "marimo==0.24.0",
-#     "numpy==2.4.6",
-#     "pandas==3.0.5",
-#     "pymc==6.3.1",
 # ]
 # ///
 
@@ -16,27 +12,20 @@
 
 This marimo notebook uses a tiny balanced 2x2 synthetic dataset. It checks the
 component-design ranks, verifies the corrected safe defaults, and then manually
-supplies the legacy malformed priors to expose their centered and non-centered
-failure modes.
+supplies the legacy malformed priors: current HSSM rejects them non-centered,
+and the centered graph exposes their location ridge.
 
-No sampling is needed. The inline environment pins the reviewed HSSM snapshot
-for a reproducible standalone or Molab run::
+No sampling is needed. For a standalone or Molab run::
 
     uvx marimo edit --sandbox docs/tutorials/random_slope_safe_priors.py
 
-The pin is a snapshot of current HSSM, which rejects the legacy malformed prior
-under non-centering before model construction instead of silently dropping its
-location. The notebook shows that rejection and builds the centered legacy
-graph. Use the link-functions tutorial to exercise the current group-prior
-contract.
-
-Regenerate the published static artifact from that pinned environment::
+Regenerate the published static artifact from the project environment::
 
     HSSM_DOCS_STATIC=1 \
-      uvx marimo==0.24.0 export ipynb \
+      uv run --group notebook marimo export ipynb --no-sandbox \
         docs/tutorials/random_slope_safe_priors.py \
         --output docs/tutorials/random_slope_safe_priors.ipynb \
-        --include-outputs --sandbox --force
+        --include-outputs --force
     uv run ruff format docs/tutorials/random_slope_safe_priors.ipynb
 
 The graph cells also require the Graphviz ``dot`` executable (for example,
@@ -104,14 +93,9 @@ def _(bmb, hssm, jax, mo):
 
     This notebook validates the corrected `prior_settings="safe"` behavior for
     a regression containing the same slopes at the population and participant
-    levels. It then recreates the old bug explicitly, without relying on an
-    affected HSSM installation. It uses **HSSM {hssm.__version__}** and
-    **Bambi {bmb.__version__}** from the pinned environment.
-
-    The hosted environment is pinned to HSSM `6af7e878`, which validates explicit
-    group priors before model construction. The malformed legacy graph can only
-    be recreated under centering; its non-centered form is rejected with a
-    message this notebook shows.
+    levels. It then supplies the old malformed priors explicitly, without relying
+    on an affected HSSM installation. It uses **HSSM {hssm.__version__}** and
+    **Bambi {bmb.__version__}**.
 
     This construction-only notebook explicitly uses the **{jax.default_backend()}**
     JAX backend so it also runs on Molab servers whose base image exposes an
@@ -123,9 +107,9 @@ def _(bmb, hssm, jax, mo):
        maximal ranks, with the usual fixed/random column overlap;
     2. corrected safe defaults structurally match common and group terms and
        fix every participant-level mean at zero;
-    3. manually recreating the old free-mean priors is rejected before
-       construction when non-centered, because the means would be
-       disconnected, and produces a location ridge when centered; and
+    3. HSSM rejects the old free-mean priors when non-centered, because Bambi
+       would leave their means disconnected, and centering them builds a
+       location ridge instead; and
     4. corrected safe defaults agree with the explicit zero-mean reference.
     """)
     return
@@ -334,22 +318,13 @@ def _(data, formula, hssm):
             process_initvals=False,
         )
 
-    return build_model, group_slope_terms, legacy_priors, workaround_priors
+    return build_model, legacy_priors, workaround_priors
 
 
 @app.cell
 def _(build_model, legacy_priors, workaround_priors):
     safe_noncentered_model = build_model(noncentered=True)
     safe_centered_model = build_model(noncentered=False)
-    try:
-        build_model(prior=legacy_priors, noncentered=True)
-    except ValueError as error:
-        legacy_noncentered_rejection = str(error)
-    else:
-        raise AssertionError(
-            "current HSSM rejects the legacy free-mean priors under "
-            "noncentered=True before model construction"
-        )
     legacy_centered_model = build_model(
         prior=legacy_priors,
         noncentered=False,
@@ -360,11 +335,22 @@ def _(build_model, legacy_priors, workaround_priors):
     )
     return (
         legacy_centered_model,
-        legacy_noncentered_rejection,
         safe_centered_model,
         safe_noncentered_model,
         workaround_model,
     )
+
+
+@app.cell
+def _(build_model, legacy_priors):
+    try:
+        build_model(prior=legacy_priors, noncentered=True)
+    except ValueError as _error:
+        legacy_noncentered_error = str(_error)
+    else:
+        raise AssertionError("HSSM accepted the legacy non-centered priors.")
+    assert "leaving a disconnected node" in legacy_noncentered_error
+    return (legacy_noncentered_error,)
 
 
 @app.cell
@@ -442,10 +428,8 @@ def _(mo):
     The legacy option is constructed manually: only the three random slopes are
     assigned estimated `Normal(0, 0.25)` means. This recreates the malformed
     priors once generated by affected HSSM versions while the notebook itself
-    continues to run on fixed HSSM code. Current HSSM builds that specification
-    only under `noncentered=False`, so its prior table comes from the centered
-    legacy model; the non-centered request is rejected before construction,
-    as section 5 shows.
+    continues to run on fixed HSSM code. The table reads them from the centered
+    model, the only legacy form current HSSM constructs.
 
     In Molab, use the selector for a focused view. The full static comparison is
     included underneath it for the published documentation.
@@ -514,9 +498,7 @@ def _(prior_comparison_table):
 @app.cell
 def _(
     find_disconnected_free_rvs,
-    group_slope_terms,
     legacy_centered_model,
-    legacy_noncentered_rejection,
     pd,
     safe_centered_model,
     safe_noncentered_model,
@@ -526,11 +508,6 @@ def _(
     safe_centered_disconnected = find_disconnected_free_rvs(
         safe_centered_model.pymc_model
     )
-    legacy_rejected_terms = [
-        term
-        for term in group_slope_terms
-        if f"'{term}'" in legacy_noncentered_rejection
-    ]
     legacy_centered_disconnected = find_disconnected_free_rvs(
         legacy_centered_model.pymc_model
     )
@@ -562,14 +539,6 @@ def _(
             },
             {
                 "prior specification": "manual legacy free means",
-                "parameterization": "non-centered",
-                "disconnected free RVs": "not built; HSSM rejected the priors for "
-                + ", ".join(legacy_rejected_terms),
-                "count": len(legacy_rejected_terms),
-                "diagnosis": "would-be orphan means, rejected before construction",
-            },
-            {
-                "prior specification": "manual legacy free means",
                 "parameterization": "centered",
                 "disconnected free RVs": ", ".join(legacy_centered_disconnected)
                 or "none",
@@ -586,7 +555,7 @@ def _(
         ]
     )
 
-    _expected_legacy_orphans = {
+    _expected_legacy_means = {
         "v_blocktype2_num|participant_id_mu",
         "v_task_num|participant_id_mu",
         "v_blocktype2_num:task_num|participant_id_mu",
@@ -613,14 +582,11 @@ def _(
     }
     assert safe_disconnected == []
     assert safe_centered_disconnected == []
-    assert legacy_rejected_terms == group_slope_terms
-    assert "disconnected node" in legacy_noncentered_rejection
-    assert "noncentered=False" in legacy_noncentered_rejection
     assert legacy_centered_disconnected == []
     assert workaround_disconnected == []
     assert _safe_group_means == set()
     assert _safe_centered_group_means == set()
-    assert _legacy_centered_group_means == _expected_legacy_orphans
+    assert _legacy_centered_group_means == _expected_legacy_means
     assert _workaround_group_means == set()
     return disconnected_by_graph, graph_table
 
@@ -636,11 +602,25 @@ def _(mo):
 
     In the manually recreated legacy case, Bambi's non-centered group term is
     `offset * sigma`; it does not add `mu`. The three supplied slope means would
-    remain free random variables without a path to the likelihood. Current HSSM
-    detects this before model construction and rejects the specification: the
-    table records the three terms it refused, and section 6 reproduces the full
-    message. Centering connects those means to the group distributions, but
-    produces the location ridge derived below rather than repairing the model.
+    remain free random variables without a path to the likelihood. Affected
+    releases built that graph silently. Current HSSM rejects it before model
+    construction:
+    """)
+    return
+
+
+@app.cell
+def _(legacy_noncentered_error, mo):
+    mo.md(f"```text\n{legacy_noncentered_error}\n```")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md("""
+    The error offers the centered alternative. Centering connects those means
+    to the group distributions and passes the check, but produces the location
+    ridge derived below rather than repairing the model.
     """)
     return
 
@@ -672,21 +652,18 @@ def _(mo):
     arrows to the observed `rt,response` node:
 
     - **red** nodes would be free random variables with no path to the
-      likelihood; current HSSM rejects such a specification before Bambi
-      builds the graph, so none appear;
+      likelihood (none of these models has one);
     - **amber** nodes are estimated participant-level population means; and
     - **blue** nodes are the matching common slopes.
 
-    The corrected-safe graph omits the unintended `*_mu` nodes. The manually
-    recreated legacy non-centered graph is never built: HSSM raises instead,
-    and its message is reproduced below. Centering those same malformed priors
-    connects the amber means, but each then competes with a blue common slope
-    for the same population location.
+    The corrected-safe graph omits the unintended `*_mu` nodes. The centered
+    legacy priors connect the amber means, but each then competes with a blue
+    common slope for the same population location.
 
-    The published documentation keeps the two diagnostically important
+    The published documentation keeps the two diagnostically important graph
     snapshots below. In the [live Molab notebook](https://molab.marimo.io/github/lnccbrown/HSSM/blob/main/docs/tutorials/random_slope_safe_priors.py),
-    use the selector to inspect all four models, including the centered safe
-    defaults and the explicit zero-mean reference.
+    use the selector to inspect all four constructible models, including the
+    centered safe defaults and the explicit zero-mean reference.
     """)
     return
 
@@ -697,8 +674,7 @@ def _(mo, static_docs):
         graph_selection = "safe_noncentered"
         _selector = mo.md(
             "**Static selection:** corrected safe defaults, non-centered. "
-            "The legacy non-centered rejection and the legacy centered graph "
-            "follow below."
+            "The centered legacy diagnostic graph follows below."
         )
     else:
         _graph_view = mo.ui.dropdown(
@@ -800,31 +776,6 @@ def _(
 def _(graph_selection, make_model_graph):
     selected_model_graph = make_model_graph(graph_selection)
     selected_model_graph
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md("""
-    ### Legacy free means, non-centered: rejected before construction
-
-    Bambi would create the three slope-mean random variables but omit them from
-    the non-centered group coefficients, leaving isolated nodes. Current HSSM
-    checks explicit group priors against the effective parameterization before
-    asking Bambi to build the model, so no graph exists for this case; model
-    construction raises the message below instead. It names each refused term
-    and the two ways out: keep the common slope with a zero-mean deviation, or
-    set `noncentered=False` to retain the explicit free mean.
-    """)
-    return
-
-
-@app.cell
-def _(legacy_noncentered_rejection, mo):
-    legacy_noncentered_message = mo.md(
-        "> " + legacy_noncentered_rejection.replace("\n", "\n> ")
-    )
-    legacy_noncentered_message
     return
 
 
@@ -937,9 +888,9 @@ def _(mo):
     zero-mean reference.
 
     The old pathology is reproduced independently by manually supplying its
-    free-mean slope priors: current HSSM rejects the non-centered form before
-    construction, naming the three means that would be orphaned, while
-    centering exposes the fixed/group-mean location ridge. For affected HSSM
+    free-mean slope priors: current HSSM rejects the non-centered form, which
+    would leave three orphan variables, while centering exposes the
+    fixed/group-mean location ridge. For affected HSSM
     releases, explicit zero-mean group priors remain the safe workaround shown
     above.
 

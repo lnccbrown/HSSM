@@ -89,8 +89,18 @@ COVERING_ARRAY = [
     ("pytensor", "advi", "simple", "cpn"),
     ("pytensor", "advi", "reg", "opn"),
     ("pytensor", "fullrank_advi", "simple", "opn"),
-    ("jax", "advi", "simple", "opn"),
-    ("jax", "fullrank_advi", "reg", "cpn"),
+    pytest.param(
+        "jax",
+        "advi",
+        "simple",
+        "opn",
+    ),
+    pytest.param(
+        "jax",
+        "fullrank_advi",
+        "reg",
+        "cpn",
+    ),
 ]
 
 

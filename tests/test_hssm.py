@@ -8,6 +8,7 @@ import pymc as pm
 import pytensor
 import pytest
 import xarray as xr
+from pymc.model.transform.optimization import freeze_dims_and_data
 from pymc.variational import Approximation
 
 import hssm
@@ -40,11 +41,11 @@ class _EqualitySpoof:
 @pytest.mark.parametrize(
     "include, expected_exception",
     [
-        (
+        pytest.param(
             [param_v],
             None,
         ),
-        (
+        pytest.param(
             [
                 param_v,
                 param_a,
@@ -68,7 +69,7 @@ class _EqualitySpoof:
             ],
             TypeError,
         ),
-        (
+        pytest.param(
             [
                 {
                     "name": "v",
@@ -78,10 +79,7 @@ class _EqualitySpoof:
                     "formula": "invalid_formula",
                 }
             ],
-            # RHS-only shorthand is normalised to ``v ~ invalid_formula`` before
-            # the design matrices are built, so the unknown column surfaces as a
-            # pandas ``KeyError`` from formulae (pandas 2 and 3 alike).
-            KeyError,
+            ValueError,
         ),
     ],
 )
@@ -209,6 +207,9 @@ def test_sample_prior_predictive(data_ddm_reg):
             prior_predictive.children
         )
         assert prior_predictive["prior_predictive"].sizes["draw"] == 10
+        # The fixed default `p_outlier` is a constant, not a prior draw (#1329).
+        assert "p_outlier" not in prior_predictive["prior"]
+        assert {"v", "a", "z", "t"} <= set(prior_predictive["prior"].data_vars)
 
     model_regression = HSSM(
         data=data_ddm_reg, include=[dict(name="v", formula="v ~ 1 + x")]
@@ -297,7 +298,7 @@ def test_add_likelihood_parameters_to_data(data_ddm):
     # Get distributional components (make sure to take the right aliases)
     distributional_component_names = [
         key_ if key_ not in model._aliases else model._aliases[key_]
-        for key_ in model.model.distributional_components.keys()
+        for key_ in model.model.conditional_parameters.keys()
     ]
 
     # Check that after computing the likelihood parameters
@@ -343,9 +344,11 @@ def test_log_likelihood_uses_likelihood_compile_mode(
     model._inference_obj = traces
     calls = []
 
-    def fake_compute_log_likelihood(bambi_model, dt, data, inplace, *, compile_mode):
-        """Record the compiler forwarded by the public method."""
-        calls.append((bambi_model, dt, data, inplace, compile_mode))
+    def fake_compute_log_likelihood(
+        bambi_model, dt, data, inplace, *, compile_mode, random_seed
+    ):
+        """Record the compiler and seed forwarded by the public method."""
+        calls.append((bambi_model, dt, data, inplace, compile_mode, random_seed))
         result = dt.copy(deep=True)
         result["log_likelihood"] = xr.Dataset(
             {"rt,response": (("chain", "draw"), np.array([[-1.0]]))}
@@ -359,6 +362,7 @@ def test_log_likelihood_uses_likelihood_compile_mode(
     result = model.log_likelihood(
         inplace=False,
         keep_likelihood_params=True,
+        random_seed=5,
     )
 
     assert len(calls) == 1
@@ -367,6 +371,7 @@ def test_log_likelihood_uses_likelihood_compile_mode(
     assert calls[0][2] is None
     assert calls[0][3] is False
     assert calls[0][4] == expected_compile_mode
+    assert calls[0][5] == 5
     assert result is not traces
     assert isinstance(result, xr.DataTree)
     assert "log_likelihood" in result
@@ -392,18 +397,15 @@ def test_add_likelihood_parameters_accepts_explicit_datatree(data_ddm, monkeypat
     )
     received = []
 
-    def fake_compute_likelihood_params(dt):
+    def fake_predict(dt, kind, inplace):
+        assert kind == "response_params"
+        assert inplace is True
         received.append(dt)
         dt["posterior"] = dt["posterior"].ds.assign(
             v_mean=(("chain", "draw"), np.array([[0.5]]))
         )
-        return dt
 
-    monkeypatch.setattr(
-        model.model,
-        "_compute_likelihood_params",
-        fake_compute_likelihood_params,
-    )
+    monkeypatch.setattr(model.model, "predict", fake_predict)
 
     result = model.add_likelihood_parameters_to_datatree(dt=traces, inplace=False)
 
@@ -507,7 +509,7 @@ def test_valid_prior_settings_preserve_regression_and_simple_prior_scope(
     safe_model = HSSM(**model_kwargs, prior_settings="safe")
 
     assert delegated_model.params["v"].prior is None
-    assert delegated_model.model.components["v"].intercept_term.prior is not None
+    assert delegated_model.model.parameters["v"].intercept_term.prior is not None
     assert isinstance(safe_model.params["v"].prior, dict)
 
     for name in ("a", "z", "t"):
@@ -759,12 +761,15 @@ def test_vi_passes_backend_to_pm_fit(
         captured["shim_active"] = hasattr(
             approximations.MeanFieldGroup.create_shared_params, "__wrapped__"
         )
+        captured["frozen"] = set(kwargs.get("more_replacements") or {})
 
     monkeypatch.setattr("hssm.base.pm.fit", fake_fit)
     # Skip post-processing since fake_fit returns no approximation object.
     monkeypatch.setattr(model, "_clean_posterior_group", lambda dt=None: None)
 
-    model.vi(niter=1, draws=1, backend=backend_arg)
+    # An explicit `more_replacements=None` is valid for pymc and must merge
+    # cleanly with the jax freeze.
+    model.vi(niter=1, draws=1, backend=backend_arg, more_replacements=None)
 
     assert captured["backend"] == expected_backend
     assert captured["shim_active"] == (expected_backend == "jax")
@@ -772,6 +777,12 @@ def test_vi_passes_backend_to_pm_fit(
     assert not hasattr(
         approximations.MeanFieldGroup.create_shared_params, "__wrapped__"
     )
+    # The jax backend also freezes the model's shared data and dim lengths
+    # (#1328); the other backends trace them live.
+    if expected_backend == "jax":
+        assert model.pymc_model.dim_lengths["__obs__"] in captured["frozen"]
+    else:
+        assert captured["frozen"] == set()
 
 
 def test_vi_idata_rejects_attached_approximation(data_ddm):
@@ -783,42 +794,28 @@ def test_vi_idata_rejects_attached_approximation(data_ddm):
         _ = model.vi_idata
 
 
-def test_drop_parent_str_requires_datatree(data_ddm):
-    """Posterior cleanup rejects a missing trace object."""
-    model = HSSM(data=data_ddm)
-
-    with pytest.raises(
-        ValueError,
-        match=r"Please provide a DataTree \(traces\) object\.",
-    ):
-        model._drop_parent_str_from_datatree(None)
-
-
-def test_drop_parent_str_renames_response_mean(data_ddm):
-    """Posterior cleanup restores the model's response-parameter name."""
-    model = HSSM(data=data_ddm)
+def test_clean_posterior_keeps_covariates_named_mean(data_ddm):
+    """Only the parent's `_mean` alias is dropped, not any name containing `_mean`."""
+    data = data_ddm.assign(rt_mean=np.linspace(-1, 1, len(data_ddm)))
+    model = HSSM(data=data, include=[{"name": "v", "formula": "v ~ 1 + rt_mean"}])
+    # bambi only emits `v_mean` for an all-simple model, so add it by hand.
+    names = ["v_mean"] + [
+        var_.name
+        for var_ in model.pymc_model.free_RVs + model.pymc_model.deterministics
+    ]
+    assert "v_rt_mean" in names
     traces = xr.DataTree.from_dict(
         {
             "posterior": xr.Dataset(
-                {
-                    "rt,response_mean": (
-                        ("chain", "draw"),
-                        np.array([[0.5]]),
-                    )
-                }
+                {name: (("chain", "draw"), np.zeros((1, 1))) for name in names}
             )
         }
     )
 
-    result = model._drop_parent_str_from_datatree(traces)
+    model._clean_posterior_group(dt=traces)
 
-    assert result is traces
-    assert model._parent in result["posterior"].data_vars
-    assert "rt,response_mean" not in result["posterior"].data_vars
-    np.testing.assert_array_equal(
-        result["posterior"][model._parent].values,
-        np.array([[0.5]]),
-    )
+    assert "v_rt_mean" in traces["posterior"].data_vars
+    assert "v_mean" not in traces["posterior"].data_vars
 
 
 def test_is_choice_only_and_deadline(data_ddm):
@@ -843,6 +840,17 @@ def test_is_choice_only_and_deadline(data_ddm):
     assert len(model_with_deadline.response) == 2
     assert model_with_deadline.response_c == "c(response, deadline)"
     assert model_with_deadline.response_str == "response,deadline"
+
+
+def test_unknown_formula_variable_raises_value_error(data_ddm_reg):
+    """A formula naming a column absent from ``data`` raises a clear ValueError.
+
+    formulae/pandas raise a bare lookup error here (its type has drifted across
+    releases), so HSSM normalises it and names the parameter and formula.
+    """
+    include = [{"name": "v", "formula": "v ~ 1 + not_a_column"}]
+    with pytest.raises(ValueError, match=r"'v'.*'v ~ 1 \+ not_a_column'.*not_a_column"):
+        HSSM(data=data_ddm_reg, include=include)
 
 
 @pytest.mark.parametrize("mode", [None, "JAX"], ids=["default", "jax_linker"])
@@ -880,7 +888,9 @@ def test_jax_callable_non_trialwise_params_logp(data_ddm, mode):
         t=t_fixed,
     )
 
-    pymc_model = model.pymc_model
+    # bambi >= 0.20 keeps the observation count as shared data, which the JAX
+    # linker cannot trace; freeze it the way PyMC's own JAX samplers do.
+    pymc_model = freeze_dims_and_data(model.pymc_model)
     value_vars = list(pymc_model.value_vars)
     assert [v.name for v in value_vars] == ["v_interval__"], (
         "only the parent should be free; the rest are fixed constants"

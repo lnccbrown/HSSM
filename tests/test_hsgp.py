@@ -48,7 +48,7 @@ def cov_priors():
 
 
 def get_hsgp_bambi_term(model, name):
-    for component in model.model.components.values():
+    for component in model.model.parameters.values():
         term = getattr(component, "terms", {}).get(name)
         if term is not None:
             return term

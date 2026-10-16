@@ -5,6 +5,7 @@ import pytest
 import xarray as xr
 
 import hssm
+from tests.trace_fixtures import build_cav_reg_model
 
 hssm.set_floatX("float32")
 
@@ -16,8 +17,8 @@ PARAMETER_GRID = [
     (None, True, False),
     # (50, False, False),
     (50, True, False),
-    # (np.arange(500), False, False), # very slow to test
-    (np.arange(500), True, False),
+    # (np.arange(200), False, False), # very slow to test
+    (np.arange(200), True, False),
     (1, False, True),
     (1, True, True),
     # (None, False, True), # very slow to test
@@ -25,7 +26,7 @@ PARAMETER_GRID = [
     (50, False, True),
     (50, True, True),
     (np.arange(50), False, True),
-    (np.arange(500), True, True),
+    (np.arange(200), True, True),
     ([1, 2, 3, 4, 5], False, False),
     ([1, 2, 3, 4, 5], True, False),
     ([1, 2, 3, 4, 5], False, True),
@@ -37,20 +38,7 @@ PARAMETER_GRID = [
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_sample_posterior_predictive(cav_dt, cavanagh_test, draws, safe_mode, inplace):
     """Test sample_posterior_predictive method."""
-    model = hssm.HSSM(
-        data=cavanagh_test,
-        include=[
-            {
-                "name": "v",
-                "prior": {
-                    "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
-                    "theta": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
-                },
-                "formula": "v ~ theta + (1|participant_id)",
-                "link": "identity",
-            },
-        ],
-    )  # Doesn't matter what model or data we use here
+    model = build_cav_reg_model(cavanagh_test)
     if "posterior_predictive" in cav_dt:
         del cav_dt["posterior_predictive"]
     cav_dt_copy = cav_dt.copy()
@@ -60,7 +48,7 @@ def test_sample_posterior_predictive(cav_dt, cavanagh_test, draws, safe_mode, in
     )
 
     if draws is None:
-        size = 500
+        size = 200
     elif isinstance(draws, int):
         size = draws
     elif isinstance(draws, np.ndarray):
@@ -97,6 +85,8 @@ def test_sample_posterior_predictive_uses_attached_traces_for_response_params(
         return expected
 
     monkeypatch.setattr(model.model, "predict", fake_predict)
+    # the fake posterior only carries `v`; this test is about delegation
+    monkeypatch.setattr(model, "_check_posterior_has_free_rvs", lambda dt: None)
 
     result = model.sample_posterior_predictive(
         kind="response_params",
@@ -128,6 +118,8 @@ def test_sample_posterior_predictive_replaces_existing_group_inplace(
         dt["posterior_predictive"] = replacement
 
     monkeypatch.setattr(model.model, "predict", fake_predict)
+    # the fake posterior only carries `v`; this test is about delegation
+    monkeypatch.setattr(model, "_check_posterior_has_free_rvs", lambda dt: None)
 
     result = model.sample_posterior_predictive(
         dt=traces,
@@ -144,3 +136,165 @@ def test_sample_posterior_predictive_replaces_existing_group_inplace(
         np.array([[1.0, 2.0]]),
     )
     assert "pre-existing posterior_predictive group deleted" in caplog.text
+
+
+@pytest.fixture(scope="module")
+def fitted_ddm_reg(data_ddm_reg):
+    """Return a regression DDM together with a short trace it was fitted on."""
+    model = hssm.HSSM(data=data_ddm_reg, include=[{"name": "v", "formula": "v ~ x"}])
+    dt = model.sample(draws=10, tune=10, chains=1, cores=1, progressbar=False)
+    return model, dt
+
+
+@pytest.fixture
+def ddm_reg_dt(fitted_ddm_reg):
+    """Return a fresh copy of the fitted trace without a predictive group."""
+    _, dt = fitted_ddm_reg
+    dt = dt.copy()
+    if "posterior_predictive" in dt:
+        del dt["posterior_predictive"]
+    return dt
+
+
+N_NEW_OBS = 40
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("safe_mode", [True, False])
+@pytest.mark.parametrize("inplace", [True, False])
+def test_out_of_sample_prediction_lands_in_posterior_predictive(
+    fitted_ddm_reg, ddm_reg_dt, data_ddm_reg, safe_mode, inplace
+):
+    """Out-of-sample draws are exposed as ``posterior_predictive``, not ``predictions``.
+
+    bambi 0.20 routes ``Model.predict(data=...)`` to a ``predictions`` group (and
+    ``predictions_constant_data``). HSSM keeps its documented contract: the response
+    draws live in ``posterior_predictive`` with one ``__obs__`` per row of ``data``.
+    """
+    model, _ = fitted_ddm_reg
+    new_data = data_ddm_reg.iloc[:N_NEW_OBS].reset_index(drop=True)
+    posterior_vars = set(ddm_reg_dt["posterior"].to_dataset().data_vars)
+
+    result = model.sample_posterior_predictive(
+        dt=ddm_reg_dt, data=new_data, draws=5, safe_mode=safe_mode, inplace=inplace
+    )
+
+    if inplace:
+        assert result is None
+        out = ddm_reg_dt
+    else:
+        assert result is not None
+        assert "posterior_predictive" not in ddm_reg_dt
+        out = result
+
+    assert "predictions" not in out
+    assert "predictions_constant_data" not in out
+    pps = out["posterior_predictive"].to_dataset()
+    assert list(pps.data_vars) == ["rt,response"]
+    assert pps.sizes["__obs__"] == N_NEW_OBS
+    assert pps.sizes["draw"] == 5
+    # the posterior is left untouched: no trial-wise variables sized to `data`
+    assert set(out["posterior"].to_dataset().data_vars) == posterior_vars
+    assert out["posterior"].to_dataset().sizes["draw"] == 10
+
+
+@pytest.mark.slow
+def test_out_of_sample_prediction_replaces_stale_predictions_groups(
+    fitted_ddm_reg, ddm_reg_dt, data_ddm_reg
+):
+    """Left-over bambi ``predictions*`` groups on ``dt`` do not survive a new call."""
+    model, _ = fitted_ddm_reg
+    new_data = data_ddm_reg.iloc[:N_NEW_OBS].reset_index(drop=True)
+    stale = xr.Dataset({"stale": (("chain", "draw"), np.zeros((1, 1)))})
+    ddm_reg_dt["predictions"] = stale
+    ddm_reg_dt["predictions_constant_data"] = stale
+
+    model.sample_posterior_predictive(
+        dt=ddm_reg_dt, data=new_data, draws=2, safe_mode=False, inplace=True
+    )
+
+    assert "predictions" not in ddm_reg_dt
+    assert "predictions_constant_data" not in ddm_reg_dt
+    pps = ddm_reg_dt["posterior_predictive"].to_dataset()
+    assert pps.sizes["__obs__"] == N_NEW_OBS
+
+
+@pytest.mark.slow
+def test_in_sample_prediction_matches_out_of_sample_layout(
+    fitted_ddm_reg, ddm_reg_dt, data_ddm_reg
+):
+    """In- and out-of-sample results share the same group and variable layout."""
+    model, _ = fitted_ddm_reg
+    in_sample = model.sample_posterior_predictive(
+        dt=ddm_reg_dt, draws=2, safe_mode=False, inplace=False
+    )
+    out_of_sample = model.sample_posterior_predictive(
+        dt=ddm_reg_dt, data=data_ddm_reg, draws=2, safe_mode=False, inplace=False
+    )
+
+    a = in_sample["posterior_predictive"].to_dataset()
+    b = out_of_sample["posterior_predictive"].to_dataset()
+    assert list(a.data_vars) == list(b.data_vars)
+    assert a["rt,response"].dims == b["rt,response"].dims
+    assert a.sizes == b.sizes
+    # HSSM's response dim is the same in every group (bambi calls it `rt_dim`)
+    assert a["rt,response"].dims[-1] == "rt,response_dim"
+    assert ddm_reg_dt["observed_data"]["rt,response"].dims[-1] == "rt,response_dim"
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("safe_mode", [True, False])
+def test_in_sample_prediction_ignores_stale_predictions_group(
+    fitted_ddm_reg, ddm_reg_dt, safe_mode
+):
+    """A stale bambi ``predictions`` group without the response is not mistaken for draws.
+
+    A prior out-of-sample ``kind="response_params"`` call leaves a ``predictions``
+    group holding only likelihood parameters. A following in-sample
+    ``kind="response"`` call writes to ``posterior_predictive`` and must not try to
+    read the response from the stale group.
+    """
+    model, _ = fitted_ddm_reg
+    stale = xr.Dataset({"v": (("chain", "draw", "__obs__"), np.zeros((1, 1, 3)))})
+    ddm_reg_dt["predictions"] = stale
+    ddm_reg_dt["predictions_constant_data"] = stale
+
+    out = model.sample_posterior_predictive(
+        dt=ddm_reg_dt, draws=2, safe_mode=safe_mode, inplace=False
+    )
+
+    assert "predictions" not in out
+    assert "predictions_constant_data" not in out
+    pps = out["posterior_predictive"].to_dataset()
+    assert list(pps.data_vars) == ["rt,response"]
+    assert pps.sizes["draw"] == 2
+
+
+@pytest.mark.parametrize("data", [None, "cavanagh_test"])
+def test_sample_posterior_predictive_rejects_trace_missing_free_rv(
+    cav_dt, cavanagh_test, data
+):
+    """A trace lacking a free RV fails loudly instead of resampling it from its prior.
+
+    Out of sample, ``pm.sample_posterior_predictive`` would otherwise draw the
+    missing RV from its prior and pass the result off as posterior predictions.
+    """
+    model = build_cav_reg_model(cavanagh_test)
+    cav_dt["posterior"] = (
+        cav_dt["posterior"].to_dataset().drop_vars("v_Intercept_centered")
+    )
+
+    with pytest.raises(ValueError, match=r"\['v_Intercept_centered'\]"):
+        model.sample_posterior_predictive(
+            dt=cav_dt, data=cavanagh_test if data else None, draws=1
+        )
+
+
+def test_free_rv_check_allows_omitted_offsets(cav_dt, cavanagh_test):
+    """`omit_offsets=True` traces pass: bambi rebuilds `*_offset` from the term."""
+    model = build_cav_reg_model(cavanagh_test)
+    cav_dt["posterior"] = (
+        cav_dt["posterior"].to_dataset().drop_vars("v_1|participant_id_offset")
+    )
+
+    model._check_posterior_has_free_rvs(cav_dt)

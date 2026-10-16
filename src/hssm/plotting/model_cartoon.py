@@ -383,6 +383,16 @@ def compute_merge_necessary_deterministics(
     deterministics_list: list[xr.Dataset] = []
     group_ds = dt[dt_group].to_dataset()
     dt_group_keys = list(group_ds.data_vars)
+    # A trace recorded under another floatX (e.g. a float64 trace loaded after
+    # `hssm.set_floatX("float32")`) breaks the compiled graph; cast it to the
+    # model's dtypes as `pm.sample_posterior_predictive` does.
+    inputs_ds = group_ds.assign(
+        {
+            rv.name: group_ds[rv.name].astype(rv.dtype)
+            for rv in model.pymc_model.free_RVs
+            if rv.name in group_ds
+        }
+    )
     # Compute the deterministic variables
     for param in necessary_params:
         if param not in dt_group_keys:
@@ -395,7 +405,7 @@ def compute_merge_necessary_deterministics(
                     cast(
                         "xr.Dataset",
                         pm.compute_deterministics(
-                            group_ds, model=model.pymc_model, var_names=[param]
+                            inputs_ds, model=model.pymc_model, var_names=[param]
                         ),
                     )
                 )

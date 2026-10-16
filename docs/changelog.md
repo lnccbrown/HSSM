@@ -1,5 +1,128 @@
 # Changelog
 
+### 0.6.0 (unreleased)
+
+Migration to the Bambi 0.20 rewrite ([bambinos/bambi#1002](https://github.com/bambinos/bambi/pull/1002)),
+tracked as [#1305](https://github.com/lnccbrown/HSSM/issues/1305) / [#1306](https://github.com/lnccbrown/HSSM/issues/1306).
+This work is in progress; entries are added as each sub-issue lands.
+
+#### Breaking changes that require migration:
+
+1. **`hssm.Link` takes a single `inverse_link` instead of `linkinv` and `linkinv_backend`**
+   ([#1311](https://github.com/lnccbrown/HSSM/issues/1311)). Bambi dropped the split between a
+   NumPy inverse for computations outside the graph and a PyTensor inverse for building it; one
+   backend-compatible inverse now serves both, and the forward `link` function is optional.
+   Custom links must be updated:
+
+   ```python
+   # before
+   hssm.Link("custom_log", link=np.log, linkinv=np.exp, linkinv_backend=pt.exp)
+   # after
+   hssm.Link("custom_log", link=np.log, inverse_link=np.exp)
+   ```
+
+   `inverse_link` must be compatible with the active backend (currently PyMC). NumPy ufuncs
+   such as `np.exp` qualify, because they dispatch to symbolic operations when handed a
+   PyTensor tensor. Reading `link.linkinv` or `link.linkinv_backend` now raises
+   `AttributeError`; read `link.inverse_link` instead. HSSM's bounded `gen_logit` is
+   unaffected for callers — it exposes the same transformation through the new attribute.
+
+#### Other changes:
+
+1. **`log_likelihood(data=...)` no longer rewrites the `posterior` group with out-of-sample
+   parameters** ([#1313](https://github.com/lnccbrown/HSSM/issues/1313)). Bambi removed
+   `Model._compute_likelihood_params` and `Family._make_dist_kwargs_and_coords`; HSSM now
+   evaluates the trial-wise likelihood parameters through `Model.predict(kind="response_params")`.
+   In sample this still adds them to `posterior` (and `keep_likelihood_params` /
+   `add_likelihood_parameters_to_datatree` behave as before). Out of sample, bambi writes them to
+   a `predictions` group, which `log_likelihood` folds into its computation and removes again, so
+   the trace comes back with only the new `log_likelihood` group changed.
+
+2. **`sample_posterior_predictive(data=...)` keeps writing to `posterior_predictive`**
+   ([#1315](https://github.com/lnccbrown/HSSM/issues/1315)). Bambi now stores out-of-sample
+   predictions in a `predictions` group (plus `predictions_constant_data`) instead of
+   `posterior_predictive`. HSSM folds the response draws back into `posterior_predictive`, so in-
+   and out-of-sample results share one layout and the plotting helpers, which always predict on
+   the data frame they are given, keep working. The trial-wise likelihood parameters bambi
+   bundles into `predictions` are not kept; `kind="response_params"` still returns bambi's
+   result unchanged (in sample: parameters added to `posterior`; out of sample: a `predictions`
+   group).
+
+3. **Out-of-sample predictions for hierarchical models pick the strategy from the grouping
+   value** ([#1316](https://github.com/lnccbrown/HSSM/issues/1316)). Bambi retired
+   `sample_new_groups` (HSSM always passed `False`) and now decides per observation: a missing
+   grouping value (`None`, `np.nan`, `pd.NA`) is an observation of *unknown identity* and borrows
+   the coefficients of a randomly chosen fitted group, which is the previous behavior; a
+   non-missing value that was not seen during fitting is a *new group* whose coefficients are
+   drawn from the population-level model with the fitted hyperparameters and shared by all of its
+   observations. Previously an unseen level was treated like a missing one. This affects
+   `sample_posterior_predictive(data=...)` and `log_likelihood(data=...)`; see the new how-to
+   guide [Predict for new or unidentified participants](how_to/predict_new_groups.md).
+
+4. **`vi(backend="jax")` freezes the model's data and dim lengths for the fit**
+   ([#1328](https://github.com/lnccbrown/HSSM/issues/1328)). Bambi 0.20 keeps the response
+   and the `__obs__` observation count as shared variables and derives shapes from them (the
+   response-parameter broadcast; HSSM's missing-data slice on the number of `-999` trials), which
+   the JAX linker traces as dynamic and rejects. HSSM now passes `pm.fit` a `more_replacements`
+   that pins those shared variables to constants — the same treatment PyMC's own JAX samplers
+   apply — so JAX-compiled VI works again on every model, missing-data models included. A
+   user-supplied `more_replacements` still takes precedence entry by entry; the other backends
+   are unchanged.
+
+5. **The response dimension is `rt,response_dim` in every group, and traces must match the model**
+   ([#1336](https://github.com/lnccbrown/HSSM/issues/1336)). Bambi 0.20 names it `rt_dim`; HSSM
+   now renames it in `observed_data` and `posterior_predictive` too, not only in
+   `prior_predictive` (previously `observed_data` used `rt,response_extra_dim_0`).
+   `sample_posterior_predictive` raises a `ValueError` when the posterior lacks a free random
+   variable of the model, such as `v_Intercept_centered` in a trace saved before Bambi 0.20.
+   Missing `*_offset` variables are allowed when the corresponding base term is present.
+   Previously, out-of-sample prediction silently drew the missing variable from its prior.
+   Resample such traces.
+
+6. **Regression intercepts appear twice in the trace when the parameter has common predictors**
+   ([#1375](https://github.com/lnccbrown/HSSM/issues/1375)). With an intercept, at least one
+   common predictor, and `center_predictors=True` (the default), Bambi now samples
+   `{param}_Intercept_centered` and records the original-scale `{param}_Intercept` as a
+   deterministic, so `az.summary` and `plot_trace` show two rows per such intercept. Both are
+   kept: Bambi's `predict` and `compute_log_likelihood` need the centered one. The meaning of
+   the intercept prior is unchanged. To report only the ordinary intercept, use
+   `az.summary(idata, var_names=["~_centered"], filter_vars="like")`. See
+   [Predictor centering and the intercept](explanations/intercept_centering.md).
+
+7. **`sample(initvals={"v_Intercept": ...})` is remapped to `v_Intercept_centered`**
+   ([#1375](https://github.com/lnccbrown/HSSM/issues/1375)). Once `v_Intercept` is a
+   deterministic, PyMC silently ignores an initial value keyed on it. HSSM now moves such a
+   key to the centered random variable, as it already did for its own default initial values.
+   An explicit `v_Intercept_centered` key takes precedence.
+
+8. **Dimension names follow Bambi 0.20.** Group-specific terms use `{factor}_dim` instead of
+   `{factor}__factor_dim`; a categorical predictor in a formula with an intercept uses
+   `{var}_dim_reduced`; and a nested factor such as `(1|g:h)` now gets two dims, `g_dim` and
+   `h_dim`, instead of one. Code that selects coordinates by dim name must be updated.
+
+9. **Traces gain a `constant_data` group** holding the design-matrix data (for example
+   `v_x_data`) and the group index arrays (for example `g__idx`) Bambi used to build the model.
+
+10. **`log_likelihood` takes a `random_seed` for unseen and missing participant IDs**
+    ([#1376](https://github.com/lnccbrown/HSSM/issues/1376)). Out of sample, the log likelihood of
+    a new or unidentified participant is conditional on coefficients that Bambi's prediction
+    machinery generates at random, so it changed between calls. `random_seed` fixes them. The
+    how-to guide [Predict for new or unidentified participants](how_to/predict_new_groups.md) now
+    documents these semantics and how to average draws into a trial-level or participant-level
+    predictive score.
+
+11. **Posterior cleanup no longer drops every variable whose name contains `_mean`**
+    ([#1378](https://github.com/lnccbrown/HSSM/issues/1378)). It now drops only the parent
+    parameter's `{parent}_mean` alias (e.g. `v_mean`), so a covariate such as `rt_mean` keeps its
+    coefficient `v_rt_mean` in the trace. The unused `hssm.utils.make_alias_dict_from_parent` and
+    the no-op `rt,response_mean` rename, which Bambi 0.20 no longer produces, are removed.
+
+#### Dependency changes:
+
+1. **`bambi` now tracks the `dev` branch** pending the 0.20 release, which reorganizes its
+   module layout and splits the frontend from the backend. The floor will be pinned to the
+   published `>=0.20` release before 0.6.0 ships.
+
 ### 0.5.1
 
 This version includes the following changes:

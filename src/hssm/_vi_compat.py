@@ -1,7 +1,8 @@
 """Scoped PyMC compatibility patches enabling ``pm.fit(backend="jax")``.
 
-Two upstream PyMC bugs block JAX-compiled variational inference for every
-model (see lnccbrown/HSSM#1056 for the full diagnosis):
+Three upstream issues block JAX-compiled variational inference (see
+lnccbrown/HSSM#1056 for the diagnosis of the first two and #1328 for the
+third):
 
 1. VI approximation parameters (e.g. meanfield ``mu``/``rho``) are created
    without static shapes, producing a runtime-shape ``Alloc`` that the JAX
@@ -11,17 +12,34 @@ model (see lnccbrown/HSSM#1056 for the full diagnosis):
    shared-variable storage, which breaks any later default-backend (numba)
    compiled function — notably ``approx.sample()``. Upstream:
    pymc-devs/pymc#8360.
+3. bambi 0.20 stores the response and the ``__obs__`` dim length as shared
+   variables, and derives shapes from them: it broadcasts every response
+   parameter with ``pt.broadcast_to(value, (model.dim_lengths["__obs__"],))``,
+   and HSSM's missing-data logp slices on ``n_missing = sum(rt == -999)``
+   computed from the (now shared) data. PyTensor's JAX linker passes shared
+   variables to ``jax.jit`` as traced arguments, so those shapes are tracers
+   and tracing fails with ``TypeError: Shapes must be 1D sequences of
+   concrete values``. PyMC's own JAX samplers sidestep this by replacing
+   every shared variable with its constant value before jaxifying
+   (``pymc.sampling.jax._replace_shared_variables``); ``pm.fit`` has no such
+   step, but accepts ``more_replacements`` to do the same. See
+   lnccbrown/HSSM#1328.
 
-Both helpers here are self-disabling: they detect an already-fixed PyMC and
-do nothing, so they are safe to keep until the pinned PyMC includes the
-upstream fixes, at which point this module can be deleted.
+The first two helpers are self-disabling: they detect an already-fixed PyMC
+and do nothing, so they are safe to keep until the pinned PyMC includes the
+upstream fixes. The third mirrors what PyMC does for its JAX samplers and
+stays as long as ``pm.fit(backend="jax")`` does not do it itself.
 """
 
 from contextlib import ExitStack, contextmanager
 from functools import wraps
 
 import numpy as np
+import pymc as pm
 import pytensor
+import pytensor.tensor as pt
+from pytensor.compile.sharedvalue import SharedVariable
+from pytensor.graph.basic import Variable
 
 
 def _with_static_shapes(orig_create_shared_params):
@@ -89,3 +107,28 @@ def coerce_approx_params_to_numpy(approx) -> None:
     """
     for param in approx.params:
         param.container.storage[0] = np.asarray(param.container.storage[0])
+
+
+def freeze_shared_data(model: pm.Model) -> dict[Variable, Variable]:
+    """Build replacements pinning a model's data and dim lengths to constants.
+
+    Returns ``{shared: constant}`` for every ``pm.Data`` variable and every
+    shared dim length of ``model``, for ``pm.fit(more_replacements=...)``.
+    With these in place, any shape the graph derives from the data or the
+    observation count is concrete when the JAX linker traces it. Random
+    generators and the VI approximation's own parameters are not touched.
+
+    The values are those at call time, matching what
+    ``pymc.sampling.jax`` does for ``pm.sample``: a later ``pm.set_data``
+    takes effect on the next ``vi()`` call, which rebuilds the replacements.
+    """
+    shared_vars: list[SharedVariable] = [
+        var for var in model.data_vars if isinstance(var, SharedVariable)
+    ]
+    shared_vars += [
+        var for var in model.dim_lengths.values() if isinstance(var, SharedVariable)
+    ]
+    return {
+        var: pt.constant(var.get_value(borrow=True), name=var.name)
+        for var in shared_vars
+    }
