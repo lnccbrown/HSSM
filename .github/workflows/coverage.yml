@@ -1,5 +1,8 @@
 name: Coverage
 
+# Besides producing coverage.xml, this is the only per-push run of the FULL
+# suite on main: PR CI runs `-m "not slow"`, and run_slow_tests.yml is opt-in
+# on push ("[run slow]" in the commit message) or weekly via drift.yml.
 on:
   push:
     branches:
@@ -11,9 +14,16 @@ on:
       - ".github/workflows/coverage.yml"
   workflow_dispatch:
 
+# Only the newest main matters for coverage; two pushes minutes apart used to
+# run two full suites to completion.
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   coverage:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     strategy:
       fail-fast: true
@@ -29,10 +39,16 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Run all tests with coverage
+      - name: Run the full suite with coverage
         run: uv run pytest --cov=src/hssm --cov-report=term-missing --cov-report=xml
+        env:
+          # sys.monitoring tracer (3.12+): lower overhead than the default C tracer.
+          COVERAGE_CORE: sysmon
 
       - name: Upload coverage to Codecov
+        # A late test failure must not throw away a 40-min report. Needs #1075:
+        # under --exitfirst, pytest-cov writes no coverage.xml at all.
+        if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v7
         with:
           verbose: true

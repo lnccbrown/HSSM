@@ -34,6 +34,9 @@ dependencies = [
     "numpy>=2.4.0,<2.5.0",
     "numpyro>=0.20",
     "onnx>=1.16.0",
+    # Imported directly throughout hssm; 6.3.0 is the first release where nuts={"jitter": False}
+    # reaches sample_jax_nuts (pymc#8380), which replaced HSSM's monkeypatch of pymc.sampling.jax.
+    "pymc>=6.3.0",
     # Direct import in hssm.plotting (gaussian_kde, chi2), not merely transitive via pymc.
     "scipy>=1.10",
     "ssm-simulators>=0.14.0",
@@ -232,15 +235,17 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 log_cli = true
-log_cli_level = "INFO" # set minimum log level for console output
+# WARNING keeps the live log readable; the slow CI path raises it to INFO for
+# the per-test RSS lines (run_tests.yml). Coverage is opt-in: pass --cov=src/hssm
+# explicitly (coverage.yml does), so plain runs are not instrumented.
+log_cli_level = "WARNING"
+# Reruns are untimed: pytest-timeout arms one timer per test, not per attempt.
+# Add --rerun-except=pytest-timeout once test_addm_waic_loo is well under 600 s (#1074).
 addopts = [
-    "--cov=.",
-    "--cov-report=term-missing",
-    "--cov-report=xml",
-    "--exitfirst",
-    "--capture=no",
-    "--timeout=360",
-    "--reruns=2",
+    "--durations=50",
+    "--durations-min=1",
+    "--timeout=600",
+    "--reruns=1",
     "--reruns-delay=5",
 ]
 markers = [
