@@ -17,6 +17,9 @@ Use `hssm.HSSM` class to construct an HSSM model.
             - sample_prior_predictive
             - vi
             - find_MAP
+            - find_MLE
+            - map
+            - mle
             - log_likelihood
             - graph
             - plot_predictive

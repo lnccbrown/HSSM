@@ -25,6 +25,9 @@ sampling model from a named model string.
             - sample_prior_predictive
             - vi
             - find_MAP
+            - find_MLE
+            - map
+            - mle
             - log_likelihood
             - plot_predictive
             - plot_quantile_probability
