@@ -29,7 +29,11 @@ with hssm.track(
     model.sample(draws=1000, chains=4)
 ```
 
-Everything inside the block becomes one MLflow run. With nothing else configured, two things appear in your working directory: `mlflow.db` holds the record of each run, and `mlruns/` holds the files attached to it — the traces, the summary table, the model specification. Keep both; the database refers to the artifacts by path rather than storing them.
+Everything inside the block becomes one MLflow run. With nothing else configured, two things appear in your working directory:
+- `mlflow.db` holds the record of each run, and
+- `mlruns/` holds the files attached to it: the traces, the summary table, the model specification, and a copy of the data the model was fit to (`data.parquet`).
+
+The database refers to the artifacts by path rather than storing them.
 
 Browse them with:
 
@@ -91,12 +95,18 @@ Keys HSSM records itself are refused rather than silently dropped — MLflow rej
 | Params | `model`, `loglik_kind`, `network_file`, `hf_revision`, `missing_data_network_file`, `missing_data_hf_revision`, `sampler`, `draws`, `tune`, `chains`, `target_accept`, `n_trials`, `n_subjects`, `spec_sha256`, `hssm_version`, `pymc_version`, `bambi_version` |
 | Metrics | `sampling_seconds`, `divergences`, `r_hat_max`, `ess_bulk_min`, `ess_tail_min` |
 | Tags | `user`, `hostname`, `git_sha`, `data_sha256`, `schema_version`, `phase`, `lineage_id`, `lineage_source` |
-| Artifacts | `model_spec.json`, `summary.csv`, `traces.nc`; `model.pkl` with `log_artifacts="all"` |
+| Artifacts | `model_spec.json`, `summary.csv`, `traces.nc`, `data.parquet`; `model.pkl` with `log_artifacts="all"` |
 
 `spec_sha256` hashes the modelling choices — model, `include`, priors, links, `p_outlier` — but not the data, so two fits share it exactly when the specification is the same. `data_sha256` hashes the observed data frame and its schema, so fits of the same data share that instead. Together they separate "same model, different data" from "same data, different model".
 
+`data.parquet` is the data the model was fit to, covariates included — the
+traces keep only the observed response, so this is what lets a run show which
+predictors a regression used. It is copied into every run, which matters when
+runs go to a shared tracking server.
+
 `log_artifacts=False` records params and metrics only, for when traces are
-large and already stored elsewhere.
+large and already stored elsewhere, or when the data should not leave your
+machine.
 
 ## Variational inference
 
