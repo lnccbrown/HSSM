@@ -8,6 +8,10 @@ optional `tracking` extra (`uv add "hssm[tracking]"`). See
 
 ::: hssm.tracking.track
 
+::: hssm.tracking.load_run
+
+::: hssm.tracking.list_runs
+
 ::: hssm.tracking.Tracker
     options:
       members:
