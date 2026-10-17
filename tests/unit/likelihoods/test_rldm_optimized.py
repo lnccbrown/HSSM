@@ -35,7 +35,9 @@ def test_make_rldm_logp_func(fixture_path):
     theta = np.ones(total_trials) * 0.1
 
     logp = make_rldm_logp_func(
-        n_participants=len(subj), n_trials=total_trials // len(subj)
+        n_participants=len(subj),
+        n_trials=total_trials // len(subj),
+        model=fixture_path / "angle.onnx",
     )
     jitted_logp = jax.jit(logp)
     jax_ll = jitted_logp(
@@ -74,6 +76,7 @@ def test_make_rldm_logp_op(fixture_path):
         n_participants=len(subj),
         n_trials=total_trials // len(subj),
         n_params=6,
+        model=fixture_path / "angle.onnx",
     )
 
     jax_ll = logp_op(

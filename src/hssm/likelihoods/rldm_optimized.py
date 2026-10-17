@@ -1,5 +1,6 @@
 """The log-likelihood function for the RLDM model."""
 
+from os import PathLike
 from typing import Callable
 
 import jax
@@ -12,11 +13,6 @@ from hssm.distribution_utils.func_utils import make_vjp_func
 
 from ..distribution_utils.jax import make_jax_logp_ops
 from ..distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
-
-# Obtain the angle log-likelihood function from an ONNX model.
-angle_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
-    model="angle.onnx",
-)
 
 
 # Inner function to compute the drift rate and update q-values for each trial.
@@ -99,7 +95,12 @@ def compute_v_subject_wise(
 compute_v_subject_wise_vmapped = jax.vmap(compute_v_subject_wise, in_axes=0)
 
 
-def make_rldm_logp_func(n_participants: int, n_trials: int) -> Callable:
+def make_rldm_logp_func(
+    n_participants: int,
+    n_trials: int,
+    *,
+    model: str | PathLike = "angle.onnx",
+) -> Callable:
     """Create a log likelihood function for the RLDM model.
 
     Parameters
@@ -108,12 +109,15 @@ def make_rldm_logp_func(n_participants: int, n_trials: int) -> Callable:
         The number of participants in the dataset.
     n_trials : int
         The number of trials per participant.
+    model : str or PathLike
+        The ONNX model to use for the angle log likelihood.
 
     Returns
     -------
     callable
         A function that computes the log likelihood for the RLDM model.
     """
+    angle_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(model=model)
 
     def logp(data, *dist_params) -> np.ndarray:
         """Compute the log likelihood for the RLDM model.
@@ -161,7 +165,13 @@ def make_rldm_logp_func(n_participants: int, n_trials: int) -> Callable:
     return logp
 
 
-def make_rldm_logp_op(n_participants: int, n_trials: int, n_params: int) -> Op:
+def make_rldm_logp_op(
+    n_participants: int,
+    n_trials: int,
+    n_params: int,
+    *,
+    model: str | PathLike = "angle.onnx",
+) -> Op:
     """Create a pytensor Op for the likelihood function of RLDM model.
 
     Parameters
@@ -170,13 +180,17 @@ def make_rldm_logp_op(n_participants: int, n_trials: int, n_params: int) -> Op:
         The number of participants in the dataset.
     n_trials : int
         The number of trials per participant.
+    n_params : int
+        The number of model parameters.
+    model : str or PathLike
+        The ONNX model to use for the angle log likelihood.
 
     Returns
     -------
     Op
         A pytensor Op that computes the log likelihood for the RLDM model.
     """
-    logp = make_rldm_logp_func(n_participants, n_trials)
+    logp = make_rldm_logp_func(n_participants, n_trials, model=model)
     vjp_logp = make_vjp_func(logp, params_only=False, n_params=n_params)
 
     return make_jax_logp_ops(

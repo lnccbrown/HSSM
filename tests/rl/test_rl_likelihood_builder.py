@@ -31,7 +31,7 @@ from hssm.utils import annotate_function
 
 # Obtain the angle log-likelihood function from an ONNX model.
 angle_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
-    model="angle.onnx",
+    model=Path(__file__).resolve().parent.parent / "fixtures" / "angle.onnx",
 )
 
 hssm.set_floatX("float32")
