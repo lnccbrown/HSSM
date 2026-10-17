@@ -164,6 +164,29 @@ def test_valid_link_settings_preserve_regression_initvals(
     np.testing.assert_allclose(model._initvals["a_Intercept"], expected_initval)
 
 
+def test_truncated_prior_preserves_user_initval(cavanagh_test):
+    """A user initval survives HSSM's bounded-prior wrapper."""
+    model = hssm.HSSM(
+        data=cavanagh_test.iloc[:12],
+        model="ddm",
+        t={
+            "name": "TruncatedNormal",
+            "mu": 0.1,
+            "sigma": 0.1,
+            "lower": 0.0,
+            "upper": 0.5,
+            "initval": 0.1,
+        },
+        p_outlier=0.0,
+        prior_settings=None,
+        process_initvals=True,
+        initval_jitter=0.0,
+    )
+
+    assert model.params["t"].prior.is_truncated
+    np.testing.assert_allclose(model.initvals["t"], 0.1)
+
+
 @pytest.mark.slow
 def test_basic_model(caplog):
     """Test basic model with p_outlier distribution defined."""
