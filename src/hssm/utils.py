@@ -275,7 +275,6 @@ def log_likelihood(
     # are substituted with constants inside HSSMDistribution.logp(), making
     # the corresponding input variable unused in the compiled graph.
     if not response_term.is_constrained:
-        # pyrefly: ignore[no-matching-overload]
         rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
         logp_compiled = pm.compile(
             [val for key_, val in pt_dict.items()],

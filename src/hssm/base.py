@@ -866,7 +866,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 backend = "numba"
 
         # Run variational inference directly from pymc model
-        # pyrefly: ignore[bad-context-manager]
         with self.pymc_model:
             if backend == "jax":
                 # Two PyMC bugs currently break backend="jax" for every
