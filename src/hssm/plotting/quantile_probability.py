@@ -183,7 +183,7 @@ def _plot_quantile_probability_1D(
     plot_data = _process_df_for_qp_plot(data, q, cond, correct, quantile_by)
     df_data = plot_data.loc[plot_data["observed"] == "observed", :]
 
-    ax = kwargs.get("ax", plt.gca())
+    ax = kwargs.pop("ax", None) or plt.gca()
 
     if data_kwargs is None:
         data_kwargs = kwargs.copy()
