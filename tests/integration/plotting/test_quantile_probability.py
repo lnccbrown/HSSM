@@ -66,13 +66,15 @@ def test_plot_quantile_probability_forwards_marker_to_seaborn():
         }
     )
     model = hssm.HSSM(data=df, model="ddm")
+    fig, ax = plt.subplots()
 
-    ax = plot_quantile_probability(
-        model, cond="stim", data=df, predictive_group=None, marker="o"
+    plot_quantile_probability(
+        model, cond="stim", data=df, predictive_group=None, ax=ax, marker="s"
     )
 
-    assert {line.get_marker() for line in ax.lines} == {"o"}
-    plt.close(ax.figure)
+    # "s" is not a default marker of either seaborn call, so it must come from kwargs.
+    assert {line.get_marker() for line in ax.lines} == {"s"}
+    plt.close(fig)
 
 
 @pytest.mark.slow
