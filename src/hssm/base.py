@@ -88,11 +88,27 @@ def _validate_setting_preset(name: str, value: object, preset: str) -> None:
         )
 
 
-def _get_prior_args(prior: bmb.Prior) -> dict[str, Any]:
-    """Return the original arguments of a Bambi or truncated HSSM prior."""
+def _get_prior_args(prior: Any) -> dict[str, Any]:
+    """Return the original arguments of a Bambi or truncated HSSM prior.
+
+    Anything else, such as a missing regression-term prior, has no arguments and
+    hence no user-supplied initial value.
+    """
+    if not isinstance(prior, bmb.Prior):
+        return {}
     if getattr(prior, "is_truncated", False):
         return cast("dict[str, Any]", getattr(prior, "_args"))
     return prior.args
+
+
+def _get_regression_term_prior(prior: dict[str, Any], term: str) -> Any:
+    """Return the prior Bambi uses for a common term of a regression.
+
+    As in Bambi, a prior named after the term takes precedence over the
+    ``"common"`` wildcard, which covers every common term, the intercept included.
+    Returns ``None`` when neither is given.
+    """
+    return prior.get(term, prior.get("common"))
 
 
 class classproperty:
@@ -2186,21 +2202,18 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 # and so keeps its plain prior.
                 prior_tmp = self.params[tmp_param].prior
                 if isinstance(prior_tmp, dict):
-                    prior_tmp = prior_tmp["Intercept"]
-                if isinstance(prior_tmp, bmb.Prior):
-                    args_tmp = _get_prior_args(prior_tmp)
-                    if return_value:
-                        return args_tmp.get("initval", None)
-                    else:
-                        return "initval" in args_tmp
+                    prior_tmp = _get_regression_term_prior(prior_tmp, "Intercept")
+                args_tmp = _get_prior_args(prior_tmp)
+                if return_value:
+                    return args_tmp.get("initval", None)
                 else:
-                    if return_value:
-                        return None
-                    return False
+                    return "initval" in args_tmp
             else:
                 # If the parameter has a suffix --> use it
                 if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
-                    args_tmp = _get_prior_args(prior_tmp[name_str_suffix])
+                    args_tmp = _get_prior_args(
+                        _get_regression_term_prior(prior_tmp, name_str_suffix)
+                    )
                     if return_value:
                         return args_tmp.get("initval", None)
                     else:
@@ -2242,7 +2255,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 # If suffix --> treat as regression and use suffix
                 if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
-                    args_tmp = _get_prior_args(prior_tmp[name_str_suffix])
+                    args_tmp = _get_prior_args(
+                        _get_regression_term_prior(prior_tmp, name_str_suffix)
+                    )
                     if return_value:
                         return args_tmp.get("initval", None)
                     else:
