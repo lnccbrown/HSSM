@@ -201,7 +201,7 @@ def _plot_quantile_probability_1D(
         y=y,
         hue=hue,
         ax=ax,
-        **data_kwargs,
+        **data_kwargs,  # pyrefly: ignore[bad-argument-type]
     )
 
     if plot_predictive:
@@ -230,7 +230,7 @@ def _plot_quantile_probability_1D(
                 y=y,
                 hue=hue,
                 ax=ax,
-                **predictive_samples_kwargs,
+                **predictive_samples_kwargs,  # pyrefly: ignore[bad-argument-type]
             )
 
         # Plot ellipses if requested
