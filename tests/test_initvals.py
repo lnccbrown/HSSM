@@ -164,27 +164,55 @@ def test_valid_link_settings_preserve_regression_initvals(
     np.testing.assert_allclose(model._initvals["a_Intercept"], expected_initval)
 
 
-def test_truncated_prior_preserves_user_initval(cavanagh_test):
-    """A user initval survives HSSM's bounded-prior wrapper."""
+_USER_V_PRIOR = {"name": "Normal", "mu": 1.0, "sigma": 0.5, "initval": 1.0}
+
+
+@pytest.mark.parametrize(
+    ("spec", "name", "truncated", "expected"),
+    [
+        pytest.param(
+            {
+                "t": {
+                    "name": "TruncatedNormal",
+                    "mu": 0.1,
+                    "sigma": 0.1,
+                    "lower": 0.0,
+                    "upper": 0.5,
+                    "initval": 0.1,
+                }
+            },
+            "t",
+            True,
+            0.1,
+            id="bounded-t",
+        ),
+        # `v` is the parent, whose prior is not wrapped in a regression dict.
+        pytest.param({"v": _USER_V_PRIOR}, "v", False, 1.0, id="parent-v"),
+        pytest.param(
+            {"include": [{"name": "v", "prior": _USER_V_PRIOR, "bounds": (-3, 3)}]},
+            "v",
+            True,
+            1.0,
+            id="bounded-parent-v",
+        ),
+    ],
+)
+def test_postprocessing_preserves_user_initvals(
+    cavanagh_test, spec, name, truncated, expected
+):
+    """A user initval survives postprocessing, with or without bounds."""
     model = hssm.HSSM(
         data=cavanagh_test.iloc[:12],
         model="ddm",
-        t={
-            "name": "TruncatedNormal",
-            "mu": 0.1,
-            "sigma": 0.1,
-            "lower": 0.0,
-            "upper": 0.5,
-            "initval": 0.1,
-        },
         p_outlier=0.0,
         prior_settings=None,
         process_initvals=True,
         initval_jitter=0.0,
+        **spec,
     )
 
-    assert model.params["t"].prior.is_truncated
-    np.testing.assert_allclose(model.initvals["t"], 0.1)
+    assert model.params[name].prior.is_truncated is truncated
+    np.testing.assert_allclose(model.initvals[name], expected, rtol=1e-6)
 
 
 @pytest.mark.slow

@@ -2182,9 +2182,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             # If the parameter was parent it is automatically treated as a
             # regression.
             if not name_str_suffix:
-                # No suffix --> Intercept
-                if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
-                    args_tmp = _get_prior_args(prior_tmp["Intercept"])
+                # No suffix --> Intercept, unless the parent is not a regression
+                # and so keeps its plain prior.
+                prior_tmp = self.params[tmp_param].prior
+                if isinstance(prior_tmp, dict):
+                    prior_tmp = prior_tmp["Intercept"]
+                if isinstance(prior_tmp, bmb.Prior):
+                    args_tmp = _get_prior_args(prior_tmp)
                     if return_value:
                         return args_tmp.get("initval", None)
                     else:
