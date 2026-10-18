@@ -5,11 +5,16 @@ import jax
 import numpy as np
 
 import hssm
+from hssm.likelihoods import rldm_optimized
 from hssm.likelihoods.rldm_optimized import make_rldm_logp_func, make_rldm_logp_op
 
 hssm.set_floatX("float32")
 
 DECIMAL = 2
+
+# The tests pass the local angle.onnx fixture, so a Hub download means `model` was
+# ignored (the Hub copy is byte-identical and would otherwise pass silently).
+pytestmark = pytest.mark.usefixtures("no_hf_hub_download")
 
 
 @pytest.fixture
@@ -91,3 +96,19 @@ def test_make_rldm_logp_op(fixture_path):
     )
 
     np.testing.assert_almost_equal(jax_ll.sum().eval(), -6879.1523, decimal=DECIMAL)
+
+
+@pytest.mark.parametrize(
+    ("factory", "kwargs"),
+    [(make_rldm_logp_func, {}), (make_rldm_logp_op, {"n_params": 6})],
+)
+def test_default_model_is_hub_angle(monkeypatch, factory, kwargs):
+    """Without ``model``, the factories load ``angle.onnx`` from the Hub."""
+    requested = []
+    monkeypatch.setattr(
+        rldm_optimized,
+        "make_jax_matrix_logp_funcs_from_onnx",
+        lambda model: requested.append(model),
+    )
+    factory(n_participants=1, n_trials=1, **kwargs)
+    assert requested == ["angle.onnx"]
