@@ -358,3 +358,33 @@ def pytest_collection_modifyitems(config, items):
 
     # Reorder items so fast tests run first, then slow tests
     items[:] = fast_tests + slow_tests
+
+
+def _block_hf_hub_download(mp: pytest.MonkeyPatch, when: str) -> None:
+    """Make HSSM's Hugging Face Hub download raise instead of using the network."""
+
+    def _blocked(*args, **kwargs):
+        raise RuntimeError(
+            f"Hugging Face Hub download of {kwargs.get('filename')!r} {when}; "
+            "load the local copy from tests/fixtures instead (see #1061)."
+        )
+
+    mp.setattr("hssm.distribution_utils.onnx_utils.model.hf_hub_download", _blocked)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_collection():
+    """Block Hugging Face Hub downloads while test modules are imported.
+
+    pytest-timeout only times test execution, so a download that stalls during
+    collection hangs the CI job until the workflow timeout (#1061).
+    """
+    with pytest.MonkeyPatch.context() as mp:
+        _block_hf_hub_download(mp, "during test collection")
+        return (yield)
+
+
+@pytest.fixture
+def no_hf_hub_download(monkeypatch):
+    """Fail the test if it downloads from the Hugging Face Hub."""
+    _block_hf_hub_download(monkeypatch, "in a test that must use local fixtures")
