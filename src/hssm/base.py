@@ -1577,12 +1577,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         This is a slightly altered version of pm.initial_point.initial_point().
 
-        Notes
-        -----
-        HSSM clears PyMC's initial-value registry after model construction, so this
-        freshly computed point can differ from the default initial values HSSM passes
-        to sampling. Use ``model.initvals`` to inspect those values.
-
         Parameters
         ----------
         transformed : bool, optional
@@ -1592,6 +1586,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         -------
         dict
             A dictionary containing the initial point of the model parameters.
+
+        Notes
+        -----
+        HSSM clears PyMC's initial-value registry after model construction, so this
+        freshly computed point can differ from the default initial values HSSM passes
+        to sampling. Use ``model.initvals`` to inspect those values.
         """
         fn = pm.initial_point.make_initial_point_fn(
             model=self.pymc_model, return_transformed=transformed
