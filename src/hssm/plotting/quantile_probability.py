@@ -587,16 +587,7 @@ def plot_quantile_probability(
     )
 
     extra_dims = (
-        list(
-            set(
-                [
-                    e
-                    for e in [cond, correct, row, col, kwargs.get("marker", None)]
-                    if e is not None
-                ]
-            )
-        )
-        or None
+        list(set([e for e in [cond, correct, row, col] if e is not None])) or None
     )
     if extra_dims is not None and groups is not None:
         extra_dims += list(groups)
