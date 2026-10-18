@@ -66,8 +66,7 @@ dev = [
     "onnxruntime>=1.27.0",
     "ruff>=0.16.1",
     "pytest>=9.1.1",
-    # <1.3 until #1334: pyrefly 1.3.0 reports 5 new errors under preset = "legacy"
-    "pyrefly>=1.2.0,<1.3",
+    "pyrefly>=1.3.2",
 ]
 
 notebook = [
@@ -270,3 +269,6 @@ hssm = { workspace = true }
 preset = "legacy"
 project-includes = ["src/hssm"]
 ignore-missing-imports = ["*"]
+# pyrefly >=1.3's legacy preset turns packages without py.typed (pymc, bambi,
+# pandas, seaborn, ...) into Any; keep type-checking HSSM's calls into them.
+replace-untyped-imports-with-any = []

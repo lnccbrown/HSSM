@@ -389,7 +389,7 @@ def logp_ddm_sdv(
     # pyrefly: ignore[bad-argument-type]
     checked_logp = check_parameters(checked_logp, z <= 1, msg="z <= 1")
     # pyrefly: ignore[bad-argument-type]
-    checked_logp = check_parameters(checked_logp, sv > 0, msg="sv > 0")
+    checked_logp = check_parameters(checked_logp, sv >= 0, msg="sv >= 0")
     return checked_logp
 
 
