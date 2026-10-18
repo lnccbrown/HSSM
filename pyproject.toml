@@ -83,7 +83,8 @@ notebook = [
     "onnxruntime>=1.27.0",
     "ptpython>=3.0.29",
     "pyarrow>=20.0.0",
-    "lanfactory>=0.7.0",
+    # 0.9.0 is the first release whose trainers run under pandas 3 (LANfactory#140).
+    "lanfactory>=0.9.0",
     "zeus-mcmc>=2.5.4",
     "bayesflow>=2.0.12",
     "keras>=3.12",
