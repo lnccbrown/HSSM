@@ -6,6 +6,7 @@ from typing import Callable
 import jax
 import jax.numpy as jnp
 import numpy as np
+import onnx
 from jax.lax import scan
 from pytensor.graph import Op
 
@@ -99,7 +100,7 @@ def make_rldm_logp_func(
     n_participants: int,
     n_trials: int,
     *,
-    model: str | PathLike = "angle.onnx",
+    model: str | PathLike | onnx.ModelProto = "angle.onnx",
 ) -> Callable:
     """Create a log likelihood function for the RLDM model.
 
@@ -109,8 +110,12 @@ def make_rldm_logp_func(
         The number of participants in the dataset.
     n_trials : int
         The number of trials per participant.
-    model : str or PathLike
-        The ONNX model to use for the angle log likelihood.
+    model : str, PathLike, or onnx.ModelProto, optional
+        The ONNX model to use for the angle log likelihood: a path to a local
+        file, a loaded ``onnx.ModelProto``, or the name of a file in the
+        ``franklab/HSSM`` Hugging Face repository. A ``str`` that is not an
+        existing local path is looked up on the Hub, so pass a ``Path`` for local
+        files. Defaults to ``"angle.onnx"`` from the Hub.
 
     Returns
     -------
@@ -170,7 +175,7 @@ def make_rldm_logp_op(
     n_trials: int,
     n_params: int,
     *,
-    model: str | PathLike = "angle.onnx",
+    model: str | PathLike | onnx.ModelProto = "angle.onnx",
 ) -> Op:
     """Create a pytensor Op for the likelihood function of RLDM model.
 
@@ -182,8 +187,9 @@ def make_rldm_logp_op(
         The number of trials per participant.
     n_params : int
         The number of model parameters.
-    model : str or PathLike
-        The ONNX model to use for the angle log likelihood.
+    model : str, PathLike, or onnx.ModelProto, optional
+        The ONNX model to use for the angle log likelihood; see
+        `make_rldm_logp_func`. Defaults to ``"angle.onnx"`` from the Hub.
 
     Returns
     -------
