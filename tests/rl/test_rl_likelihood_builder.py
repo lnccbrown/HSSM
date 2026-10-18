@@ -29,11 +29,6 @@ from hssm.rl.likelihoods.builder import (
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.utils import annotate_function
 
-# Obtain the angle log-likelihood function from an ONNX model.
-angle_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
-    model=Path(__file__).resolve().parent.parent / "fixtures" / "angle.onnx",
-)
-
 hssm.set_floatX("float32")
 
 DECIMAL = 2
@@ -88,6 +83,16 @@ def fixture_path():
 
 
 @pytest.fixture
+def angle_logp_jax_func(fixture_path):
+    """Angle log-likelihood function from the local ONNX fixture.
+
+    Built per test rather than at import, so the ONNX graph is not loaded and
+    traced during test collection (#1061).
+    """
+    return make_jax_matrix_logp_funcs_from_onnx(model=fixture_path / "angle.onnx")
+
+
+@pytest.fixture
 def model_config():
     """Shared model configuration constants."""
     return ModelConfig(
@@ -135,7 +140,7 @@ def param_arrays(rldm_data):
 
 
 @pytest.fixture
-def annotated_ssm_logp_func():
+def annotated_ssm_logp_func(angle_logp_jax_func):
     """Create the annotated SSM log-likelihood function for RLDM models."""
     compute_v_subject_wise_annotated = annotate_function(
         inputs=["rl.alpha", "scaler", "response", "feedback"],
@@ -1103,7 +1108,9 @@ class TestRldmLikelihoodBuilder:
 class TestMultipleComputedParameters:
     """Test suite for models with multiple computed parameters."""
 
-    def test_two_computed_parameters(self, rldm_data, model_config, param_arrays):
+    def test_two_computed_parameters(
+        self, rldm_data, model_config, param_arrays, angle_logp_jax_func
+    ):
         """Test model with two computed parameters (v and a)."""
 
         # Create computation function for threshold 'a' from arousal
@@ -1157,7 +1164,9 @@ class TestMultipleComputedParameters:
         assert not np.isnan(result).any(), "Result contains NaN values"
         assert not np.isinf(result).any(), "Result contains infinite values"
 
-    def test_parameter_ordering(self, rldm_data, model_config, param_arrays):
+    def test_parameter_ordering(
+        self, rldm_data, model_config, param_arrays, angle_logp_jax_func
+    ):
         """Test that computed and non-computed parameters are ordered correctly."""
         compute_v_annotated = annotate_function(
             inputs=["rl.alpha", "scaler", "response", "feedback"],
@@ -1200,7 +1209,7 @@ class TestMultipleComputedParameters:
         assert not np.isnan(result).any()
 
     def test_computed_params_different_inputs(
-        self, rldm_data, model_config, param_arrays
+        self, rldm_data, model_config, param_arrays, angle_logp_jax_func
     ):
         """Test multiple computed params with different input requirements."""
 
@@ -1253,7 +1262,9 @@ class TestMultipleComputedParameters:
         assert result.shape[0] == rldm_data.total_trials
         assert not np.isnan(result).any()
 
-    def test_no_computed_parameters(self, rldm_data, model_config, param_arrays):
+    def test_no_computed_parameters(
+        self, rldm_data, model_config, param_arrays, angle_logp_jax_func
+    ):
         """Test edge case with no computed parameters."""
         ssm_logp_func = annotate_function(
             inputs=["v", "a", "Z", "t", "theta", "rt", "response"],
@@ -1287,7 +1298,9 @@ class TestMultipleComputedParameters:
         assert result.shape[0] == rldm_data.total_trials
         assert not np.isnan(result).any()
 
-    def test_all_parameters_computed(self, rldm_data, model_config, param_arrays):
+    def test_all_parameters_computed(
+        self, rldm_data, model_config, param_arrays, angle_logp_jax_func
+    ):
         """Test edge case where all SSM parameters are computed.
 
         This verifies the system can handle scenarios where no parameters
