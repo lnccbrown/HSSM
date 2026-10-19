@@ -1,6 +1,8 @@
 """Tests for quantile-probability plotting helpers and public API."""
 
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import pytest
 
 import hssm
@@ -22,6 +24,35 @@ def has_twin(ax):
         if other_ax.bbox.bounds == ax.bbox.bounds:
             return True
     return False
+
+
+def test__plot_quantile_probability_1D_uses_passed_ax():
+    """A user-supplied ``ax`` is drawn on, not forwarded to seaborn twice."""
+    rng = np.random.default_rng(0)
+    groups = [("observed", -1, [-1]), ("predicted", 0, [0, 1])]
+    df = pd.concat(
+        [
+            pd.DataFrame(
+                {
+                    "observed": observed,
+                    "chain": chain,
+                    "draw": draw,
+                    "stim": stim,
+                    "rt": rng.uniform(0.3, 2.0, 50),
+                    "response": rng.choice([-1, 1], 50),
+                }
+            )
+            for observed, chain, draws in groups
+            for draw in draws
+            for stim in ["LL", "WW"]
+        ],
+        ignore_index=True,
+    )
+    fig, ax = plt.subplots()
+
+    assert _plot_quantile_probability_1D(df, cond="stim", ax=ax) is ax
+    assert ax.lines
+    plt.close(fig)
 
 
 @pytest.mark.slow
