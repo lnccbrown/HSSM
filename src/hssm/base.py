@@ -55,7 +55,8 @@ from hssm.utils import (
     _split_array,
 )
 
-from . import plotting, tracking
+from . import _tracking_hooks as tracking_hooks
+from . import plotting
 from .config import BaseModelConfig
 from .modelconfig import list_models
 from .param import Params
@@ -423,12 +424,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # lazily at log time would attribute a later model's network to this
         # one, and reading it without clearing would hand an analytical model
         # whichever network the previous model loaded.
-        tracking.reset_network_record()
+        tracking_hooks.reset_network_record()
         self.model_distribution = self._make_model_distribution()
-        networks = tracking.recorded_networks()
-        self._tracking_network = networks.get(tracking.LIKELIHOOD_ROLE, {})
+        networks = tracking_hooks.recorded_networks()
+        self._tracking_network = networks.get(tracking_hooks.LIKELIHOOD_ROLE, {})
         self._tracking_missing_data_network = networks.get(
-            tracking.MISSING_DATA_ROLE, {}
+            tracking_hooks.MISSING_DATA_ROLE, {}
         )
 
         self.family = make_family(
@@ -799,7 +800,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             nuts = {"jitter": False, **(kwargs.get("nuts") or {})}
             kwargs["nuts"] = nuts
 
-        tracker = tracking.active()
+        tracker = tracking_hooks.active()
         if tracker is not None:
             tracker.sample_started()
 
@@ -818,7 +819,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # Subset data vars in posterior
         self._clean_posterior_group(dt=self._inference_obj)
 
-        # Opt-in MLflow tracking (hssm.track): params, metrics, artifacts.
+        # Opt-in MLflow tracking (hssm.tracking.track): params, metrics, artifacts.
         if tracker is not None:
             tracker.log_sample(self, sampler, kwargs)
         return self.traces
@@ -886,7 +887,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 backend = "numba"
 
-        tracker = tracking.active()
+        tracker = tracking_hooks.active()
         if tracker is not None:
             tracker.vi_started()
 
@@ -1703,7 +1704,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Opt-in MLflow tracking: attach model.pkl when log_artifacts="all".
         # A traces-only save writes no pickle, so any in the directory is older.
-        if not save_traces_only and (tracker := tracking.active()) is not None:
+        if not save_traces_only and (tracker := tracking_hooks.active()) is not None:
             tracker.log_saved_model(model_path)
 
     @classmethod

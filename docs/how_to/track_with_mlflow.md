@@ -13,14 +13,17 @@ pip install "hssm[tracking]"  # with pip
 
 ## Record a fit
 
-Wrap the work in `hssm.track`:
+Import `track` from `hssm.tracking` and wrap the work in it. Importing
+`hssm.tracking` without the extra raises an `ImportError` that says how to
+install it; the rest of HSSM works without MLflow.
 
 ```python
 import hssm
+from hssm.tracking import track
 
 data = hssm.load_data("cavanagh_theta")
 
-with hssm.track(
+with track(
     experiment="my-study",
     run_name="ddm-basic",
     dataset_name="cavanagh_theta",  # optional but recommended for dataset tracking
@@ -57,7 +60,7 @@ To keep several projects apart, or to use a tracking server, set `MLFLOW_TRACKIN
 
 ```python
 for sd in [0.5, 1.0, 2.0]:
-    with hssm.track(
+    with track(
         experiment="my-study",
         params={"prior_v_sd": sd},
         dataset_name="cavanagh_theta",
@@ -75,7 +78,7 @@ Add more as you go with `run.log_param(...)`, and attach figures or your own met
 ```python
 import arviz as az
 
-with hssm.track(experiment="my-study", dataset_name="cavanagh_theta") as run:
+with track(experiment="my-study", dataset_name="cavanagh_theta") as run:
     model = hssm.HSSM(data, model="ddm")
     model.sample()
     run.log_param("note", "pilot subjects only")
@@ -116,7 +119,7 @@ machine.
 approximate posterior as `vi_traces.nc`:
 
 ```python
-with hssm.track(
+with track(
     experiment="my-study",
     run_name="advi",
     dataset_name="cavanagh_theta",
@@ -133,7 +136,7 @@ Adding a simulated dataset to the same study:
 ```python
 sim = hssm.simulate_data(model="ddm", theta=dict(v=0.5, a=1.5, z=0.5, t=0.1), size=500)
 
-with hssm.track(
+with track(
     experiment="my-study",
     run_name="ddm-recovery",
     dataset_name="ddm-sim-v0.5",
@@ -172,13 +175,14 @@ table or a plot.
 
 ## Rebuild a model from a run
 
-`hssm.load_run` turns a run back into a fitted model: it rebuilds the model from
+`load_run` turns a run back into a fitted model: it rebuilds the model from
 the run's `model_spec.json` and `data.parquet`, and attaches its traces.
 
 ```python
 import arviz as az
+from hssm.tracking import load_run
 
-model = hssm.load_run("<run_id>")
+model = load_run("<run_id>")
 az.summary(model.traces)
 ```
 
@@ -186,19 +190,21 @@ The run id is on the tracker while you fit, and it stays readable after the
 block closes:
 
 ```python
-with hssm.track(experiment="my-study", run_name="ddm-basic") as run:
+with track(experiment="my-study", run_name="ddm-basic") as run:
     model = hssm.HSSM(data, model="ddm")
     model.sample()
 
 run_id = run.run_id
 ```
 
-For an earlier run, `hssm.list_runs()` lists every run `hssm.track` recorded,
+For an earlier run, `list_runs()` lists every run `track` recorded,
 newest first, with its id, name, experiment, model and dataset. The
 `restorable` column says whether `load_run` can rebuild it:
 
 ```python
-hssm.list_runs()
+from hssm.tracking import list_runs
+
+list_runs()
 ```
 
 The run must have been logged with artifacts on (the default), and the model
