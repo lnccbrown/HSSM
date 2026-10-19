@@ -40,11 +40,10 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 5 * * 1'
     uses: ./.github/workflows/run_tests.yml
     with:
-      # Clear the PR-oriented addopts: --exitfirst truncates the blast radius
-      # and --reruns=2 masks flakiness — both wrong for drift triage. The
-      # timeout is re-added explicitly. (No spaces inside any word: test_args
-      # expands unquoted in run_tests.yml.)
-      test_args: "-o addopts= --timeout=360"
+      # Clear the PR-oriented addopts: --reruns masks flakiness, which is wrong
+      # for drift triage. Timeout and durations are re-added explicitly. (No
+      # spaces inside any word: test_args expands unquoted in run_tests.yml.)
+      test_args: "-o addopts= --timeout=600 --durations=50"
 
   slow:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 5 * * 1'
