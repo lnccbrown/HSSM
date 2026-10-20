@@ -20,7 +20,7 @@ def _model(n_choices, **kwargs):
 
 @pytest.mark.parametrize(
     ("n_choices", "theta"),
-    [(2, [2.0, 0.7]), (3, [2.0, -1.0, 0.5])],
+    [(2, [2.0, 0.7]), (3, [2.0, -1.0, 0.5]), (4, [1.5, -1.0, 0.5, 1.0])],
 )
 def test_rv_matches_softmax(n_choices, theta):
     """Simulated choice frequencies follow softmax(beta * [0, logit1, ...])."""
