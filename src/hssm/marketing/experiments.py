@@ -810,7 +810,7 @@ def _save_figure(result: ExperimentResult, png: Path, svg: Path) -> None:
     import matplotlib as mpl
     import matplotlib.pyplot as plt
 
-    settings = {
+    settings: dict[Any, Any] = {
         "figure.dpi": FIGURE_DPI,
         "font.family": "DejaVu Sans",
         "svg.hashsalt": "hssm-marketing-v1",
