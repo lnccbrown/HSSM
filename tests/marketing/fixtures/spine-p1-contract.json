@@ -1,0 +1,121 @@
+{
+  "schema": "hssm-spine-marketing-contract-pin-v1",
+  "source": {
+    "repository": "lnccbrown/HSSMSpine",
+    "commit": "2bee24766586621ec98b3b338560a9dfe273f607",
+    "path": "marketing/contracts/marketing-contracts-v1.schema.json",
+    "sha256": "sha256:e359b7dd13e28924e15865fccb2e239d86321931b663febed7c4c895de4108dd"
+  },
+  "contracts": {
+    "marketing-experiment-request-v1": {
+      "required": [
+        "schema",
+        "experiment_id",
+        "brief_id",
+        "template_id",
+        "scientific_question",
+        "expected_contrast",
+        "data_class",
+        "dataset_ref",
+        "hssm_ref",
+        "environment_digest",
+        "inputs",
+        "random_seeds",
+        "resource_tier",
+        "diagnostic_policy",
+        "expected_outputs",
+        "visibility",
+        "approval"
+      ],
+      "allowed": [
+        "schema",
+        "experiment_id",
+        "brief_id",
+        "template_id",
+        "scientific_question",
+        "expected_contrast",
+        "data_class",
+        "dataset_ref",
+        "hssm_ref",
+        "environment_digest",
+        "inputs",
+        "random_seeds",
+        "resource_tier",
+        "diagnostic_policy",
+        "expected_outputs",
+        "visibility",
+        "approval"
+      ],
+      "enums": {
+        "resource_tier": ["S", "F", "E"],
+        "visibility": ["internal", "gated_external", "public"]
+      }
+    },
+    "marketing-experiment-run-v1": {
+      "required": [
+        "schema",
+        "run_id",
+        "request_digest",
+        "runtime_provenance",
+        "logs",
+        "outputs",
+        "diagnostics",
+        "result_digest",
+        "status"
+      ],
+      "allowed": [
+        "schema",
+        "run_id",
+        "request_digest",
+        "runtime_provenance",
+        "logs",
+        "outputs",
+        "diagnostics",
+        "result_digest",
+        "status",
+        "nondeterminism"
+      ],
+      "enums": {
+        "status": ["passed", "failed", "inconclusive", "cancelled"]
+      }
+    },
+    "marketing-asset-v1": {
+      "required": [
+        "schema",
+        "asset_id",
+        "brief_id",
+        "source_refs",
+        "run_ids",
+        "creator",
+        "caption",
+        "alt_text",
+        "licence",
+        "consent",
+        "master",
+        "derivatives",
+        "transformations",
+        "review_state"
+      ],
+      "allowed": [
+        "schema",
+        "asset_id",
+        "brief_id",
+        "source_refs",
+        "run_ids",
+        "creator",
+        "caption",
+        "alt_text",
+        "licence",
+        "consent",
+        "master",
+        "derivatives",
+        "transformations",
+        "review_state",
+        "data_class"
+      ],
+      "enums": {
+        "review_state": ["proposed", "in_review", "approved", "rejected"]
+      }
+    }
+  }
+}
