@@ -88,6 +88,29 @@ def _validate_setting_preset(name: str, value: object, preset: str) -> None:
         )
 
 
+def _get_prior_args(prior: Any) -> dict[str, Any]:
+    """Return the original arguments of a Bambi or truncated HSSM prior.
+
+    Anything else, such as a missing regression-term prior, has no arguments and
+    hence no user-supplied initial value.
+    """
+    if not isinstance(prior, bmb.Prior):
+        return {}
+    if getattr(prior, "is_truncated", False):
+        return cast("dict[str, Any]", getattr(prior, "_args"))
+    return prior.args
+
+
+def _get_regression_term_prior(prior: dict[str, Any], term: str) -> Any:
+    """Return the prior Bambi uses for a common term of a regression.
+
+    As in Bambi, a prior named after the term takes precedence over the
+    ``"common"`` wildcard, which covers every common term, the intercept included.
+    Returns ``None`` when neither is given.
+    """
+    return prior.get(term, prior.get("common"))
+
+
 class classproperty:
     """A decorator that combines the behavior of @property and @classmethod.
 
@@ -1586,7 +1609,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         )
 
     def initial_point(self, transformed: bool = False) -> dict[str, np.ndarray]:
-        """Compute the initial point of the model.
+        """Compute a fresh PyMC initial point for the model.
 
         This is a slightly altered version of pm.initial_point.initial_point().
 
@@ -1599,6 +1622,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         -------
         dict
             A dictionary containing the initial point of the model parameters.
+
+        Notes
+        -----
+        HSSM clears PyMC's initial-value registry after model construction, so this
+        freshly computed point can differ from the default initial values HSSM passes
+        to sampling. Use ``model.initvals`` to inspect those values.
         """
         fn = pm.initial_point.make_initial_point_fn(
             model=self.pymc_model, return_transformed=transformed
@@ -2210,21 +2239,22 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             # If the parameter was parent it is automatically treated as a
             # regression.
             if not name_str_suffix:
-                # No suffix --> Intercept
-                if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
-                    args_tmp = getattr(prior_tmp["Intercept"], "args")
-                    if return_value:
-                        return args_tmp.get("initval", None)
-                    else:
-                        return "initval" in args_tmp
+                # No suffix --> Intercept, unless the parent is not a regression
+                # and so keeps its plain prior.
+                prior_tmp = self.params[tmp_param].prior
+                if isinstance(prior_tmp, dict):
+                    prior_tmp = _get_regression_term_prior(prior_tmp, "Intercept")
+                args_tmp = _get_prior_args(prior_tmp)
+                if return_value:
+                    return args_tmp.get("initval", None)
                 else:
-                    if return_value:
-                        return None
-                    return False
+                    return "initval" in args_tmp
             else:
                 # If the parameter has a suffix --> use it
                 if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
-                    args_tmp = getattr(prior_tmp[name_str_suffix], "args")
+                    args_tmp = _get_prior_args(
+                        _get_regression_term_prior(prior_tmp, name_str_suffix)
+                    )
                     if return_value:
                         return args_tmp.get("initval", None)
                     else:
@@ -2246,8 +2276,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                         return self.params[tmp_param].prior
                     else:
                         return True
-                elif isinstance(self.params[tmp_param].prior, bmb.Prior):
-                    args_tmp = getattr(self.params[tmp_param].prior, "args")
+                elif isinstance(prior_tmp := self.params[tmp_param].prior, bmb.Prior):
+                    args_tmp = _get_prior_args(prior_tmp)
                     if "initval" in args_tmp:
                         if return_value:
                             return args_tmp["initval"]
@@ -2266,7 +2296,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 # If suffix --> treat as regression and use suffix
                 if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
-                    args_tmp = getattr(prior_tmp[name_str_suffix], "args")
+                    args_tmp = _get_prior_args(
+                        _get_regression_term_prior(prior_tmp, name_str_suffix)
+                    )
                     if return_value:
                         return args_tmp.get("initval", None)
                     else:
