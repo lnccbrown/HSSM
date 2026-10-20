@@ -419,6 +419,38 @@ class TestSimulationRouting:
         for c in rt_hist:
             assert "max_t" not in c
 
+    def test_noisy_rt_sims_use_simulator_default_step(self, monkeypatch):
+        """delta_t_model sets the drawn geometry, not the predicted RTs.
+
+        The predicted histograms must sample the same predictive as
+        sample_posterior_predictive, which calls the simulator without a
+        delta_t. A coarser step lengthens the simulated RTs (crossings between
+        grid points are missed), so the noisy RT sims must not receive
+        delta_t_model, while geometry and trajectories still do.
+        """
+        import hssm.plotting.model_cartoon as mc
+
+        calls: list[dict] = []
+        real_simulator = mc.simulator
+
+        def recording(*args, **kw):
+            calls.append(kw)
+            return real_simulator(*args, **kw)
+
+        monkeypatch.setattr(mc, "simulator", recording)
+        _render("band", n_trajectories=2, delta_t_model=0.02)
+        plt.close("all")
+
+        no_noise = [c for c in calls if c.get("no_noise")]
+        noisy = [c for c in calls if not c.get("no_noise")]
+        traj = [c for c in noisy if c.get("smooth_unif") is False]
+        rt_hist = [c for c in noisy if "smooth_unif" not in c]
+        assert no_noise and traj and rt_hist
+        for c in no_noise + traj:
+            assert c["delta_t"] == pytest.approx(0.02)
+        for c in rt_hist:
+            assert "delta_t" not in c
+
 
 class TestUncertainHistogramLayers:
     def _densities(self, n_draws=6, n_bins=10):
@@ -602,14 +634,14 @@ class TestPlotFuncModel:
 
         theta_mean, _ = _theta_frames()
         # reproduce the renderer's seeding protocol: one Generator, simulator
-        # seeds drawn positionally (the plug-in sim's seed is the first draw)
+        # seeds drawn positionally (the plug-in sim's seed is the first draw);
+        # no delta_t, as in the renderer (simulator default step)
         rng = np.random.default_rng(0)
         sim_out = simulator(
             model="ddm",
             theta=theta_mean.values,
             n_samples=2,
             no_noise=False,
-            delta_t=0.01,
             random_state=int(rng.integers(0, 2**31 - 1)),
         )
         edges = np.arange(-0.05, 5, 0.05)
@@ -621,6 +653,48 @@ class TestPlotFuncModel:
             mean_line.get_ydata() - (mean_line.get_ydata() - y).min(), y, atol=1e-8
         )
         plt.close("all")
+
+    def test_predicted_rts_match_first_passage_closed_form(self, monkeypatch):
+        """The predicted RTs carry no visible time-discretization bias.
+
+        With v=0 and z=0.5 the decision time is the exit time of a standard
+        Brownian motion started midway in an interval of width 2a, whose mean
+        is a**2, so E[RT] = t + a**2 = 0.55 s here. A walker checked against
+        the bounds only every delta_t misses crossings between grid points;
+        to first order this widens each bound by 0.5826 * sqrt(delta_t)
+        (Broadie, Glasserman & Kou, 1997), a bias of about +0.062 s at
+        delta_t=0.01 and +0.019 s at the simulator's default 0.001. The
+        0.04 s tolerance separates the two by more than 15 Monte Carlo
+        standard errors (about 0.001 s with 40 000 RTs).
+        """
+        import hssm.plotting.model_cartoon as mc
+
+        captured: list[np.ndarray] = []
+        real_simulator = mc.simulator
+
+        def recording(*args, **kw):
+            out = real_simulator(*args, **kw)
+            if not kw.get("no_noise") and "smooth_unif" not in kw:
+                captured.append(np.asarray(out["rts"]).ravel())
+            return out
+
+        monkeypatch.setattr(mc, "simulator", recording)
+        theta_mean = pd.DataFrame({"v": [0.0], "a": [0.5], "z": [0.5], "t": [0.3]})
+        fig, ax = plt.subplots()
+        plot_func_model(
+            model_name="ddm",
+            axis=ax,
+            theta_mean=theta_mean,
+            data=None,
+            n_reps=40_000,
+            random_state=0,
+        )
+        plt.close("all")
+
+        (rts,) = captured  # the plug-in simulation behind the predicted curve
+        rts = rts[rts != -999]
+        assert rts.size == 40_000
+        assert abs(rts.mean() - (0.3 + 0.5**2)) < 0.04
 
     def test_zorder_semantic_stack(self):
         fig, ax, up, down = _render("both")
@@ -947,6 +1021,34 @@ class TestPlotFuncModelN:
             assert kw["n_samples"] == 3
         seeds = [kw["random_state"] for kw in noisy]
         assert len(set(seeds)) == len(seeds)
+
+    def test_noisy_rt_sims_use_simulator_default_step(self, monkeypatch):
+        """delta_t_model sets the geometry, not the predicted RTs (>2 choices).
+
+        Same contract as the 2-choice renderer (see TestSimulationRouting).
+        """
+        import hssm.plotting.model_cartoon as mc
+
+        calls: list[dict] = []
+        real_simulator = mc.simulator
+
+        def recording(*args, **kw):
+            calls.append(kw)
+            return real_simulator(*args, **kw)
+
+        monkeypatch.setattr(mc, "simulator", recording)
+        self._render_n("band", n_trajectories=1, delta_t_model=0.02)
+        plt.close("all")
+
+        no_noise = [c for c in calls if c.get("no_noise")]
+        noisy = [c for c in calls if not c.get("no_noise")]
+        traj = [c for c in noisy if c.get("smooth_unif") is False]
+        rt_hist = [c for c in noisy if "smooth_unif" not in c]
+        assert no_noise and traj and rt_hist
+        for c in no_noise + traj:
+            assert c["delta_t"] == pytest.approx(0.02)
+        for c in rt_hist:
+            assert "delta_t" not in c
 
     def test_hist_height_auto_single_axis(self, monkeypatch):
         """'auto' scales the histograms to HIST_HEIGHT_MARGIN of the headroom.
