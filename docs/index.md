@@ -13,8 +13,8 @@
 ![GitHub Repo stars](https://img.shields.io/github/stars/lnccbrown/HSSM)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-**HSSM** (Hierarchical Sequential Sampling Modeling) is a modern,
-source-available Python toolbox for computational modeling in cognitive
+**HSSM** (Hierarchical Sequential Sampling Modeling) is modern, publicly
+available scientific software for computational modeling in cognitive
 neuroscience. It supports
 a broad range of sequential sampling models used to study decision-making,
 learning, and other cognitive processes — from basic research to the analysis of
@@ -29,6 +29,50 @@ collaboration with the
 [Center for Computation and Visualization (CCV)](https://ccv.brown.edu/) and the
 [Center for Computational Brain Science](https://ccbs.carney.brown.edu/) within
 the [Carney Institute at Brown University](https://www.brown.edu/carney/).
+
+## Why HSSM?
+
+Choice rates alone can hide whether a condition changed evidence accumulation,
+response caution, starting bias, non-decision time, or learning. HSSM connects
+those mechanism-sensitive questions to hierarchical Bayesian models, uncertainty,
+posterior checks, and reproducible artifacts. It is designed for scientific
+analysis and decision support—not as a clinically validated biomarker or a
+regulatory decision system.
+
+<div class="grid cards" markdown>
+
+-   __Learn and reproduce__
+
+    ---
+
+    Read the [paper and citation](#citation), run the
+    [quickstart](getting_started/getting_started.ipynb), then explore
+    [method and model stories](campaigns/methods.md).
+
+-   __Follow what changed__
+
+    ---
+
+    Start with the [release and migration guide](campaigns/releases.md) and the
+    versioned [changelog](changelog.md).
+
+-   __Ask and contribute__
+
+    ---
+
+    Join [GitHub Discussions](https://github.com/lnccbrown/HSSM/discussions),
+    follow the [contribution guide](CONTRIBUTING.md), or
+    [suggest a public content idea](community/content-suggestions.md).
+
+-   __Evaluate a decision-support use__
+
+    ---
+
+    Read the [decision-support boundary](campaigns/decision-support.md) and
+    [use and licensing route](use-and-licensing.md) before proposing a pilot or
+    commercial incorporation.
+
+</div>
 
 ## Installation
 
@@ -158,5 +202,6 @@ bioRxiv 2026.06.05.730398.
 
 ## License
 
-HSSM is licensed under
-[Copyright 2023, Brown University, Providence, RI](license.md)
+HSSM carries the [Brown University licence](license.md). It is not represented
+as OSI open source. The [use and licensing page](use-and-licensing.md) explains
+the public routing boundary without replacing the licence or legal advice.

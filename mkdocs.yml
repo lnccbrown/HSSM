@@ -29,6 +29,7 @@ exclude_docs: |
 nav:
   - Home:
       - Overview: index.md
+      - Explore HSSM: campaigns/index.md
   - Learn:
       - Overview: learn/index.md
       - Get started:
@@ -91,6 +92,10 @@ nav:
       - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
       - Random-slope prior diagnostics: tutorials/random_slope_safe_priors.ipynb
       - Choosing a parameterization per parameter: tutorials/parameterization_per_parameter.ipynb
+      - Public stories and applications:
+          - Releases and migration: campaigns/releases.md
+          - Method and model stories: campaigns/methods.md
+          - Decision-support boundary: campaigns/decision-support.md
   - Reference:
       - Overview: reference/index.md
       - Built-in models and likelihoods: reference/models-and-likelihoods.md
@@ -111,6 +116,7 @@ nav:
           - hssm.set_floatX: api/set_floatx.md
           - hssm.show_defaults: api/show_defaults.md
           - hssm.check_data_for_rl: api/check_data_for_rl.md
+          - Governed public-evidence templates: reference/marketing-experiments.md
       - Likelihoods:
           - hssm.likelihoods: api/likelihoods.md
       - Working with distributions:
@@ -120,6 +126,8 @@ nav:
       - Project and site:
           - Changelog: changelog.md
           - The HSSM ecosystem: ecosystem/index.md
+          - Use and licensing: use-and-licensing.md
+          - Suggest public content: community/content-suggestions.md
           - Credits: credits.md
           - License: license.md
       - Historical tutorial snapshots:

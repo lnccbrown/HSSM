@@ -1,0 +1,50 @@
+name: Public content suggestion
+description: Propose an evidence-linked HSSM explanation, tutorial, visual, or community story.
+title: "content: "
+labels: ["content-suggestion"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue is public. Do not include credentials, direct identifiers, patient-level data, confidential partner information, private conversations, or raw unpublished results. Submission is intake, not approval to publish.
+  - type: input
+    id: premise
+    attributes:
+      label: Audience question or premise
+      description: State one useful, non-obvious question or thesis.
+      placeholder: The same choice rate can hide a different response-time process.
+    validations:
+      required: true
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Primary audience
+      options:
+        - Academic or computational researchers
+        - Open scientific software contributors
+        - Biopharma or CNS scientists
+        - Consumer-behaviour or decision-science teams
+        - Methods-adjacent community
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Canonical public evidence
+      description: Link public documentation, code, a release, paper, dataset, or reproducible artifact. Say what still needs evidence.
+    validations:
+      required: true
+  - type: textarea
+    id: visual
+    attributes:
+      label: Visual hypothesis
+      description: What should a reader notice within two seconds and understand after ten?
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public-intake confirmation
+      options:
+        - label: I confirm this contains only public-safe information and does not grant publication, identity, data-use, or licensing permission.
+          required: true

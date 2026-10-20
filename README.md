@@ -15,6 +15,11 @@ interface. HSSM is a
 [BRAINSTORM](https://ccbs.carney.brown.edu/brainstorm) project at Brown
 University.
 
+HSSM is publicly available scientific software. It is not represented as OSI open
+source; its Brown University licence limits incorporation into commercial products
+or services. See [use and licensing](https://lnccbrown.github.io/HSSM/use-and-licensing/)
+before planning commercial incorporation.
+
 ## Install
 
 Use Python 3.12, 3.13, or 3.14 in a fresh environment:
@@ -35,6 +40,12 @@ then follow the
 [main tutorial](https://lnccbrown.github.io/HSSM/tutorials/main_tutorial/).
 The [ecosystem map](https://lnccbrown.github.io/HSSM/ecosystem/) explains when
 work belongs in HSSM or one of its sibling projects.
+
+One-click project routes: [paper and citation](#citation) ·
+[community](https://github.com/lnccbrown/HSSM/discussions) ·
+[release and migration guide](https://lnccbrown.github.io/HSSM/campaigns/releases/) ·
+[use and licensing](https://lnccbrown.github.io/HSSM/use-and-licensing/) ·
+[suggest a public content idea](https://lnccbrown.github.io/HSSM/community/content-suggestions/).
 
 ## Contributing and support
 
