@@ -470,12 +470,20 @@ class HSSM(HSSMBase):
         # HSSM.__init__ always builds a Config, which is where ndt_edge_shift lives.
         ndt_edge_shift = typing_cast("Config", self.model_config).ndt_edge_shift
 
+        # make_distribution() reads a float lapse as a log probability, while
+        # _check_lapse() sets the choice-only lapse as the probability 1 / n_choices.
+        lapse = (
+            float(np.log(self.lapse))
+            if self.is_choice_only and isinstance(self.lapse, int | float)
+            else self.lapse
+        )
+
         return make_distribution(
             rv=rv_name,
             loglik=self.loglik,
             list_params=_list_params,
             bounds=self.bounds,
-            lapse=self.lapse,
+            lapse=lapse,
             extra_fields=(
                 None
                 if not self.extra_fields
