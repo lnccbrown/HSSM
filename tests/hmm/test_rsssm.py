@@ -987,6 +987,62 @@ def test_padding_requires_contiguous_participants():
         pad_and_align_to_T_max(df, "participant_id", ["rt", "response"])
 
 
+class TestPadAndAlignSuggestedSort:
+    """The sort suggested by the contiguity error must keep trial order."""
+
+    @staticmethod
+    def _interleaved_panel(
+        n_participants: int, n_trials: int, participant_col: str
+    ) -> pd.DataFrame:
+        """Return a trial-major panel whose rows are in chronological order."""
+        n_rows = n_participants * n_trials
+        return pd.DataFrame(
+            {
+                participant_col: np.tile(np.arange(n_participants), n_trials),
+                "trial_id": np.repeat(np.arange(n_trials), n_participants),
+                "rt": np.random.default_rng(0).uniform(0.2, 1.5, n_rows),
+                "response": np.where(np.arange(n_rows) % 2, 1, -1),
+            }
+        )
+
+    @pytest.mark.parametrize(
+        "participant_col", ["participant_id", "subj_id", "subject's id"]
+    )
+    def test_error_message_suggests_safe_sorts(self, participant_col: str):
+        """The error message suggests both safe sorting forms."""
+        df = self._interleaved_panel(3, 4, participant_col)
+        with pytest.raises(ValueError, match="contiguous") as exc_info:
+            pad_and_align_to_T_max(df, participant_col, ["rt", "response"])
+
+        message = str(exc_info.value)
+        assert f"data.sort_values({participant_col!r}, kind='stable')" in message
+        assert f"data.sort_values([{participant_col!r}, 'trial_id'])" in message
+
+    @pytest.mark.parametrize(
+        "participant_col", ["participant_id", "subj_id", "subject's id"]
+    )
+    def test_suggested_sorts_preserve_trial_order(self, participant_col: str):
+        """Both suggested sorting forms keep trials in sequence."""
+        n_participants, n_trials = 15, 150
+        df = self._interleaved_panel(n_participants, n_trials, participant_col)
+        with pytest.raises(ValueError, match="contiguous"):
+            pad_and_align_to_T_max(df, participant_col, ["rt", "response"])
+
+        remedies = {
+            "participant and trial columns": df.sort_values(
+                [participant_col, "trial_id"]
+            ),
+            "stable participant column": df.sort_values(participant_col, kind="stable"),
+        }
+        for remedy, remedied in remedies.items():
+            _, _, n, t_max = pad_and_align_to_T_max(
+                remedied, participant_col, ["rt", "response"]
+            )
+            assert (n, t_max) == (n_participants, n_trials)
+            for _, trials in remedied.groupby(participant_col)["trial_id"]:
+                assert trials.is_monotonic_increasing, remedy
+
+
 def test_single_trial_only_panel_rejected():
     """A panel where every participant has one trial (T_max == 1) is rejected."""
     df = pd.DataFrame(

@@ -56,6 +56,13 @@ def pad_and_align_to_T_max(
     ValueError
         If ``participant_col`` is missing, contains NaNs, or participant rows
         are not contiguous.
+
+    Notes
+    -----
+    Only the grouping of rows by participant is checked. The order of trials
+    within each participant cannot be checked here because no trial column is
+    inspected. The forward recursion takes trial order from row order, so each
+    participant's rows must already be in trial order.
     """
     if participant_col not in data.columns:
         raise ValueError(
@@ -80,8 +87,16 @@ def pad_and_align_to_T_max(
     n_unique = int(pid.nunique())
     if n_runs != n_unique:
         raise ValueError(
-            "Data rows must be contiguous per participant. Sort by participant "
-            f"before passing to RSSSM (e.g. data.sort_values('{participant_col}'))."
+            "Data rows must be contiguous per participant. The RSSSM forward "
+            "recursion reads each participant's trial sequence from row order. "
+            "Please sort the data by participant and, within participant, by "
+            "trial order before passing it to RSSSM, e.g. "
+            f"data.sort_values([{participant_col!r}, 'trial_id']) "
+            "with your trial-order column in place of 'trial_id', or, if the "
+            "rows are already in trial order within each participant, "
+            f"data.sort_values({participant_col!r}, kind='stable'). The default "
+            "single-column sort is not stable and can scramble the order of "
+            "trials within participants."
         )
 
     # Preserve first-appearance order of participants.
