@@ -427,7 +427,9 @@ class RLSSM(_RLSSM):
     Parameters
     ----------
     data : pd.DataFrame
-        Trial-level data (balanced panel required).
+        Trial-level data (balanced panel required). Rows must be grouped by
+        participant and, within each participant, in trial order: the learning
+        sequence is read from row order.
     model : str | None, optional
         Name of an ``ssms.rl`` preset or custom registered RLSSM model. Defaults
         to ``"2AB_RW_DDM"``.
