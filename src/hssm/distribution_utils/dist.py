@@ -359,12 +359,17 @@ def make_hssm_rv(
                 **kwargs,
             )
 
+            # ssm-simulators returns (rt, response) pairs; keep only the response.
+            if is_choice_only and obs_dim_int > 1:
+                sims_out = sims_out[..., -1]
+
             sims_out = _apply_lapse_model(
                 sims_out=sims_out,
                 p_outlier=p_outlier,
                 rng=rng,
                 lapse_dist=cls._lapse,
                 choices=choices,
+                is_choice_only=is_choice_only,
             )
 
             return sims_out
@@ -378,6 +383,7 @@ def _apply_lapse_model(
     rng: np.random.Generator,
     lapse_dist: bmb.Prior | float | None,
     choices: list,
+    is_choice_only: bool = False,
 ) -> np.ndarray:
     """Apply lapse model to the simulation output.
 
@@ -393,6 +399,10 @@ def _apply_lapse_model(
         The lapse distribution to draw from
     choices : list
         List of possible choices
+    is_choice_only : bool
+        Whether `sims_out` holds responses only, without a reaction-time column.
+        Lapses then draw a uniformly random choice, matching the choice-only
+        lapse likelihood of 1 / n_choices.
 
     Returns
     -------
@@ -408,17 +418,16 @@ def _apply_lapse_model(
             "distribution but did not specify the distribution."
         )
 
-    if not isinstance(lapse_dist, bmb.Prior):
-        # A numeric `lapse` (e.g. `1 / n_choices` for choice-only models) has no
-        # reaction-time distribution to draw lapse RTs from, so it cannot drive
-        # simulation via this RT/response path.
+    if not is_choice_only and not isinstance(lapse_dist, bmb.Prior):
+        # A numeric `lapse` has no reaction-time distribution to draw lapse RTs
+        # from, so it cannot drive simulation via this RT/response path.
         raise TypeError(
-            "Lapse simulation is not supported for choice-only models with a "
-            f"numeric lapse ({lapse_dist!r}). Provide a `bmb.Prior` lapse "
+            "Lapse simulation is not supported for models with reaction times "
+            f"and a numeric lapse ({lapse_dist!r}). Provide a `bmb.Prior` lapse "
             "distribution to simulate lapses, or disable `p_outlier`."
         )
 
-    out_shape = sims_out.shape[:-1]
+    out_shape = sims_out.shape if is_choice_only else sims_out.shape[:-1]
 
     # Handle p_outlier shape/type to ensure consistent shape:
     # - 0-dim numpy array (scalar array) -> convert to float
@@ -440,13 +449,19 @@ def _apply_lapse_model(
     if replace_n == 0:
         return sims_out
 
+    if is_choice_only:
+        sims_out[replace] = rng.choice(choices, size=replace_n)
+        return sims_out
+
+    lapse_prior = cast("bmb.Prior", lapse_dist)  # numeric lapse rejected above
+
     replace_shape = (*out_shape[:-1], replace_n)
     replace_mask = np.stack([replace, replace], axis=-1)
     n_draws = np.prod(replace_shape)
     lapse_rt = cast(
         "np.ndarray",
         pm.draw(
-            get_distribution_from_prior(lapse_dist).dist(**lapse_dist.args),
+            get_distribution_from_prior(lapse_prior).dist(**lapse_prior.args),
             n_draws,
             random_seed=rng,
         ),
@@ -766,6 +781,7 @@ def make_family(
     parent: str = "v",
     likelihood_name: str = "SSM Likelihood",
     family_name="SSM Family",
+    is_choice_only: bool = False,
 ) -> bmb.Family:
     """Build a family in bambi.
 
@@ -783,6 +799,9 @@ def make_family(
         the name of the likelihood function. Defaults to "SSM Likelihood".
     family_name
         the name of the family. Defaults to "SSM Family".
+    is_choice_only : optional
+        Whether the model is choice-only. Choice-only draws have no (rt, response)
+        axis, so the family must not add one to the posterior predictive coords.
 
     Returns
     -------
@@ -793,7 +812,8 @@ def make_family(
         likelihood_name, parent=parent, params=list_params, dist=dist
     )
 
-    family = SSMFamily(family_name, likelihood=likelihood, link=link)
+    family_cls = bmb.Family if is_choice_only else SSMFamily
+    family = family_cls(family_name, likelihood=likelihood, link=link)
 
     return family
 

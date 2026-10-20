@@ -447,6 +447,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self.list_params,
             self.link,
             self._parent,
+            is_choice_only=self.is_choice_only,
         )
 
         # Targeted statistical-identifiability warnings for common/group or
