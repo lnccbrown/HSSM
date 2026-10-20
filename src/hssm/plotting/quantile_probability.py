@@ -706,7 +706,7 @@ def plot_quantile_probability(
             _logger.warning("No data for group %s. Skipping this group", title)
             continue
         g = _plot_quantile_probability_2D(
-            plotting_df,
+            df,
             cond=cond,
             x=x,
             y=y,

@@ -261,3 +261,36 @@ class TestQuantileProbabilityPlotting:
                 n_samples=10,
             )
             assert ax is not None
+
+
+def test_plot_quantile_probability_groups_plot_only_their_own_data():
+    """Each per-group grid holds that group's rows, not the whole dataset."""
+    rng = np.random.default_rng(0)
+    n = 400
+    df = pd.DataFrame(
+        {
+            "rt": rng.uniform(0.3, 2.0, n),
+            "response": rng.choice([-1.0, 1.0], n),
+            "stim": rng.choice(["LL", "WW"], n),
+            "conf": rng.choice(["high", "low"], n),
+            "block": rng.choice(["b1", "b2"], n),
+            "participant_id": np.repeat(["p1", "p2"], n // 2),
+        }
+    )
+    model = hssm.HSSM(data=df, model="ddm")
+
+    plots = plot_quantile_probability(
+        model,
+        cond="stim",
+        data=df,
+        predictive_group=None,
+        row="conf",
+        col="block",
+        groups="participant_id",
+    )
+
+    assert [sorted(g.data["participant_id"].unique()) for g in plots] == [
+        ["p1"],
+        ["p2"],
+    ]
+    plt.close("all")
