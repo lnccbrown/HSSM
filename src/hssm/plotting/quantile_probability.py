@@ -587,16 +587,7 @@ def plot_quantile_probability(
     )
 
     extra_dims = (
-        list(
-            set(
-                [
-                    e
-                    for e in [cond, correct, row, col, kwargs.get("marker", None)]
-                    if e is not None
-                ]
-            )
-        )
-        or None
+        list(set([e for e in [cond, correct, row, col] if e is not None])) or None
     )
     if extra_dims is not None and groups is not None:
         extra_dims += list(groups)
@@ -706,7 +697,7 @@ def plot_quantile_probability(
             _logger.warning("No data for group %s. Skipping this group", title)
             continue
         g = _plot_quantile_probability_2D(
-            plotting_df,
+            df,
             cond=cond,
             x=x,
             y=y,
