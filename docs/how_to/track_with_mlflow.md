@@ -119,6 +119,22 @@ traces keep only the observed response, so this is what lets a run show which
 predictors a regression used. It is copied into every run, which matters when
 runs go to a shared tracking server.
 
+To open the data in a spreadsheet or another tool that does not read parquet,
+download it from the run and write it out as CSV:
+
+```python
+import mlflow
+import pandas as pd
+
+path = mlflow.artifacts.download_artifacts(
+    run_id="<run_id>", artifact_path="data.parquet"
+)
+pd.read_parquet(path).to_csv("data.csv", index=False)
+```
+
+Keep the parquet as the run's record: a CSV does not store column types, so,
+for example, a categorical column comes back as plain text.
+
 `log_artifacts=False` records params, metrics and tags only, for when traces
 are large and already stored elsewhere, or when the data should not leave your
 machine. A named dataset is still registered, which sends its column schema and

@@ -1,5 +1,7 @@
 """Tests for hssm.rl.utils — validate_balanced_panel."""
 
+import re
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -105,3 +107,61 @@ class TestValidateBalancedPanelContiguity:
         n_p, n_t = validate_balanced_panel(df_sorted)
         assert n_p == 3
         assert n_t == 4
+
+
+class TestValidateBalancedPanelSuggestedSort:
+    """The sort suggested by the contiguity error must keep trial order.
+
+    The RL likelihood takes each participant's trial order from row order, so a
+    sort that makes rows contiguous but reorders trials within a participant
+    passes validation while silently corrupting the learning sequence. pandas'
+    default sort (``kind="quicksort"``) is not stable.
+    """
+
+    @staticmethod
+    def _interleaved_panel(
+        n_participants: int, n_trials: int, participant_col: str
+    ) -> pd.DataFrame:
+        """Return a panel exported trial by trial: interleaved, in trial order."""
+        return pd.DataFrame(
+            {
+                participant_col: np.tile(np.arange(n_participants), n_trials),
+                "trial_id": np.repeat(np.arange(n_trials), n_participants),
+                "rt": np.random.default_rng(0).random(n_participants * n_trials),
+            }
+        )
+
+    @pytest.mark.parametrize("participant_col", ["participant_id", "subj_id"])
+    def test_error_message_suggests_stable_sort(self, participant_col: str) -> None:
+        """The error message suggests a stable sort on the given column."""
+        df = self._interleaved_panel(3, 4, participant_col)
+        with pytest.raises(ValueError, match="contiguous") as exc_info:
+            validate_balanced_panel(df, participant_col=participant_col)
+        message = str(exc_info.value)
+        assert f"data.sort_values('{participant_col}', kind='stable')" in message
+        assert (
+            f"data.sort_values(['{participant_col}', 'trial_id'], kind='stable')"
+            in message
+        )
+
+    @pytest.mark.parametrize("participant_col", ["participant_id", "subj_id"])
+    def test_suggested_sorts_preserve_trial_order(self, participant_col: str) -> None:
+        """Every sort quoted in the message keeps each participant's trial order.
+
+        Size of the FULL_RUN setting of docs/tutorials/rlssm_basic.ipynb
+        (15 participants x 150 trials).
+        """
+        n_participants, n_trials = 15, 150
+        df = self._interleaved_panel(n_participants, n_trials, participant_col)
+        with pytest.raises(ValueError, match="contiguous") as exc_info:
+            validate_balanced_panel(df, participant_col=participant_col)
+        snippets = re.findall(r"data\.sort_values\([^)]*\)", str(exc_info.value))
+        assert snippets
+        for snippet in snippets:
+            # Run the quoted code as a user would, on the interleaved panel.
+            remedied = eval(snippet, {"__builtins__": {}}, {"data": df})
+            assert validate_balanced_panel(
+                remedied, participant_col=participant_col
+            ) == (n_participants, n_trials)
+            for _, trials in remedied.groupby(participant_col)["trial_id"]:
+                assert trials.is_monotonic_increasing, snippet
