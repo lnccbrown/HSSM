@@ -1,0 +1,21 @@
+{
+  "schema": "marketing-experiment-request-v1",
+  "experiment_id": "p2-tier-s-smoke",
+  "brief_id": "brief-p2-tier-s-smoke",
+  "template_id": "prior-sensitivity-threshold-v1",
+  "scientific_question": "Does the bounded runner emit a contract-compatible evidence package?",
+  "expected_contrast": "The predeclared posterior probability gap is visible.",
+  "data_class": "synthetic",
+  "dataset_ref": "synthetic:generated",
+  "hssm_ref": "p2-source-checkout",
+  "environment_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "inputs": {},
+  "random_seeds": [1729],
+  "resource_tier": "S",
+  "diagnostic_policy": "tier-s-scientific-v1",
+  "expected_outputs": ["summary", "data", "png", "svg", "asset"],
+  "visibility": "internal",
+  "approval": {
+    "mode": "validated_intake"
+  }
+}

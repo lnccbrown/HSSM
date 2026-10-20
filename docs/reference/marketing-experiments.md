@@ -59,6 +59,17 @@ Run it only in an isolated, network-disabled worker with a fresh output director
 python -m hssm.marketing request.json artifact/
 ```
 
+From a source checkout, the committed P2 smoke request exercises the same boundary:
+
+```bash
+artifact_dir="$(mktemp -d)"
+python -m hssm.marketing \
+  tests/marketing/fixtures/tier-s-smoke-request.json \
+  "$artifact_dir"
+test -s "$artifact_dir/run.json"
+test -s "$artifact_dir/asset.json"
+```
+
 ## Artifact convention
 
 Each run writes the exact request, machine-readable summary and CSV, deterministic

@@ -10,30 +10,13 @@ from typing import Any
 from hssm.marketing import run_experiment, validate_request
 
 PIN = Path(__file__).with_name("fixtures") / "spine-p1-contract.json"
+SMOKE_REQUEST = Path(__file__).with_name("fixtures") / "tier-s-smoke-request.json"
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
 def _request() -> dict[str, Any]:
-    return {
-        "schema": "marketing-experiment-request-v1",
-        "experiment_id": "contract-pin-smoke",
-        "brief_id": "brief-contract-pin",
-        "template_id": "prior-sensitivity-threshold-v1",
-        "scientific_question": "Does the evidence package match the P1 contract?",
-        "expected_contrast": "The predeclared probability gap is visible.",
-        "data_class": "synthetic",
-        "dataset_ref": "synthetic:generated",
-        "hssm_ref": "p2-contract-test",
-        "environment_digest": "sha256:" + "0" * 64,
-        "inputs": {},
-        "random_seeds": [1729],
-        "resource_tier": "S",
-        "diagnostic_policy": "tier-s-scientific-v1",
-        "expected_outputs": ["summary", "data", "png", "svg", "asset"],
-        "visibility": "internal",
-        "approval": {"mode": "validated_intake"},
-    }
+    return json.loads(SMOKE_REQUEST.read_text(encoding="utf-8"))
 
 
 def _assert_contract_shape(
