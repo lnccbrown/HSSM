@@ -39,13 +39,13 @@ def _run(body: str) -> subprocess.CompletedProcess:
 
 
 def test_hssm_imports_without_mlflow():
-    """Importing HSSM, and the tracking module itself, must not need MLflow."""
+    """Importing HSSM, and the hooks its fitting code uses, must not need MLflow."""
     result = _run(
         """
         import hssm
-        from hssm import tracking
+        from hssm import _tracking_hooks
 
-        assert tracking.active() is None
+        assert _tracking_hooks.active() is None
         print("ok")
         """
     )
@@ -61,15 +61,15 @@ def test_network_provenance_works_without_mlflow():
     """
     result = _run(
         """
-        from hssm import tracking
+        from hssm import _tracking_hooks as hooks
 
-        tracking.record_network("ddm.onnx", "/tmp/snapshots/abc123/ddm.onnx")
-        assert tracking.last_network() == {
+        hooks.record_network("ddm.onnx", "/tmp/snapshots/abc123/ddm.onnx")
+        assert hooks.last_network() == {
             "network_file": "ddm.onnx",
             "hf_revision": "abc123",
         }
-        tracking.reset_network_record()
-        assert tracking.last_network() == {}
+        hooks.reset_network_record()
+        assert hooks.last_network() == {}
         print("ok")
         """
     )
@@ -77,20 +77,17 @@ def test_network_provenance_works_without_mlflow():
     assert "ok" in result.stdout
 
 
-def test_track_raises_a_useful_error_without_mlflow():
+def test_importing_tracking_raises_a_useful_error_without_mlflow():
     """Asking for tracking without the extra must say how to install it."""
     result = _run(
         """
-        import hssm
-
         try:
-            with hssm.track(experiment="x"):
-                pass
+            import hssm.tracking
         except ImportError as e:
             assert "hssm[tracking]" in str(e), str(e)
             print("ok")
         else:
-            raise AssertionError("track() did not raise without mlflow")
+            raise AssertionError("hssm.tracking imported without mlflow")
         """
     )
     assert result.returncode == 0, result.stderr[-2000:]

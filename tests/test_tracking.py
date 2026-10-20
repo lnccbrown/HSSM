@@ -1,4 +1,4 @@
-"""Tests for opt-in MLflow tracking of inference runs (hssm.track)."""
+"""Tests for opt-in MLflow tracking of inference runs (hssm.tracking.track)."""
 
 import contextlib
 import dataclasses
@@ -12,9 +12,11 @@ import pandas as pd
 import pytest
 
 import hssm
-from hssm import tracking
 
 mlflow = pytest.importorskip("mlflow")
+
+from hssm import _tracking_hooks as tracking_hooks
+from hssm import tracking
 
 
 @pytest.fixture(autouse=True)
@@ -27,7 +29,7 @@ def _isolated_mlflow(tmp_path, monkeypatch):
     # ./mlruns. Run from tmp_path so that lands with the rest of the test's
     # scratch instead of in the developer's working directory.
     monkeypatch.chdir(tmp_path)
-    tracking.reset_network_record()
+    tracking_hooks.reset_network_record()
     uri = f"sqlite:///{(tmp_path / 'tracking.db').absolute()}"
     mlflow.set_tracking_uri(uri)
     # mlflow remembers the active experiment *id* process-wide; a previous
@@ -36,7 +38,7 @@ def _isolated_mlflow(tmp_path, monkeypatch):
     yield uri
     if mlflow.active_run() is not None:
         mlflow.end_run()
-    tracking.reset_network_record()
+    tracking_hooks.reset_network_record()
     with contextlib.suppress(Exception):
         mlflow.set_tracking_uri(original_uri)
 
@@ -55,14 +57,14 @@ class TestNetworkProvenance:
         A path outside the cache layout has no revision to report.
         """
         p = tmp_path / "models--franklab--HSSM" / "snapshots" / "abc123" / "ddm.onnx"
-        assert tracking.hf_revision_from_path(p) == "abc123"
-        assert tracking.hf_revision_from_path(tmp_path / "ddm.onnx") is None
+        assert tracking_hooks.hf_revision_from_path(p) == "abc123"
+        assert tracking_hooks.hf_revision_from_path(tmp_path / "ddm.onnx") is None
 
     def test_recorded_network_is_readable_with_its_revision(self, tmp_path):
         """What the loader records is what a tracker started later reads back."""
         p = tmp_path / "snapshots" / "deadbeef" / "angle.onnx"
-        tracking.record_network("angle.onnx", p)
-        assert tracking.last_network() == {
+        tracking_hooks.record_network("angle.onnx", p)
+        assert tracking_hooks.last_network() == {
             "network_file": "angle.onnx",
             "hf_revision": "deadbeef",
         }
@@ -82,7 +84,7 @@ class TestNetworkProvenance:
             lambda repo_id, filename, revision=None: str(local),
         )
         assert onnx_model.download_hf("ddm.onnx") == str(local)
-        assert tracking.last_network() == {
+        assert tracking_hooks.last_network() == {
             "network_file": "ddm.onnx",
             "hf_revision": "c0ffee",
         }
@@ -187,14 +189,14 @@ class TestHelpers:
     def test_tags_cannot_overwrite_the_schema_tags(self):
         """Overwriting `phase` would make the run unfindable by its own schema."""
         with pytest.raises(ValueError, match="reserved"):
-            with hssm.track(tags={"phase": "x"}):
+            with tracking.track(tags={"phase": "x"}):
                 pass
 
     def test_nested_track_blocks_are_refused(self):
         """One active run per process: a nested block would silently split a fit."""
-        with hssm.track():
+        with tracking.track():
             with pytest.raises(RuntimeError, match="nested"):
-                with hssm.track():
+                with tracking.track():
                     pass
 
     def test_block_that_fits_nothing_still_closes_a_complete_run(self):
@@ -203,7 +205,7 @@ class TestHelpers:
         The id is normally resolved when a model is logged; without one it is
         minted at exit rather than left as the internal placeholder.
         """
-        with hssm.track(experiment="infer/empty", run_name="noop") as t:
+        with tracking.track(experiment="infer/empty", run_name="noop") as t:
             run_id = t.run_id
         run = _run(run_id)
         assert run.info.status == "FINISHED"
@@ -216,7 +218,7 @@ class TestHelpers:
         A leaked tracker would attach the next fit in the process to a dead run.
         """
         with pytest.raises(RuntimeError):
-            with hssm.track() as t:
+            with tracking.track() as t:
                 run_id = t.run_id
                 raise RuntimeError("boom")
         assert _run(run_id).info.status == "FAILED"
@@ -224,12 +226,12 @@ class TestHelpers:
 
 
 class TestTrackedFit:
-    """A real (tiny) fit inside hssm.track: analytical ddm, 1 chain."""
+    """A real (tiny) fit inside tracking.track: analytical ddm, 1 chain."""
 
     @pytest.fixture
     def fitted(self, data_ddm):
         """Run a tiny analytical ddm fit inside a track block."""
-        with hssm.track(
+        with tracking.track(
             experiment="infer/ddm", run_name="t", lineage_id="lin-explicit"
         ) as t:
             model = hssm.HSSM(data_ddm, model="ddm")
@@ -269,11 +271,11 @@ class TestTrackedFit:
 
     def test_changing_the_specification_changes_the_spec_hash(self, data_ddm):
         """Adding `p_outlier` is a different model, so a different digest."""
-        with hssm.track() as t1:
+        with tracking.track() as t1:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
-        with hssm.track() as t2:
+        with tracking.track() as t2:
             hssm.HSSM(data_ddm, model="ddm", p_outlier=0.1).sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -295,7 +297,7 @@ class TestSaveModelHook:
         # `save_model` writes relative to the cwd, which `_isolated_mlflow`
         # already points at this test's tmp_path.
         for mode, expect in (("all", True), (True, False)):
-            with hssm.track(log_artifacts=mode) as t:
+            with tracking.track(log_artifacts=mode) as t:
                 model = hssm.HSSM(data_ddm, model="ddm")
                 model.sample(draws=5, chains=1, tune=5, progressbar=False)
                 model.save_model(model_name=f"m-{mode}", save_traces_only=False)
@@ -306,7 +308,7 @@ class TestSaveModelHook:
 
     def test_log_artifacts_false_keeps_metrics_but_writes_no_files(self, data_ddm):
         """Turning artifacts off must not cost the run its metrics too."""
-        with hssm.track(log_artifacts=False) as t:
+        with tracking.track(log_artifacts=False) as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -344,13 +346,13 @@ class TestUserParams:
 
     def test_params_argument_reaches_the_run(self):
         """Params passed to track() land on the run."""
-        with hssm.track(experiment="study", params={"prior_v_sd": 2.0}) as t:
+        with tracking.track(experiment="study", params={"prior_v_sd": 2.0}) as t:
             run_id = t.run_id
         assert _run(run_id).data.params["prior_v_sd"] == "2.0"
 
     def test_params_can_be_added_after_the_block_opens(self):
         """Not everything worth recording is known when the run starts."""
-        with hssm.track(experiment="study") as t:
+        with tracking.track(experiment="study") as t:
             t.log_param("note", "pilot only")
             t.log_params({"cohort": "A", "excluded": "3"})
             run_id = t.run_id
@@ -361,18 +363,18 @@ class TestUserParams:
     def test_reserved_params_rejected_by_track(self):
         """A key HSSM logs itself is refused up front, not silently dropped."""
         with pytest.raises(ValueError, match="model"):
-            with hssm.track(params={"model": "mine"}):
+            with tracking.track(params={"model": "mine"}):
                 pass
 
     def test_reserved_params_rejected_by_log_param(self):
         """The guard applies to the handle too, not just to `track()`."""
-        with hssm.track() as t:
+        with tracking.track() as t:
             with pytest.raises(ValueError, match="draws"):
                 t.log_param("draws", 5)
 
     def test_user_params_survive_a_fit(self, data_ddm):
         """User params coexist with the ones the fit logs."""
-        with hssm.track(experiment="study", params={"dataset": "v2"}) as t:
+        with tracking.track(experiment="study", params={"dataset": "v2"}) as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -413,11 +415,11 @@ class TestNetworkAttribution:
         """
         model = hssm.HSSM(data_ddm, model="ddm")
         model._tracking_network = {"network_file": "net_a.onnx", "hf_revision": "aaa"}
-        tracking.record_network("net_b.onnx", "/tmp/snapshots/bbb/net_b.onnx")
+        tracking_hooks.record_network("net_b.onnx", "/tmp/snapshots/bbb/net_b.onnx")
 
         # An explicit lineage id keeps the manifest lookup (a network call) out
         # of the test; it is not what is under test here.
-        with hssm.track(experiment="study", lineage_id="lin") as t:
+        with tracking.track(experiment="study", lineage_id="lin") as t:
             t.log_model(model)
             run_id = t.run_id
         p = _run(run_id).data.params
@@ -431,11 +433,11 @@ class TestNetworkAttribution:
         model that downloads nothing ends up with nothing rather than with
         whatever the previous model in the session loaded.
         """
-        tracking.record_network("net_a.onnx", "/tmp/snapshots/aaa/net_a.onnx")
+        tracking_hooks.record_network("net_a.onnx", "/tmp/snapshots/aaa/net_a.onnx")
         model = hssm.HSSM(data_ddm, model="ddm", loglik_kind="analytical")
         assert model._tracking_network == {}
 
-        with hssm.track(experiment="study", lineage_id="lin") as t:
+        with tracking.track(experiment="study", lineage_id="lin") as t:
             t.log_model(model)
             run_id = t.run_id
         assert "net_a.onnx" not in _run(run_id).data.params.get("network_file", "")
@@ -447,7 +449,7 @@ class TestTrackedVI:
     @pytest.fixture
     def fitted_vi(self, data_ddm):
         """Run a tiny ADVI fit inside a track block."""
-        with hssm.track(experiment="study", run_name="advi", lineage_id="lin") as t:
+        with tracking.track(experiment="study", run_name="advi", lineage_id="lin") as t:
             model = hssm.HSSM(data_ddm, model="ddm")
             model.vi(method="advi", niter=100, draws=10, progressbar=False)
             run_id = t.run_id
@@ -503,7 +505,9 @@ class TestDatasetRegistration:
         MLflow's Datasets panel is fed by `log_input`, not by params or tags,
         so without this the panel reads "None" however much else is recorded.
         """
-        with hssm.track(experiment="study", lineage_id="lin", dataset_name="ddm") as t:
+        with tracking.track(
+            experiment="study", lineage_id="lin", dataset_name="ddm"
+        ) as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -521,7 +525,7 @@ class TestDatasetRegistration:
         Every study would otherwise show the same generic dataset name, which
         is worse than an empty panel. `data_sha256` still identifies the data.
         """
-        with hssm.track(experiment="study", lineage_id="lin") as t:
+        with tracking.track(experiment="study", lineage_id="lin") as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -541,7 +545,7 @@ class TestContextIsolation:
         def worker():
             seen["active"] = tracking.active()
 
-        with hssm.track(experiment="study", lineage_id="lin"):
+        with tracking.track(experiment="study", lineage_id="lin"):
             assert tracking.active() is not None
             t = threading.Thread(target=worker)
             t.start()
@@ -566,7 +570,7 @@ class TestContextIsolation:
                 draws=5, chains=1, tune=5, progressbar=False
             )
 
-        with hssm.track(experiment="study", lineage_id="lin") as t:
+        with tracking.track(experiment="study", lineage_id="lin") as t:
             thread = threading.Thread(target=worker)
             thread.start()
             thread.join()
@@ -591,16 +595,18 @@ class TestContextIsolation:
         seen = {}
 
         def worker():
-            tracking.record_network("other.onnx", "/tmp/snapshots/bbb/other.onnx")
-            seen["in_thread"] = tracking.last_network().get("network_file")
+            tracking_hooks.record_network("other.onnx", "/tmp/snapshots/bbb/other.onnx")
+            seen["in_thread"] = tracking_hooks.last_network().get("network_file")
 
-        tracking.record_network("mine.onnx", "/tmp/snapshots/aaa/mine.onnx")
+        tracking_hooks.record_network("mine.onnx", "/tmp/snapshots/aaa/mine.onnx")
         thread = threading.Thread(target=worker)
         thread.start()
         thread.join()
 
         assert seen["in_thread"] == "other.onnx"  # the thread saw its own
-        assert tracking.last_network()["network_file"] == "mine.onnx"  # ours intact
+        assert (
+            tracking_hooks.last_network()["network_file"] == "mine.onnx"
+        )  # ours intact
 
 
 def _artifacts(run_id):
@@ -619,7 +625,7 @@ class TestDataArtifact:
 
     def test_fitted_data_round_trips(self, data_ddm):
         """The stored copy is the frame the posterior was fit to, exactly."""
-        with hssm.track(experiment="study", lineage_id="lin") as t:
+        with tracking.track(experiment="study", lineage_id="lin") as t:
             model = hssm.HSSM(data_ddm, model="ddm")
             model.sample(draws=5, chains=1, tune=5, progressbar=False)
             run_id = t.run_id
@@ -631,7 +637,7 @@ class TestDataArtifact:
         `traces.nc` holds only the observed response, so without this a run
         could not say which predictors a regression used.
         """
-        with hssm.track(experiment="study", lineage_id="lin") as t:
+        with tracking.track(experiment="study", lineage_id="lin") as t:
             hssm.HSSM(
                 data_ddm_reg,
                 model="ddm",
@@ -642,7 +648,7 @@ class TestDataArtifact:
 
     def test_not_written_when_artifacts_are_off(self, data_ddm):
         """`log_artifacts=False` keeps the data out of the run."""
-        with hssm.track(log_artifacts=False, lineage_id="lin") as t:
+        with tracking.track(log_artifacts=False, lineage_id="lin") as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -651,7 +657,9 @@ class TestDataArtifact:
 
     def test_named_dataset_points_at_the_stored_copy(self, data_ddm):
         """The Datasets panel entry links to the artifact, not just a schema."""
-        with hssm.track(experiment="study", lineage_id="lin", dataset_name="ddm") as t:
+        with tracking.track(
+            experiment="study", lineage_id="lin", dataset_name="ddm"
+        ) as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -671,7 +679,9 @@ class TestDataArtifact:
             raise ImportError("pyarrow is not installed")
 
         monkeypatch.setattr(pd.DataFrame, "to_parquet", refuse)
-        with hssm.track(experiment="study", lineage_id="lin", dataset_name="ddm") as t:
+        with tracking.track(
+            experiment="study", lineage_id="lin", dataset_name="ddm"
+        ) as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -697,7 +707,9 @@ class TestDataArtifact:
             "get_artifact_uri",
             lambda path=None: f"mlflow-artifacts:/1/abc/artifacts/{path}",
         )
-        with hssm.track(experiment="study", lineage_id="lin", dataset_name="ddm") as t:
+        with tracking.track(
+            experiment="study", lineage_id="lin", dataset_name="ddm"
+        ) as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -712,12 +724,12 @@ def _posterior(idata):
 
 
 class TestLoadRun:
-    """`hssm.load_run` rebuilds a fitted model from what its run recorded."""
+    """`tracking.load_run` rebuilds a fitted model from what its run recorded."""
 
     @pytest.fixture
     def fitted_reg(self, data_ddm_reg):
         """A regression with a dict prior: everything the spec can store as is."""
-        with hssm.track(experiment="study", lineage_id="lin") as t:
+        with tracking.track(experiment="study", lineage_id="lin") as t:
             model = hssm.HSSM(
                 data_ddm_reg,
                 model="ddm",
@@ -735,7 +747,7 @@ class TestLoadRun:
     def test_rebuilt_model_has_the_same_specification(self, fitted_reg):
         """Same modelling choices, same data: the spec hashes must agree."""
         run_id, model = fitted_reg
-        loaded = hssm.load_run(run_id)
+        loaded = tracking.load_run(run_id)
         assert isinstance(loaded, hssm.HSSM)
         assert tracking.spec_sha256(tracking.model_spec(loaded)) == (
             tracking.spec_sha256(tracking.model_spec(model))
@@ -745,15 +757,15 @@ class TestLoadRun:
     def test_rebuilt_model_carries_the_fitted_posterior(self, fitted_reg):
         """The draws come back attached, not just the model that made them."""
         run_id, model = fitted_reg
-        loaded = hssm.load_run(run_id)
+        loaded = tracking.load_run(run_id)
         assert _posterior(loaded.traces).equals(_posterior(model.traces))
 
     def test_vi_run_restores_the_vi_posterior(self, data_ddm):
         """A VI fit stores `vi_traces.nc`, which must land back on the model."""
-        with hssm.track(lineage_id="lin") as t:
+        with tracking.track(lineage_id="lin") as t:
             model = hssm.HSSM(data_ddm, model="ddm")
             model.vi(method="advi", niter=100, draws=10, progressbar=False)
-        loaded = hssm.load_run(t.run_id)
+        loaded = tracking.load_run(t.run_id)
         assert _posterior(loaded._inference_obj_vi).equals(
             _posterior(model._inference_obj_vi)
         )
@@ -772,7 +784,7 @@ class TestLoadRun:
         """
         import bambi as bmb
 
-        with hssm.track(lineage_id="lin") as t:
+        with tracking.track(lineage_id="lin") as t:
             hssm.HSSM(
                 data_ddm,
                 model="ddm",
@@ -780,7 +792,7 @@ class TestLoadRun:
             ).sample(draws=5, chains=1, tune=5, progressbar=False)
         assert _run(t.run_id).data.tags["spec_restorable"] == "false"
         with pytest.raises(ValueError, match="cannot be rebuilt from its spec"):
-            hssm.load_run(t.run_id)
+            tracking.load_run(t.run_id)
 
     def test_untagged_run_reports_why_its_rebuild_failed(self, data_ddm, monkeypatch):
         """A run from before `spec_restorable` gets no verdict at logging time.
@@ -789,7 +801,7 @@ class TestLoadRun:
         network, invalid data), so the error must carry the real cause rather
         than blame text-recorded arguments outright.
         """
-        with hssm.track(lineage_id="lin") as t:
+        with tracking.track(lineage_id="lin") as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -800,26 +812,26 @@ class TestLoadRun:
 
         monkeypatch.setattr(hssm, "HSSM", fail)
         with pytest.raises(ValueError) as excinfo:
-            hssm.load_run(t.run_id)
+            tracking.load_run(t.run_id)
         message = str(excinfo.value)
         assert "network ddm.onnx not found" in message
         assert "may hold arguments recorded as text" in message
 
     def test_run_without_artifacts_cannot_be_rebuilt(self, data_ddm):
         """`log_artifacts=False` keeps no data or spec, so nothing to rebuild from."""
-        with hssm.track(log_artifacts=False, lineage_id="lin") as t:
+        with tracking.track(log_artifacts=False, lineage_id="lin") as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
         with pytest.raises(ValueError, match="log_artifacts"):
-            hssm.load_run(t.run_id)
+            tracking.load_run(t.run_id)
 
     def test_other_model_classes_are_refused(self, fitted_reg):
         """Subclasses record different constructor arguments than `HSSM`."""
         run_id, _ = fitted_reg
         mlflow.tracking.MlflowClient().set_tag(run_id, "model_class", "RLSSM")
         with pytest.raises(NotImplementedError, match="RLSSM"):
-            hssm.load_run(run_id)
+            tracking.load_run(run_id)
 
     def test_explicit_tracking_uri_leaves_the_global_one_alone(
         self, fitted_reg, _isolated_mlflow
@@ -827,7 +839,7 @@ class TestLoadRun:
         """Loading from a named server must not redirect later tracked runs."""
         run_id, _ = fitted_reg
         mlflow.set_tracking_uri("sqlite:///elsewhere.db")
-        loaded = hssm.load_run(run_id, tracking_uri=_isolated_mlflow)
+        loaded = tracking.load_run(run_id, tracking_uri=_isolated_mlflow)
         assert isinstance(loaded, hssm.HSSM)
         assert mlflow.get_tracking_uri() == "sqlite:///elsewhere.db"
 
@@ -848,8 +860,8 @@ LIST_RUNS_COLUMNS = [
 
 
 def _empty_hssm_run(**kwargs):
-    """A run recorded by hssm.track with nothing fitted inside it."""
-    with hssm.track(**kwargs) as t:
+    """A run recorded by tracking.track with nothing fitted inside it."""
+    with tracking.track(**kwargs) as t:
         pass
     return t.run_id
 
@@ -885,13 +897,13 @@ def _only_row(runs, run_id):
 
 
 class TestListRuns:
-    """`hssm.list_runs` shows the runs `hssm.track` recorded, one row each."""
+    """`tracking.list_runs` shows the runs `tracking.track` recorded, one row each."""
 
     def test_runs_listed_newest_first_with_their_experiment(self):
         """The table a user reads a `run_id` off: curated columns, newest on top."""
         _hssm_run_started_at(1_000, "first", experiment="study-a")
         _hssm_run_started_at(2_000, "second", experiment="study-b")
-        runs = hssm.list_runs()
+        runs = tracking.list_runs()
         assert list(runs.columns) == LIST_RUNS_COLUMNS
         assert list(runs["run_name"]) == ["second", "first"]
         assert list(runs["experiment"]) == ["study-b", "study-a"]
@@ -899,11 +911,11 @@ class TestListRuns:
 
     def test_fitted_run_reports_model_data_and_that_it_can_be_rebuilt(self, data_ddm):
         """A fit fills in the model columns, and `load_run` can rebuild it."""
-        with hssm.track(lineage_id="lin", dataset_name="ddm-sim") as t:
+        with tracking.track(lineage_id="lin", dataset_name="ddm-sim") as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
-        row = _only_row(hssm.list_runs(), t.run_id)
+        row = _only_row(tracking.list_runs(), t.run_id)
         assert row["model"] == "ddm"
         assert row["loglik_kind"] == "analytical"
         assert row["dataset_name"] == "ddm-sim"
@@ -914,7 +926,7 @@ class TestListRuns:
         """Other tools on a shared server log runs too; they are not HSSM fits."""
         other = _other_tools_run()
         hssm_run = _empty_hssm_run()
-        run_ids = set(hssm.list_runs()["run_id"])
+        run_ids = set(tracking.list_runs()["run_id"])
         assert hssm_run in run_ids
         assert other not in run_ids
 
@@ -922,25 +934,25 @@ class TestListRuns:
         """The column agrees with what `load_run` would refuse."""
         import bambi as bmb
 
-        with hssm.track(lineage_id="lin") as t:
+        with tracking.track(lineage_id="lin") as t:
             hssm.HSSM(
                 data_ddm,
                 model="ddm",
                 include=[{"name": "v", "prior": bmb.Prior("Normal", mu=0, sigma=1)}],
             ).sample(draws=5, chains=1, tune=5, progressbar=False)
-        assert not _only_row(hssm.list_runs(), t.run_id)["restorable"]
+        assert not _only_row(tracking.list_runs(), t.run_id)["restorable"]
 
     def test_run_without_artifacts_is_not_restorable(self, data_ddm):
         """No stored data or spec means nothing for `load_run` to rebuild from."""
-        with hssm.track(log_artifacts=False, lineage_id="lin") as t:
+        with tracking.track(log_artifacts=False, lineage_id="lin") as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
-        assert not _only_row(hssm.list_runs(), t.run_id)["restorable"]
+        assert not _only_row(tracking.list_runs(), t.run_id)["restorable"]
 
     def test_empty_store_gives_an_empty_table_with_the_columns(self):
         """Code that reads the columns must not break before the first run."""
-        runs = hssm.list_runs()
+        runs = tracking.list_runs()
         assert runs.empty
         assert list(runs.columns) == LIST_RUNS_COLUMNS
 
@@ -948,7 +960,7 @@ class TestListRuns:
         """Listing a named server must not redirect later tracked runs."""
         hssm_run = _empty_hssm_run()
         mlflow.set_tracking_uri("sqlite:///elsewhere.db")
-        runs = hssm.list_runs(tracking_uri=_isolated_mlflow)
+        runs = tracking.list_runs(tracking_uri=_isolated_mlflow)
         assert list(runs["run_id"]) == [hssm_run]
         assert mlflow.get_tracking_uri() == "sqlite:///elsewhere.db"
 
@@ -1072,7 +1084,7 @@ class TestRunFieldReaders:
 
     def test_dataset_name_is_the_registered_name(self, data_ddm):
         """The name passed to `track(dataset_name=...)`."""
-        with hssm.track(lineage_id="lin", dataset_name="ddm-sim") as t:
+        with tracking.track(lineage_id="lin", dataset_name="ddm-sim") as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -1084,7 +1096,7 @@ class TestRunFieldReaders:
         import mlflow.data
 
         other = mlflow.data.from_pandas(data_ddm.head(), name="user-logged")
-        with hssm.track(lineage_id="lin", dataset_name="ddm-sim") as t:
+        with tracking.track(lineage_id="lin", dataset_name="ddm-sim") as t:
             mlflow.log_input(other)
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
@@ -1096,7 +1108,7 @@ class TestRunFieldReaders:
         """No `dataset_name=`: a user's own input does not fill the column."""
         import mlflow.data
 
-        with hssm.track(lineage_id="lin") as t:
+        with tracking.track(lineage_id="lin") as t:
             mlflow.log_input(
                 mlflow.data.from_pandas(pd.DataFrame({"x": [1]}), name="user-logged")
             )
@@ -1148,7 +1160,7 @@ class TestRebuildArtifactsTag:
 
     def test_set_when_data_and_spec_are_stored(self, data_ddm):
         """A fit with artifacts on stores both files and says so."""
-        with hssm.track(lineage_id="lin") as t:
+        with tracking.track(lineage_id="lin") as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -1157,7 +1169,7 @@ class TestRebuildArtifactsTag:
 
     def test_absent_when_artifacts_are_off(self, data_ddm):
         """`log_artifacts=False` stores neither file."""
-        with hssm.track(log_artifacts=False, lineage_id="lin") as t:
+        with tracking.track(log_artifacts=False, lineage_id="lin") as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -1170,7 +1182,7 @@ class TestRebuildArtifactsTag:
             raise OSError("no parquet engine")
 
         monkeypatch.setattr(tracking.Tracker, "_log_data", fail)
-        with hssm.track(lineage_id="lin") as t:
+        with tracking.track(lineage_id="lin") as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -1178,7 +1190,7 @@ class TestRebuildArtifactsTag:
 
     def test_list_runs_makes_no_request_per_run(self, data_ddm, monkeypatch):
         """Listing reads tags it already has instead of each run's artifacts."""
-        with hssm.track(lineage_id="lin") as t:
+        with tracking.track(lineage_id="lin") as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
             )
@@ -1187,7 +1199,7 @@ class TestRebuildArtifactsTag:
             raise AssertionError("list_runs listed a run's artifacts")
 
         monkeypatch.setattr(mlflow.tracking.MlflowClient, "list_artifacts", no_listing)
-        assert _only_row(hssm.list_runs(), t.run_id)["restorable"]
+        assert _only_row(tracking.list_runs(), t.run_id)["restorable"]
 
 
 class TestReviewFixes:
@@ -1197,14 +1209,16 @@ class TestReviewFixes:
 
     def test_network_roles_are_recorded_apart(self):
         """A missing-data network must not overwrite the likelihood's record."""
-        tracking.record_network("ddm.onnx", "/tmp/snapshots/aaa/ddm.onnx")
-        with tracking.network_role("missing_data"):
-            tracking.record_network("ddm_cpn.onnx", "/tmp/snapshots/ccc/ddm_cpn.onnx")
-        assert tracking.recorded_networks() == {
+        tracking_hooks.record_network("ddm.onnx", "/tmp/snapshots/aaa/ddm.onnx")
+        with tracking_hooks.network_role("missing_data"):
+            tracking_hooks.record_network(
+                "ddm_cpn.onnx", "/tmp/snapshots/ccc/ddm_cpn.onnx"
+            )
+        assert tracking_hooks.recorded_networks() == {
             "likelihood": {"network_file": "ddm.onnx", "hf_revision": "aaa"},
             "missing_data": {"network_file": "ddm_cpn.onnx", "hf_revision": "ccc"},
         }
-        assert tracking.last_network() == {
+        assert tracking_hooks.last_network() == {
             "network_file": "ddm.onnx",
             "hf_revision": "aaa",
         }
@@ -1229,7 +1243,7 @@ class TestReviewFixes:
         model = hssm.HSSM(
             data, model="ddm", loglik_kind="approx_differentiable", missing_data=True
         )
-        with hssm.track(lineage_id="lin") as t:
+        with tracking.track(lineage_id="lin") as t:
             t.log_model(model)
         p = _run(t.run_id).data.params
         assert p["network_file"] == "ddm.onnx" and p["hf_revision"] == "aaa"
@@ -1239,7 +1253,7 @@ class TestReviewFixes:
     def test_missing_data_network_params_are_reserved(self):
         """HSSM logs them itself, so a caller may not."""
         with pytest.raises(ValueError, match="missing_data_network_file"):
-            with hssm.track(params={"missing_data_network_file": "x"}):
+            with tracking.track(params={"missing_data_network_file": "x"}):
                 pass
 
     # -- save_model(save_traces_only=True) -----------------------------------
@@ -1249,7 +1263,7 @@ class TestReviewFixes:
         model = hssm.HSSM(data_ddm, model="ddm")
         model.sample(draws=5, chains=1, tune=5, progressbar=False)
         model.save_model(model_name="m")  # untracked: leaves m/model.pkl
-        with hssm.track(log_artifacts="all", lineage_id="lin") as t:
+        with tracking.track(log_artifacts="all", lineage_id="lin") as t:
             model = hssm.HSSM(data_ddm, model="ddm")
             model.sample(draws=5, chains=1, tune=5, progressbar=False)
             model.save_model(model_name="m", save_traces_only=True)
@@ -1278,7 +1292,7 @@ class TestReviewFixes:
 
     def test_second_fit_in_one_block_leaves_the_first_fit_s_record(self, data_ddm):
         """Same settings would be accepted by MLflow; the second fit is skipped."""
-        with hssm.track(lineage_id="lin") as t:
+        with tracking.track(lineage_id="lin") as t:
             model = hssm.HSSM(data_ddm, model="ddm")
             model.sample(draws=5, chains=1, tune=5, progressbar=False, random_seed=1)
             first = model.traces["posterior"].to_dataset().copy(deep=True)
@@ -1295,7 +1309,7 @@ class TestReviewFixes:
 
     def test_vi_after_sample_in_one_block_is_skipped(self, data_ddm):
         """A different kind of fit is a second fit too."""
-        with hssm.track(lineage_id="lin") as t:
+        with tracking.track(lineage_id="lin") as t:
             model = hssm.HSSM(data_ddm, model="ddm")
             model.sample(draws=5, chains=1, tune=5, progressbar=False)
             model.vi(method="advi", niter=50, draws=5, progressbar=False)
@@ -1317,16 +1331,16 @@ class TestReviewFixes:
             raise RuntimeError("server unavailable")
 
         monkeypatch.setattr(mlflow, "set_tags", fail)
-        with hssm.track() as t:
+        with tracking.track() as t:
             pass
         assert mlflow.active_run() is None
         assert _run(t.run_id).info.status == "FINISHED"
 
     def test_model_less_run_records_where_its_lineage_came_from(self):
         """`lineage_source` is part of the schema for every run."""
-        with hssm.track() as minted:
+        with tracking.track() as minted:
             pass
-        with hssm.track(lineage_id="mine") as given:
+        with tracking.track(lineage_id="mine") as given:
             pass
         assert _run(minted.run_id).data.tags["lineage_source"] == "minted"
         tags = _run(given.run_id).data.tags
@@ -1371,11 +1385,11 @@ class TestRevisionPinning:
 
     def test_pins_apply_only_inside_the_block(self):
         """Ordinary model building outside `load_run` keeps the default branch."""
-        assert tracking.pinned_revision("ddm.onnx") is None
-        with tracking.pinned_revisions({"ddm.onnx": "aaa"}):
-            assert tracking.pinned_revision("ddm.onnx") == "aaa"
-            assert tracking.pinned_revision("angle.onnx") is None
-        assert tracking.pinned_revision("ddm.onnx") is None
+        assert tracking_hooks.pinned_revision("ddm.onnx") is None
+        with tracking_hooks.pinned_revisions({"ddm.onnx": "aaa"}):
+            assert tracking_hooks.pinned_revision("ddm.onnx") == "aaa"
+            assert tracking_hooks.pinned_revision("angle.onnx") is None
+        assert tracking_hooks.pinned_revision("ddm.onnx") is None
 
     def test_loader_asks_the_hub_for_the_pinned_revision(
         self, fixture_path, tmp_path, monkeypatch
@@ -1385,7 +1399,7 @@ class TestRevisionPinning:
 
         hub = _FakeHub(fixture_path, tmp_path, {"ddm.onnx": "bbb"})
         monkeypatch.setattr(onnx_model, "hf_hub_download", hub)
-        with tracking.pinned_revisions({"ddm.onnx": "aaa"}):
+        with tracking_hooks.pinned_revisions({"ddm.onnx": "aaa"}):
             onnx_model.download_hf("ddm.onnx")
             onnx_model.load_onnx_model("ddm.onnx")
         onnx_model.load_onnx_model("ddm.onnx")
@@ -1411,7 +1425,7 @@ class TestRevisionPinning:
         shutil.copy(fixture_path / "angle.onnx", cwd / "ddm.onnx")
         monkeypatch.chdir(cwd)
 
-        with tracking.pinned_revisions({"ddm.onnx": "aaa"}):
+        with tracking_hooks.pinned_revisions({"ddm.onnx": "aaa"}):
             pinned = onnx_model.load_onnx_model("ddm.onnx")
         assert hub.requests == [("ddm.onnx", "aaa")]
         assert pinned == onnx.load(fixture_path / "ddm.onnx")
@@ -1429,14 +1443,14 @@ class TestRevisionPinning:
         hub = _FakeHub(fixture_path, tmp_path / "hub", {"ddm.onnx": "aaa"})
         monkeypatch.setattr(onnx_model, "hf_hub_download", hub)
         model = hssm.HSSM(data_ddm, model="ddm", loglik_kind="approx_differentiable")
-        with hssm.track(lineage_id="lin") as t:
+        with tracking.track(lineage_id="lin") as t:
             t.log_model(model)
 
         cwd = tmp_path / "cwd"
         cwd.mkdir()
         shutil.copy(fixture_path / "angle.onnx", cwd / "ddm.onnx")
         monkeypatch.chdir(cwd)
-        loaded = hssm.load_run(t.run_id)
+        loaded = tracking.load_run(t.run_id)
         assert hub.requests[-1] == ("ddm.onnx", "aaa")
         assert loaded._tracking_network == {
             "network_file": "ddm.onnx",
@@ -1452,11 +1466,11 @@ class TestRevisionPinning:
         hub = _FakeHub(fixture_path, tmp_path, {"ddm.onnx": "aaa"})
         monkeypatch.setattr(onnx_model, "hf_hub_download", hub)
         model = hssm.HSSM(data_ddm, model="ddm", loglik_kind="approx_differentiable")
-        with hssm.track(lineage_id="lin") as t:
+        with tracking.track(lineage_id="lin") as t:
             t.log_model(model)
 
         hub.latest["ddm.onnx"] = "bbb"
-        loaded = hssm.load_run(t.run_id)
+        loaded = tracking.load_run(t.run_id)
         assert hub.requests[-1] == ("ddm.onnx", "aaa")
         assert loaded._tracking_network == {
             "network_file": "ddm.onnx",
@@ -1478,11 +1492,11 @@ class TestRevisionPinning:
         model = hssm.HSSM(
             data, model="ddm", loglik_kind="approx_differentiable", missing_data=True
         )
-        with hssm.track(lineage_id="lin") as t:
+        with tracking.track(lineage_id="lin") as t:
             t.log_model(model)
 
         hub.latest.update({"ddm.onnx": "bbb", "ddm_cpn.onnx": "ddd"})
-        loaded = hssm.load_run(t.run_id)
+        loaded = tracking.load_run(t.run_id)
         assert loaded._tracking_network["hf_revision"] == "aaa"
         assert loaded._tracking_missing_data_network["hf_revision"] == "ccc"
 
@@ -1495,7 +1509,7 @@ class TestPreviouslyMissedFindings:
     def test_revision_found_for_a_network_in_a_subfolder(self, tmp_path):
         """`hf_hub_download("sub/net.onnx")` caches it one level deeper."""
         nested = tmp_path / "snapshots" / "abc123" / "sub" / "net.onnx"
-        assert tracking.hf_revision_from_path(nested) == "abc123"
+        assert tracking_hooks.hf_revision_from_path(nested) == "abc123"
 
     def test_revision_is_the_cache_commit_not_a_repository_folder(self, tmp_path):
         """A repository folder named `snapshots` must not pass for the cache's."""
@@ -1508,11 +1522,13 @@ class TestPreviouslyMissedFindings:
             / "v1"
             / "net.onnx"
         )
-        assert tracking.hf_revision_from_path(nested) == "abc123"
+        assert tracking_hooks.hf_revision_from_path(nested) == "abc123"
 
     def test_no_revision_outside_the_cache_layout(self, tmp_path):
         """A path with no `snapshots/<sha>/` above it has nothing to report."""
-        assert tracking.hf_revision_from_path(tmp_path / "sub" / "net.onnx") is None
+        assert (
+            tracking_hooks.hf_revision_from_path(tmp_path / "sub" / "net.onnx") is None
+        )
 
     # -- spec hash stable across processes -----------------------------------
 
@@ -1541,7 +1557,7 @@ class TestPreviouslyMissedFindings:
         """The active experiment belongs to the old store, not the new one."""
         mlflow.set_experiment("study")  # active in this test's own store
         other = f"sqlite:///{(tmp_path / 'other.db').absolute()}"
-        with hssm.track(tracking_uri=other) as t:
+        with tracking.track(tracking_uri=other) as t:
             pass
         client = mlflow.tracking.MlflowClient(tracking_uri=other)
         run = client.get_run(t.run_id)
@@ -1550,7 +1566,7 @@ class TestPreviouslyMissedFindings:
     def test_same_store_keeps_the_active_experiment(self):
         """Not switching stores must not undo the user's `set_experiment`."""
         mlflow.set_experiment("study")
-        with hssm.track() as t:
+        with tracking.track() as t:
             pass
         experiment_id = _run(t.run_id).info.experiment_id
         assert mlflow.get_experiment(experiment_id).name == "study"
