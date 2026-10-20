@@ -55,6 +55,28 @@ def test__plot_quantile_probability_1D_uses_passed_ax():
     plt.close(fig)
 
 
+def test_plot_quantile_probability_forwards_marker_to_seaborn():
+    """A top-level ``marker`` styles the lines instead of being read as a column."""
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame(
+        {
+            "rt": rng.uniform(0.3, 2.0, 200),
+            "response": rng.choice([-1.0, 1.0], 200),
+            "stim": rng.choice(["LL", "WW"], 200),
+        }
+    )
+    model = hssm.HSSM(data=df, model="ddm")
+    fig, ax = plt.subplots()
+
+    plot_quantile_probability(
+        model, cond="stim", data=df, predictive_group=None, ax=ax, marker="s"
+    )
+
+    # "s" is not a default marker of either seaborn call, so it must come from kwargs.
+    assert {line.get_marker() for line in ax.lines} == {"s"}
+    plt.close(fig)
+
+
 @pytest.mark.slow
 class TestQuantileProbabilityPlotting:
     """Tests for functions in hssm.plotting.quantile_probability."""
