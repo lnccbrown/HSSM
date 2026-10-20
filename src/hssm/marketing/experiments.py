@@ -70,7 +70,11 @@ class FieldSpec:
         """Return a normalized numeric value or reject it."""
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ExperimentRequestError(f"input `{name}` must be numeric")
-        if not math.isfinite(float(value)):
+        try:
+            finite = math.isfinite(float(value))
+        except OverflowError:
+            finite = False
+        if not finite:
             raise ExperimentRequestError(f"input `{name}` must be finite")
         if self.kind is int and not isinstance(value, int):
             raise ExperimentRequestError(f"input `{name}` must be an integer")

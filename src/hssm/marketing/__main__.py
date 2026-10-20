@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .experiments import available_templates, run_experiment
+from .experiments import ExperimentRequestError, available_templates, run_experiment
 
 
 def main() -> int:
@@ -23,8 +23,11 @@ def main() -> int:
         return 0
     if args.request is None or args.output is None:
         parser.error("request and output are required unless --list-templates is used")
-    request = json.loads(args.request.read_text(encoding="utf-8"))
-    manifest = run_experiment(request, args.output)
+    try:
+        request = json.loads(args.request.read_text(encoding="utf-8"))
+        manifest = run_experiment(request, args.output)
+    except (json.JSONDecodeError, ExperimentRequestError) as error:
+        parser.exit(1, f"request rejected: {error}\n")
     print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0 if manifest["status"] == "passed" else 2
 

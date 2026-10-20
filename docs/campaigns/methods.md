@@ -14,5 +14,4 @@ interpret the answer.
 
 For reusable public figures, use the
 [governed experiment templates](../reference/marketing-experiments.md). Their
-outputs are synthetic unless a manifest explicitly names an approved public
-dataset; a simulation is never captioned as an observed effect.
+outputs are synthetic; a simulation is never captioned as an observed effect.

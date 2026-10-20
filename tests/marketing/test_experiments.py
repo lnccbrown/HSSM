@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from typing import TYPE_CHECKING
 
 import pytest
@@ -13,6 +14,7 @@ from hssm.marketing import (
     run_experiment,
     validate_request,
 )
+from hssm.marketing.__main__ import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -199,13 +201,51 @@ def test_malformed_enum_and_pin_types_raise_contract_errors(field, value) -> Non
 
 
 def test_non_finite_numeric_inputs_are_rejected() -> None:
-    """NaN and infinity are not valid template inputs."""
-    for value in (float("nan"), float("inf"), float("-inf")):
+    """NaN, infinity and integers too large for floats are invalid inputs."""
+    for value in (float("nan"), float("inf"), float("-inf"), 10**400):
         candidate = request(
             "prior-sensitivity-threshold-v1", inputs={"observed_mean": value}
         )
         with pytest.raises(ExperimentRequestError, match="finite"):
             validate_request(candidate)
+
+
+@pytest.mark.parametrize(
+    ("contents", "message"),
+    [
+        ("not-json", "Expecting value"),
+        (
+            json.dumps(
+                request("prior-sensitivity-threshold-v1")
+                | {"schema": "unsupported"}
+            ),
+            "schema must be",
+        ),
+    ],
+)
+def test_cli_reports_rejected_requests_without_tracebacks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    contents: str,
+    message: str,
+) -> None:
+    """Give callers a stable rejection exit distinct from runner failures."""
+    request_path = tmp_path / "request.json"
+    request_path.write_text(contents, encoding="utf-8")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["hssm.marketing", str(request_path), str(tmp_path / "artifacts")],
+    )
+    with pytest.raises(SystemExit) as error:
+        main()
+    captured = capsys.readouterr()
+    assert error.value.code == 1
+    assert captured.out == ""
+    assert captured.err.startswith("request rejected: ")
+    assert message in captured.err
+    assert "Traceback" not in captured.err
 
 
 def test_failed_diagnostics_block_claim_use_and_asset_review(tmp_path: Path) -> None:
