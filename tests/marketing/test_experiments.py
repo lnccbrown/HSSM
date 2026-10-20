@@ -216,8 +216,7 @@ def test_non_finite_numeric_inputs_are_rejected() -> None:
         ("not-json", "Expecting value"),
         (
             json.dumps(
-                request("prior-sensitivity-threshold-v1")
-                | {"schema": "unsupported"}
+                request("prior-sensitivity-threshold-v1") | {"schema": "unsupported"}
             ),
             "schema must be",
         ),
