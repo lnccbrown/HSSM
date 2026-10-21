@@ -32,7 +32,9 @@ def download_hf(path: str):
     The file is downloaded using the HuggingFace Hub's
      hf_hub_download function.
     """
-    local_path = hf_hub_download(repo_id=REPO_ID, filename=path)
+    local_path = hf_hub_download(
+        repo_id=REPO_ID, filename=path, revision=tracking.pinned_revision(path)
+    )
     tracking.record_network(path, local_path)
     return local_path
 
@@ -62,8 +64,11 @@ def load_onnx_model(
             f"or an ONNX ModelProto object, but got {model}."
         )
 
+    # A pin means `load_run` is rebuilding a fit whose network came from the
+    # hub; a same-named file in the cwd must not stand in for it.
+    revision = tracking.pinned_revision(model) if isinstance(model, str) else None
     model_path = Path(model)
-    if model_path.exists():
+    if model_path.exists() and revision is None:
         return onnx.load(model_path)
 
     if isinstance(model, PathLike):
@@ -72,7 +77,7 @@ def load_onnx_model(
         )
 
     if isinstance(model, str):
-        local_path = hf_hub_download(repo_id=REPO_ID, filename=model)
+        local_path = hf_hub_download(repo_id=REPO_ID, filename=model, revision=revision)
         tracking.record_network(model, local_path)
         return onnx.load(local_path)
 

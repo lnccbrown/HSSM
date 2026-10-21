@@ -13,8 +13,9 @@ def test_download_hf():
     ) as mock_download:
         mock_download.return_value = "/tmp/fake_model.onnx"
         result = download_hf("some_model.onnx")
+        # Outside `hssm.load_run` no revision is pinned: the default branch.
         mock_download.assert_called_once_with(
-            repo_id=REPO_ID, filename="some_model.onnx"
+            repo_id=REPO_ID, filename="some_model.onnx", revision=None
         )
         assert result == "/tmp/fake_model.onnx"
 
@@ -44,8 +45,9 @@ def test_load_onnx_model_with_hf_download():
         mock_download.return_value = "/tmp/fake_model.onnx"
         mock_load.return_value = "loaded_model"
         result = load_onnx_model("remote_model.onnx")
+        # Outside `hssm.load_run` no revision is pinned: the default branch.
         mock_download.assert_called_once_with(
-            repo_id=REPO_ID, filename="remote_model.onnx"
+            repo_id=REPO_ID, filename="remote_model.onnx", revision=None
         )
         mock_load.assert_called_once_with("/tmp/fake_model.onnx")
         assert result == "loaded_model"
