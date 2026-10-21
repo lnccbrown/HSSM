@@ -20,6 +20,7 @@ not_in_nav: |
   tutorials/parameterization_per_parameter.py
   tutorials/poisson_race.py
   tutorials/random_slope_safe_priors.py
+  tutorials/track_with_mlflow.py
 
 exclude_docs: |
   overrides/
@@ -73,6 +74,7 @@ nav:
           - Simulate data with the do-operator: tutorials/do_operator.ipynb
           - Save and load models: tutorials/save_load_tutorial.ipynb
           - Track fits with MLflow: how_to/track_with_mlflow.md
+          - Track fits with MLflow (notebook): tutorials/track_with_mlflow.ipynb
       - Custom likelihoods and models:
           - Bring your own likelihood (external trainers): how_to/external_trainers.md
           - Custom models from JAX callables: tutorials/jax_callable_contribution_onnx_example.ipynb
@@ -150,6 +152,7 @@ plugins:
         - tutorials/parameterization_per_parameter.py
         - tutorials/poisson_race.py
         - tutorials/random_slope_safe_priors.py
+        - tutorials/track_with_mlflow.py
       execute: true
       execute_ignore:
         - getting_started/getting_started.ipynb
@@ -197,6 +200,7 @@ plugins:
         - tutorials/bayesflow_nre_onnx_integration.ipynb
         - tutorials/sbi_nre_integration.ipynb
         - tutorials/poisson_race.ipynb
+        - tutorials/track_with_mlflow.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
       no_prompt: true
