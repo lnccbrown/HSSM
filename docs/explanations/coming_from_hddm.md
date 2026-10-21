@@ -29,7 +29,10 @@ for the analytical likelihood instead.
 You can see the conversion in HSSM's own source: the black-box likelihoods
 wrap HDDM's Cython WFPT implementation and pass `a * 2` when they call it. The
 other parameters — `v`, `z`, `t`, `sv`, `sz`, `st` — carry over unchanged, and
-`z` is a relative starting point in `(0, 1)` in both packages.
+`z` is a relative starting point in `(0, 1)` in both packages. The one
+exception is `st` in `ddm_st`: there it is the half-width of the uniform
+non-decision-time kernel (`t ± st`), while HDDM's `st` is the full width
+(`t ± st/2`), so an HDDM `st` of `0.2` is a `ddm_st` `st` of `0.1`.
 
 ## Your data
 
