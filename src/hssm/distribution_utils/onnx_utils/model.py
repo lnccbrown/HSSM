@@ -6,6 +6,8 @@ from pathlib import Path
 import onnx
 from huggingface_hub import hf_hub_download
 
+from hssm import tracking
+
 REPO_ID = "franklab/HSSM"
 
 
@@ -30,7 +32,9 @@ def download_hf(path: str):
     The file is downloaded using the HuggingFace Hub's
      hf_hub_download function.
     """
-    return hf_hub_download(repo_id=REPO_ID, filename=path)
+    local_path = hf_hub_download(repo_id=REPO_ID, filename=path)
+    tracking.record_network(path, local_path)
+    return local_path
 
 
 def load_onnx_model(
@@ -68,7 +72,9 @@ def load_onnx_model(
         )
 
     if isinstance(model, str):
-        return onnx.load(hf_hub_download(repo_id=REPO_ID, filename=model))
+        local_path = hf_hub_download(repo_id=REPO_ID, filename=model)
+        tracking.record_network(model, local_path)
+        return onnx.load(local_path)
 
     raise ValueError(
         f"The model must be a path to a local ONNX file, a HuggingFace file, "
