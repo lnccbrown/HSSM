@@ -599,6 +599,110 @@ class TestContextIsolation:
         assert tracking.last_network()["network_file"] == "mine.onnx"  # ours intact
 
 
+def _artifacts(run_id):
+    return {a.path for a in mlflow.tracking.MlflowClient().list_artifacts(run_id)}
+
+
+def _download_data(run_id):
+    path = mlflow.artifacts.download_artifacts(
+        run_id=run_id, artifact_path="data.parquet"
+    )
+    return pd.read_parquet(path)
+
+
+class TestDataArtifact:
+    """The data a model was fit to is kept with its run, as `data.parquet`."""
+
+    def test_fitted_data_round_trips(self, data_ddm):
+        """The stored copy is the frame the posterior was fit to, exactly."""
+        with hssm.track(experiment="study", lineage_id="lin") as t:
+            model = hssm.HSSM(data_ddm, model="ddm")
+            model.sample(draws=5, chains=1, tune=5, progressbar=False)
+            run_id = t.run_id
+        pd.testing.assert_frame_equal(_download_data(run_id), model.data)
+
+    def test_covariates_survive(self, data_ddm_reg):
+        """What the traces lose — a regression's covariates — the artifact keeps.
+
+        `traces.nc` holds only the observed response, so without this a run
+        could not say which predictors a regression used.
+        """
+        with hssm.track(experiment="study", lineage_id="lin") as t:
+            hssm.HSSM(
+                data_ddm_reg,
+                model="ddm",
+                include=[{"name": "v", "formula": "v ~ x + y"}],
+            ).sample(draws=5, chains=1, tune=5, progressbar=False)
+            run_id = t.run_id
+        assert {"x", "y"} <= set(_download_data(run_id).columns)
+
+    def test_not_written_when_artifacts_are_off(self, data_ddm):
+        """`log_artifacts=False` keeps the data out of the run."""
+        with hssm.track(log_artifacts=False, lineage_id="lin") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+            run_id = t.run_id
+        assert "data.parquet" not in _artifacts(run_id)
+
+    def test_named_dataset_points_at_the_stored_copy(self, data_ddm):
+        """The Datasets panel entry links to the artifact, not just a schema."""
+        with hssm.track(experiment="study", lineage_id="lin", dataset_name="ddm") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+            run_id = t.run_id
+        run = mlflow.tracking.MlflowClient().get_run(run_id)
+        source = json.loads(run.inputs.dataset_inputs[0].dataset.source)
+        assert source["uri"].endswith("data.parquet")
+
+    def test_a_failed_write_costs_only_the_data(self, data_ddm, monkeypatch):
+        """If the parquet cannot be written, the fit and the rest of the run stand.
+
+        `to_parquet` can fail on unusual frames, or when pyarrow is missing
+        because MLflow was installed without the `tracking` extra.
+        """
+
+        def refuse(*args, **kwargs):
+            raise ImportError("pyarrow is not installed")
+
+        monkeypatch.setattr(pd.DataFrame, "to_parquet", refuse)
+        with hssm.track(experiment="study", lineage_id="lin", dataset_name="ddm") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+            run_id = t.run_id
+        run = mlflow.tracking.MlflowClient().get_run(run_id)
+        names = _artifacts(run_id)
+        assert run.info.status == "FINISHED"
+        assert "data.parquet" not in names
+        assert {"model_spec.json", "summary.csv", "traces.nc"} <= names
+        # The dataset is still registered, just without a stored copy to link.
+        assert run.inputs.dataset_inputs[0].dataset.name == "ddm"
+
+    def test_dataset_survives_a_proxied_artifact_store(self, data_ddm, monkeypatch):
+        """A server run with --serve-artifacts must still get its Datasets entry.
+
+        Such a server hands out `mlflow-artifacts:/...` URIs, which MLflow has no
+        dataset-source resolver for. Linking the entry to the stored copy then
+        fails, and the entry must be registered without the link rather than
+        dropped. Faking the URI reproduces it: resolution is by scheme alone.
+        """
+        monkeypatch.setattr(
+            mlflow,
+            "get_artifact_uri",
+            lambda path=None: f"mlflow-artifacts:/1/abc/artifacts/{path}",
+        )
+        with hssm.track(experiment="study", lineage_id="lin", dataset_name="ddm") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+            run_id = t.run_id
+        run = mlflow.tracking.MlflowClient().get_run(run_id)
+        assert [d.dataset.name for d in run.inputs.dataset_inputs] == ["ddm"]
+        assert "data.parquet" in _artifacts(run_id)
+
+
 class TestReviewFixes:
     """Behaviour pinned down in review of the tracking PR."""
 
