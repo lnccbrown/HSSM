@@ -447,6 +447,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self.list_params,
             self.link,
             self._parent,
+            is_choice_only=self.is_choice_only,
         )
 
         # Targeted statistical-identifiability warnings for common/group or
@@ -2015,11 +2016,21 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     + "parameter is not None"
                 )
         if self.has_lapse:
-            if lapse is None:
-                if self.is_choice_only:
-                    self.lapse = 1 / self.n_choices
-                else:
-                    self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
+            if self.is_choice_only:
+                # Choice-only lapses are simulated as uniform random choices, so
+                # the likelihood must use the same uniform probability.
+                uniform = 1 / self.n_choices
+                if lapse is not None and not (
+                    isinstance(lapse, int | float) and np.isclose(lapse, uniform)
+                ):
+                    raise ValueError(
+                        "Choice-only models only support a uniform lapse over "
+                        f"choices (1 / n_choices = {uniform:g}), but got {lapse!r}. "
+                        "Omit `lapse` to use it."
+                    )
+                self.lapse = uniform
+            elif lapse is None:
+                self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
             else:
                 self.lapse = lapse
             self.list_params.append("p_outlier")

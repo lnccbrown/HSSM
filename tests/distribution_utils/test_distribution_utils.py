@@ -771,3 +771,13 @@ def test_full_ddm_keeps_likelihood_for_rt_below_t():
         logp_full_ddm(data, *params),
         rtol=1e-6,
     )
+
+
+@pytest.mark.parametrize(
+    ("size", "expected"), [(None, (2,)), ((1,), (1, 2)), ((3,), (3, 2))]
+)
+def test_rt_single_draw_keeps_the_requested_shape(size, expected):
+    """ssms squeezes a single (rt, response) draw; the RV restores its batch axis."""
+    rv = distribution_utils.make_hssm_rv("ddm", ["v", "a", "z", "t"])()
+
+    assert pm.draw(rv(0.5, 1.5, 0.5, 0.3, size=size), random_seed=5).shape == expected
