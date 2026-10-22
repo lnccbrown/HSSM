@@ -340,8 +340,10 @@ def make_hssm_rv(
             # First figure out what the size specified here is
             # Since the number of unnamed arguments is undetermined,
             # we are going to use this hack.
+            requested_size = kwargs.get("size", args[-1])
             size, args, kwargs = _extract_size(args, kwargs)
             arg_arrays = _create_arg_arrays(cls, args)
+            param_shapes = [arr.shape for arr in arg_arrays]
             p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
 
             # Forward observed per-trial covariates to the simulator when the RV
@@ -362,6 +364,17 @@ def make_hssm_rv(
             # ssm-simulators returns (rt, response) pairs; keep only the response.
             if is_choice_only and obs_dim_int > 1:
                 sims_out = sims_out[..., -1]
+
+            # With all-scalar parameters ssm-simulators squeezes a single draw's
+            # batch axis away; restore the batch shape PyMC expects.
+            if all(arr.size == 1 for arr in arg_arrays):
+                batch_shape = (
+                    np.broadcast_shapes(*param_shapes)
+                    if requested_size is None
+                    else tuple(np.atleast_1d(requested_size))
+                )
+                support_shape = () if is_choice_only else (obs_dim_int,)
+                sims_out = sims_out.reshape(batch_shape + support_shape)
 
             sims_out = _apply_lapse_model(
                 sims_out=sims_out,

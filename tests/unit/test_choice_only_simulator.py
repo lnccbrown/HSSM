@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import pymc as pm
 import pytest
 from scipy.special import softmax
 
@@ -126,3 +127,13 @@ def test_non_uniform_lapse_is_rejected(lapse):
 def test_explicit_uniform_lapse_is_accepted():
     """Passing the uniform lapse explicitly is the same as the default."""
     assert _model(3, lapse=1 / 3).lapse == pytest.approx(1 / 3)
+
+
+@pytest.mark.parametrize(("size", "expected"), [(None, ()), ((1,), (1,)), ((3,), (3,))])
+def test_single_draw_keeps_the_requested_shape(size, expected):
+    """ssms squeezes a single draw; the RV restores the requested batch shape."""
+    dist = _model(2).model_distribution.dist(
+        beta=2.0, logit1=0.5, p_outlier=0.5, size=size
+    )
+
+    assert pm.draw(dist, random_seed=5).shape == expected
