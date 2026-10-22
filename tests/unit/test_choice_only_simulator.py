@@ -110,3 +110,19 @@ def test_choice_only_ssms_model_keeps_only_responses():
 
     assert draws.shape == (100,)
     assert set(np.unique(draws)) == {-1, 1}
+
+
+@pytest.mark.parametrize(
+    "lapse",
+    [0.5, {"name": "Uniform", "lower": 0.0, "upper": 20.0}],
+    ids=["non_uniform_probability", "rt_prior"],
+)
+def test_non_uniform_lapse_is_rejected(lapse):
+    """Choice-only lapses are uniform over choices, so simulation matches logp."""
+    with pytest.raises(ValueError, match="uniform lapse"):
+        _model(3, lapse=lapse)
+
+
+def test_explicit_uniform_lapse_is_accepted():
+    """Passing the uniform lapse explicitly is the same as the default."""
+    assert _model(3, lapse=1 / 3).lapse == pytest.approx(1 / 3)
