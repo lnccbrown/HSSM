@@ -35,8 +35,8 @@ def _():
     # builds away from host CUDA plugins before importing HSSM/JAX.
     os.environ["JAX_PLATFORMS"] = "cpu"
     os.environ["JAX_SKIP_CUDA_CONSTRAINTS_CHECK"] = "1"
-    # Silence only Bambi's notice that numpyro ignores PyMC's `init`; every
-    # other warning, including sampling diagnostics, stays visible.
+    # Silence only PyMC's notice that numpyro ignores the `init` HSSM passes;
+    # every other warning, including sampling diagnostics, stays visible.
     warnings.filterwarnings(
         "ignore", message=r"`init='adapt_diag'` is ignored", category=UserWarning
     )
