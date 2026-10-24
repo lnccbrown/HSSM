@@ -53,9 +53,12 @@ class RLSSMConfig(BaseModelConfig):
       parameter is specified (see below).
     - ``decision_process``: the name (string) or `ModelConfig` instance
       that identifies the SSM decision process (e.g. ``"ddm"``, ``"angle"``).
-    - ``decision_process_loglik_kind`` / ``learning_process_kind``: string
-      tags that record which kind of likelihood and which kind of learning rule
-      are used (e.g. ``"approx_differentiable"`` / ``"blackbox"``).
+    - ``decision_process_loglik_kind``: which likelihood of the decision
+      process is used (e.g. ``"approx_differentiable"`` or ``"analytical"``).
+      `from_ssms_model` and `hssm.rl.get_rlssm_model_config` build the
+      decision process from it; on a hand-built config it only records it.
+    - ``learning_process_kind``: a string tag recording the kind of learning
+      rule (e.g. ``"blackbox"``).
     - ``ndt_edge_shift``: the decision process's declaration of which
       parameter shifts the lower edge of the response-time support and by
       how much (``{"param": "st", "scale": 0.5}`` floors the log-likelihood
@@ -260,7 +263,8 @@ class RLSSMConfig(BaseModelConfig):
         computed_functions = _make_ssms_computed_functions(assembled)
 
         # Decision-process SSM logp is owned by HSSM: reuse the registry's
-        # modelconfig+ONNX builder, then attach the ssms-derived computed funcs.
+        # modelconfig builder (an ONNX network or a declared jax_loglik), then
+        # attach the ssms-derived computed funcs.
         # Local import avoids a config <-> registry import cycle.
         from . import registry  # noqa: PLC0415
 

@@ -450,11 +450,6 @@ class RLSSM(_RLSSM):
     decision_process : str | None, optional
         Override the SSM name in the registry. ``None`` uses the registry
         default.
-    decision_process_loglik_kind : str | None, optional
-        Which likelihood of the decision process to use, e.g. ``"analytical"``
-        for the exact DDM instead of the default ``"approx_differentiable"``
-        LAN. ``None`` uses the registry default. With *model_config*, it must
-        match ``model_config.decision_process_loglik_kind``.
     participant_col : str, optional
         Column identifying participants. Defaults to ``"participant_id"``.
     p_outlier : float | dict | bmb.Prior | None, optional
@@ -475,6 +470,13 @@ class RLSSM(_RLSSM):
         Whether to post-process initial values. Defaults to ``True``.
     initval_jitter : float, optional
         Jitter magnitude for initial values.
+    decision_process_loglik_kind : LoglikKind | None, optional
+        Which likelihood of the decision process to use, e.g. ``"analytical"``
+        for the exact DDM instead of the default ``"approx_differentiable"``
+        LAN. ``None`` uses the registry default. With *model_config*, it must
+        match ``model_config.decision_process_loglik_kind``. A decision process
+        registered with `hssm.rl.register_ssm` has a single likelihood, so for
+        it the kind is only a label.
     **kwargs
         Additional keyword arguments forwarded to `bmb.Model`.
     """
@@ -510,7 +512,6 @@ class RLSSM(_RLSSM):
         model_config: RLSSMConfig | None = None,
         learning_process: dict[str, Any] | None = None,
         decision_process: str | None = None,
-        decision_process_loglik_kind: "LoglikKind | None" = None,
         participant_col: str = "participant_id",
         p_outlier: float | dict | bmb.Prior | None = 0.05,
         lapse: float | dict | bmb.Prior | None = None,
@@ -519,6 +520,7 @@ class RLSSM(_RLSSM):
         extra_namespace: dict[str, Any] | None = None,
         process_initvals: bool = True,
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
+        decision_process_loglik_kind: "LoglikKind | None" = None,
         **kwargs: Any,
     ) -> None:
         # Capture simplified args BEFORE calling super so they can be

@@ -59,15 +59,16 @@ def test_jax_loglik_matches_loglik(model, kind):
     obs = data[mc["response"]].to_numpy(dtype="float64")
     params = [np.full(len(obs), theta[name]) for name in mc["list_params"]]
 
-    symbols = [pt.vector(name, dtype="float64") for name in mc["list_params"]]
-    obs_symbol = pt.matrix("obs", dtype="float64")
-    loglik = pytensor.function(
-        [obs_symbol, *symbols], entry["loglik"](obs_symbol, *symbols)
-    )
+    if entry.get("backend") == "jax":
+        expected = np.asarray(entry["loglik"](obs, *params))
+    else:
+        symbols = [pt.vector(name, dtype="float64") for name in mc["list_params"]]
+        obs_symbol = pt.matrix("obs", dtype="float64")
+        loglik = pytensor.function(
+            [obs_symbol, *symbols], entry["loglik"](obs_symbol, *symbols)
+        )
+        expected = loglik(obs, *params)
 
     np.testing.assert_allclose(
-        np.asarray(entry["jax_loglik"](obs, *params)),
-        loglik(obs, *params),
-        rtol=0,
-        atol=1e-10,
+        np.asarray(entry["jax_loglik"](obs, *params)), expected, rtol=0, atol=1e-10
     )

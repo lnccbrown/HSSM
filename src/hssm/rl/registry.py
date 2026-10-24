@@ -343,9 +343,9 @@ def _build_ssm_spec_from_modelconfig(
 
     else:
         raise ValueError(
-            f"Model '{name}'s {kind} likelihood has no JAX implementation (an ONNX "
-            "network or a declared `jax_loglik`), so it cannot be used as an "
-            "RLSSM decision process."
+            f"Model '{name}' declares no `jax_loglik` for its {kind} likelihood, "
+            "and that likelihood is not an ONNX network, so it cannot be used as "
+            "an RLSSM decision process."
         )
 
     return {
@@ -588,7 +588,9 @@ def get_rlssm_model_config(
         Which likelihood of the decision process to use, e.g. ``"analytical"``
         for the exact DDM instead of its ``"approx_differentiable"`` LAN.
         ``None`` keeps the registry entry's kind (``"approx_differentiable"``
-        for ssms presets). Accepted for ssms presets too.
+        for ssms presets). Accepted for ssms presets too. A decision process
+        registered with `register_ssm` has a single likelihood, so for it the
+        kind is only a label.
 
     Returns
     -------

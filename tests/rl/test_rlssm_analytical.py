@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from unittest import mock
 
+import arviz as az
 import cloudpickle
 import jax
 import numpy as np
@@ -18,6 +19,7 @@ import pytest
 from ssms import rl
 
 import hssm
+import hssm.modelconfig as mc_module
 from hssm.likelihoods.analytical import ddm_bounds, logp_ddm
 from hssm.rl import registry
 
@@ -181,7 +183,7 @@ def test_save_load_keeps_the_analytical_likelihood(data):
     ("model", "kind", "match"),
     [
         ("2AB_RW_Angle", "analytical", "has no analytical likelihood"),
-        ("2AB_RW_DDM", "blackbox", "has no JAX implementation"),
+        ("2AB_RW_DDM", "blackbox", "declares no `jax_loglik`"),
         ("2AB_RW_DDM", "bogus", "must be one of"),
     ],
 )
@@ -206,26 +208,111 @@ def test_kind_must_agree_with_model_config(data):
     hssm.rl.RLSSM(data, model_config=config, decision_process_loglik_kind="analytical")
 
 
-def test_custom_model_takes_bounds_from_the_analytical_entry():
-    """A registered RLSSM on the analytical ddm uses its bounds, with finite defaults."""
+def _register_rw_ddm(**kwargs):
+    """Register an HSSM-side RW + ddm RLSSM (0/1 responses)."""
     hssm.rl.register_rlssm_model(
-        name="rw_ddm_analytical",
+        name="rw_ddm",
         decision_process="ddm",
-        decision_process_loglik_kind="analytical",
         learning_process={"v": registry._compute_v_annotated},
         learning_process_params=["rl_alpha", "scaler"],
         learning_process_bounds={"rl_alpha": (0.0, 1.0), "scaler": (0.0, 10.0)},
         learning_process_params_default=[0.2, 1.5],
         extra_fields=["feedback"],
         choices=[0, 1],
+        **kwargs,
     )
 
-    config = hssm.rl.get_rlssm_model_config("rw_ddm_analytical")
+
+def _patch_ddm_entry(monkeypatch, kind, **extra):
+    """Add *extra* keys to the ddm modelconfig's *kind* likelihood entry."""
+    real = mc_module.get_default_model_config
+
+    def patched(name):
+        config = deepcopy(real(name))
+        if name == "ddm":
+            config["likelihoods"][kind].update(extra)
+        return config
+
+    monkeypatch.setattr(mc_module, "get_default_model_config", patched)
+
+
+def test_custom_model_takes_bounds_from_the_analytical_entry():
+    """A registered RLSSM on the analytical ddm uses its bounds and finite defaults."""
+    _register_rw_ddm(decision_process_loglik_kind="analytical")
+
+    config = hssm.rl.get_rlssm_model_config("rw_ddm")
 
     assert config.decision_process_loglik_kind == "analytical"
     assert {p: config.bounds[p] for p in "azt"} == {p: ddm_bounds[p] for p in "azt"}
-    assert np.all(np.isfinite(config.params_default))
+    # RL defaults, then a, z, t: 1 above a lower-only bound, else the midpoint.
+    assert config.params_default == [0.2, 1.5, 1.0, 0.5, 1.0]
     assert list(registry._SSM_LOGP_CACHE) == [("ddm", "analytical")]
+
+
+def test_custom_model_kind_can_be_chosen_per_call():
+    """A per-call kind overrides the registered one without changing the entry."""
+    _register_rw_ddm()
+
+    config = hssm.rl.get_rlssm_model_config(
+        "rw_ddm", decision_process_loglik_kind="analytical"
+    )
+
+    assert config.decision_process_loglik_kind == "analytical"
+    assert list(registry._SSM_LOGP_CACHE) == [("ddm", "analytical")]
+    entry = registry._RLSSM_REGISTRY["rw_ddm"]
+    assert entry.decision_process_loglik_kind == "approx_differentiable"
+
+
+def test_decision_process_override_keeps_the_kind():
+    """Overriding the decision process resolves it with the entry's kind."""
+    _register_rw_ddm(decision_process_loglik_kind="analytical")
+
+    config = hssm.rl.get_rlssm_model_config("rw_ddm", decision_process="ddm")
+
+    assert {p: config.bounds[p] for p in "azt"} == {p: ddm_bounds[p] for p in "azt"}
+
+
+def test_preset_keeps_the_ssms_bounds_under_analytical():
+    """Presets keep ssms's parameter box and defaults whatever the kind."""
+    assembled = rl.preset.get("2AB_RW_DDM").assemble(backend="jax")
+
+    config = hssm.rl.get_rlssm_model_config(
+        "2AB_RW_DDM", decision_process_loglik_kind="analytical"
+    )
+
+    assert config.bounds == dict(assembled.bounds)
+    assert list(config.params_default) == list(assembled.params_default)
+
+
+def test_ndt_edge_shift_comes_from_the_selected_kind(monkeypatch):
+    """The support-edge declaration is read from the chosen likelihood entry."""
+    shift = {"param": "a", "scale": 0.1}
+    _patch_ddm_entry(monkeypatch, "analytical", ndt_edge_shift=shift)
+
+    config = hssm.rl.RLSSMConfig.from_ssms_model(
+        "2AB_RW_DDM", decision_process_loglik_kind="analytical"
+    )
+
+    assert config.ndt_edge_shift == shift
+
+
+def test_entry_with_extra_fields_is_rejected(monkeypatch):
+    """A decision process cannot be given the extra data columns it would need."""
+    _patch_ddm_entry(monkeypatch, "analytical", extra_fields=["x"])
+
+    with pytest.raises(ValueError, match="extra_fields"):
+        hssm.rl.get_rlssm_model_config(
+            "2AB_RW_DDM", decision_process_loglik_kind="analytical"
+        )
+
+
+def test_custom_paths_reject_unknown_kinds():
+    """Registration and per-call overrides only accept HSSM's likelihood kinds."""
+    with pytest.raises(ValueError, match="must be one of"):
+        _register_rw_ddm(decision_process_loglik_kind="bogus")
+    _register_rw_ddm()
+    with pytest.raises(ValueError, match="must be one of"):
+        hssm.rl.get_rlssm_model_config("rw_ddm", decision_process_loglik_kind="bogus")
 
 
 def test_float32_gradients_are_finite(data):
@@ -249,8 +336,9 @@ def test_float32_gradients_are_finite(data):
 def test_parameter_recovery():
     """The analytical RLSSM recovers the generating parameters.
 
-    Simulated at delta_t = 1e-4: at ssms's default 1 ms step, the Euler scheme
-    widens the boundary enough to bias the exact likelihood's `a` by about 0.02.
+    Simulated at delta_t = 1e-4, which removes the ~0.02 Euler bias in `a` that
+    ssms's default 1 ms step gives the exact likelihood; at this sample size that
+    bias is below the 3-SD tolerance, so the check targets gross errors.
     """
     config = rl.preset.get("2AB_RW_DDM")
     config.ssm_kwargs = {"delta_t": 1e-4, "max_t": 20.0}
@@ -267,3 +355,5 @@ def test_parameter_recovery():
         draws = np.asarray(posterior[name]).ravel()
         assert abs(draws.mean() - value) < 3 * draws.std(), name
     assert int(idata["sample_stats"]["diverging"].sum()) == 0
+    rhat = az.rhat(idata["posterior"].dataset, var_names=list(TRUTH))
+    assert float(rhat.to_array().max()) <= 1.01
