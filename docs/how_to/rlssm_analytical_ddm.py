@@ -328,9 +328,8 @@ def _(mo):
       loads the preset's network (and downloads it on first use) before you
       replace it.
     - **Native support is planned.** A built-in way to choose the analytical
-      likelihood for an RLSSM decision process is planned as part of the RLSSM
-      integration work
-      ([lnccbrown/HSSM#804](https://github.com/lnccbrown/HSSM/issues/804)).
+      likelihood for an RLSSM decision process is planned in
+      [lnccbrown/HSSM#1420](https://github.com/lnccbrown/HSSM/issues/1420).
     """)
     return
 
