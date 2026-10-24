@@ -35,7 +35,11 @@ def _():
     # builds away from host CUDA plugins before importing HSSM/JAX.
     os.environ["JAX_PLATFORMS"] = "cpu"
     os.environ["JAX_SKIP_CUDA_CONSTRAINTS_CHECK"] = "1"
-    warnings.filterwarnings("ignore")
+    # Silence only Bambi's notice that numpyro ignores PyMC's `init`; every
+    # other warning, including sampling diagnostics, stays visible.
+    warnings.filterwarnings(
+        "ignore", message=r"`init='adapt_diag'` is ignored", category=UserWarning
+    )
     logging.getLogger("jax._src.xla_bridge").setLevel(logging.CRITICAL)
 
     import arviz as az
