@@ -16,6 +16,8 @@ This version includes the following changes:
 
 6. **The `p_outlier` regression and random-slope tutorials execute again** (#1366, closes #1363). Both had failed at model construction since the 0.5.0 safe-prior guards. `tutorial_p_outlier_regression` now gives `v` the `gen_logit` link through `link_settings="log_logit"`, since the guard refuses an unbounded identity-scale default for a group-only intercept on a bounded parameter; `random_slope_safe_priors` now shows HSSM rejecting the legacy free-mean group priors under `noncentered=True` instead of building that graph, and keeps every other comparison.
 
+7. **A JAX version of the analytical DDM likelihood** (#1420). `hssm.likelihoods.logp_ddm_jax` ports `logp_ddm` (Navarro & Fuss, 2009) to JAX with the same parameterization, response coding, series switch and lower bound. Tests pin it to `logp_ddm` (per-trial difference at most 1e-10 in float64, including the floor and response times below `t`) and keep its float32 gradients finite. Nothing uses it yet; it is the first step towards an analytical DDM decision process for RLSSM (#1420).
+
 ### 0.5.0
 
 This version includes the following changes:
