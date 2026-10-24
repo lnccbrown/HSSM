@@ -16,6 +16,8 @@ This version includes the following changes:
 
 6. **The `p_outlier` regression and random-slope tutorials execute again** (#1366, closes #1363). Both had failed at model construction since the 0.5.0 safe-prior guards. `tutorial_p_outlier_regression` now gives `v` the `gen_logit` link through `link_settings="log_logit"`, since the guard refuses an unbounded identity-scale default for a group-only intercept on a bounded parameter; `random_slope_safe_priors` now shows HSSM rejecting the legacy free-mean group priors under `noncentered=True` instead of building that graph, and keeps every other comparison.
 
+7. **The HSSM-side two-armed-bandit learner handles `-1`/`1` responses** (#1419, closes #1418). `hssm.rl.likelihoods.two_armed_bandit.compute_v_subject_wise` and its copy in `hssm.likelihoods.rldm_optimized` used the response as the arm index, so with `-1`/`1` responses JAX wrapped `-1` to arm 1 and every trial updated arm 1, silently giving wrong drifts. The response now maps to arm `response > 0`. Data coded 0/1 and the `ssms.rl` presets (`2AB_RW_DDM`, ...) were not affected; refit any custom RLSSM that used this learner with `-1`/`1` responses.
+
 ### 0.5.0
 
 This version includes the following changes:
