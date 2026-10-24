@@ -16,6 +16,8 @@ This version includes the following changes:
 
 6. **The `p_outlier` regression and random-slope tutorials execute again** (#1366, closes #1363). Both had failed at model construction since the 0.5.0 safe-prior guards. `tutorial_p_outlier_regression` now gives `v` the `gen_logit` link through `link_settings="log_logit"`, since the guard refuses an unbounded identity-scale default for a group-only intercept on a bounded parameter; `random_slope_safe_priors` now shows HSSM rejecting the legacy free-mean group priors under `noncentered=True` instead of building that graph, and keeps every other comparison.
 
+7. **Documentation: using the analytical DDM in an RLSSM** (#1417). The built-in RLSSM presets evaluate their decision process with a LAN. A new how-to converts `logp_ddm` to JAX and swaps it into the `"2AB_RW_DDM"` preset's configuration, keeping the preset's Rescorla–Wagner learner, and checks the result against `logp_ddm` and by parameter recovery. See [Use the analytical DDM in an RLSSM](how_to/rlssm_analytical_ddm.ipynb).
+
 ### 0.5.0
 
 This version includes the following changes:
