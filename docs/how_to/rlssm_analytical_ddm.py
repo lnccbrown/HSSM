@@ -36,7 +36,7 @@ def _():
     # builds away from host CUDA plugins before importing HSSM/JAX.
     os.environ["JAX_PLATFORMS"] = "cpu"
     os.environ["JAX_SKIP_CUDA_CONSTRAINTS_CHECK"] = "1"
-    # Silence only Bambi's notice that numpyro ignores PyMC's `init`, and
+    # Silence only PyMC's notice that numpyro ignores the `init` HSSM passes, and
     # numpyro's notice that one CPU device runs the chains in sequence; every
     # other warning, including sampling diagnostics, stays visible.
     warnings.filterwarnings(
@@ -147,8 +147,9 @@ def _(mo):
 
     `ssms` simulates the DDM with Euler steps of 1 ms by default. That widens the
     effective boundary slightly, and an exact likelihood then recovers `a` about
-    0.02 above its generating value. A step of 0.1 ms removes that offset, so we
-    set it through the preset's `ssm_kwargs`.
+    0.02 above its generating value. A step of 0.1 ms shrinks that offset to
+    about 0.005, well inside the posterior uncertainty, so we set it through the
+    preset's `ssm_kwargs`.
     """)
     return
 
@@ -264,7 +265,9 @@ def _(mo):
     whichever likelihood they use. Simulate from `ssms.rl` instead: with
     `mode="ppc"`, the simulator replays the observed task, so the learner sees the
     same feedback each participant did. Here we simulate once at the analytical
-    posterior means.
+    posterior means. This limitation is also why HSSM warned, when it built each
+    model above, that `2AB_RW_DDM` is not supported in `ssm_simulators`: the
+    warning concerns predictive sampling only, not the fit.
     """)
     return
 
