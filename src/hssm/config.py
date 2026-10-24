@@ -21,6 +21,8 @@ from .modelconfig import get_default_model_config
 from .register import register_model
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from pytensor.tensor.random.op import RandomVariable
 
 import logging
@@ -158,6 +160,9 @@ class Config(BaseModelConfig):
     # Which parameter shifts the lower edge of the response-time support, and by
     # how much (edge at t - scale * param). None keeps the edge at t.
     ndt_edge_shift: NDTEdgeShift | None = None
+    # A JAX implementation of this same likelihood, f(data, *list_params), read by
+    # the RLSSM registry; plain HSSM evaluates `loglik`.
+    jax_loglik: Callable[..., Any] | None = None
 
     def __post_init__(self):
         """Validate that loglik_kind is provided."""

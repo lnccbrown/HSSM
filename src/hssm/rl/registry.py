@@ -4,8 +4,9 @@ This module provides:
 
 - `_SSM_REGISTRY` — holds custom SSM entries added via `register_ssm`.
     Built-in HSSM models (`"ddm"`, `"angle"`, `"weibull"`, and any other
-    model in `hssm.modelconfig` that exposes an `approx_differentiable`
-    likelihood) are resolved automatically from
+    model in `hssm.modelconfig` whose likelihood of the requested kind has a
+    JAX implementation: an ONNX network, or a declared `jax_loglik` such as the
+    `"analytical"` DDM) are resolved automatically from
     `hssm.modelconfig.get_default_model_config` and do not need to be
     pre-registered here.
 - `_RLSSM_REGISTRY` — maps custom HSSM-side RLSSM model strings to their
@@ -21,9 +22,11 @@ from __future__ import annotations
 
 import importlib
 import logging
+import math
 from copy import deepcopy
 from dataclasses import dataclass, field
 from inspect import signature
+from os import PathLike
 from typing import TYPE_CHECKING, Any, cast
 
 import jax.numpy as jnp
@@ -35,7 +38,7 @@ from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.utils import annotate_function
 
-from .config import RLSSMConfig
+from .config import RLSSMConfig, _validate_decision_process_loglik_kind
 
 _logger = logging.getLogger(__name__)
 
@@ -44,7 +47,7 @@ DEFAULT_RLSSM_MODEL = "2AB_RW_DDM"
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-    from hssm._types import NDTEdgeShift
+    from hssm._types import LoglikKind, NDTEdgeShift
 
 
 @dataclass
@@ -180,8 +183,9 @@ _SSM_REGISTRY: dict[str, dict[str, Any]] = {}
 
 # Cache for resolved SSM base logp functions (populated on first use by
 # _get_ssm_logp, or immediately by register_ssm when a pre-built func is
-# supplied by the caller).
-_SSM_LOGP_CACHE: dict[str, Any] = {}
+# supplied by the caller). Custom entries are keyed by name; built-in models by
+# (name, loglik kind), so their LAN and analytical variants can coexist.
+_SSM_LOGP_CACHE: dict[str | tuple[str, str], Any] = {}
 
 
 def _make_inv_temp_softmax_base_logp(n_choices: int) -> Any:
@@ -248,19 +252,42 @@ def _make_ssm_base_logp_from_onnx(
     )(_raw)
 
 
-def _build_ssm_spec_from_modelconfig(name: str) -> dict[str, Any]:
+def _make_ssm_base_logp_from_jax_callable(
+    jax_loglik: Any,
+    list_params_ssm: list[str],
+    response: list[str],
+) -> Any:
+    """Adapt a JAX ``f(data, *params)`` likelihood to the RL builder's matrix.
+
+    The builder passes one matrix whose columns are ``list_params_ssm`` followed
+    by ``response``.
+    """
+    n_params = len(list_params_ssm)
+
+    @annotate_function(inputs=list_params_ssm + response, outputs=["logp"])
+    def _base_logp(lan_matrix):
+        params = (lan_matrix[:, i] for i in range(n_params))
+        return jax_loglik(lan_matrix[:, n_params:], *params)
+
+    return _base_logp
+
+
+def _build_ssm_spec_from_modelconfig(
+    name: str, kind: LoglikKind = "approx_differentiable"
+) -> dict[str, Any]:
     """Build an SSM registry-compatible spec from HSSM's modelconfig system.
 
-    This allows any built-in HSSM model with an ``approx_differentiable``
-    likelihood to be used as an RLSSM decision process without re-registering
-    it in ``_SSM_REGISTRY``.  Parameter defaults are computed as midpoints of
-    the model's parameter bounds.
+    This allows any built-in HSSM model to be used as an RLSSM decision process
+    without re-registering it in ``_SSM_REGISTRY``, provided its *kind*
+    likelihood has a JAX implementation: a declared ``jax_loglik`` (for
+    example the ``analytical`` DDM) or an ONNX network (``approx_differentiable``).
+    Bounds and ``ndt_edge_shift`` come from that likelihood entry.
 
     Raises
     ------
     ValueError
-        If *name* is not a supported HSSM model or it has no
-        ``approx_differentiable`` likelihood.
+        If *name* is not a supported HSSM model, has no *kind* likelihood, or
+        that likelihood has no JAX implementation.
     """
     # Local import to avoid circular dependencies at module level.
     from hssm.modelconfig import get_default_model_config  # noqa: PLC0415
@@ -275,53 +302,90 @@ def _build_ssm_spec_from_modelconfig(name: str) -> dict[str, Any]:
             "Use register_ssm() to add a custom decision process."
         ) from exc
 
-    ad = mc["likelihoods"].get("approx_differentiable")
-    if ad is None:
+    likelihood = mc["likelihoods"].get(kind)
+    if likelihood is None:
         raise ValueError(
-            f"Model '{name}' has no approx_differentiable likelihood and cannot be "
-            "used as an RLSSM decision process."
+            f"Model '{name}' has no {kind} likelihood and cannot be used as an "
+            f"RLSSM decision process with that kind. It declares: "
+            f"{sorted(mc['likelihoods'])}."
+        )
+    if likelihood.get("extra_fields"):
+        raise ValueError(
+            f"Model '{name}'s {kind} likelihood needs extra_fields "
+            f"{likelihood['extra_fields']}, which an RLSSM decision process "
+            "cannot supply."
         )
 
     list_params_ssm: list[str] = list(mc["list_params"])
-    bounds_ssm: dict[str, tuple[float, float]] = dict(ad["bounds"])
+    bounds_ssm: dict[str, tuple[float, float]] = dict(likelihood["bounds"])
     response: list[str] = list(mc["response"])
-    onnx_file: str = str(ad["loglik"])
-
-    # Derive parameter defaults as midpoints of their respective bounds.
-    params_default_ssm = [
-        sum(bounds_ssm[p]) / 2 if p in bounds_ssm else 0.0 for p in list_params_ssm
-    ]
+    jax_loglik = likelihood.get("jax_loglik")
+    loglik = likelihood.get("loglik")
 
     # Capture loop variables explicitly to avoid closure-over-variable issues.
-    def _factory(
-        _onnx_file: str = onnx_file,
-        _params: list[str] = list_params_ssm,
-        _response: list[str] = response,
-    ) -> Any:
-        return _make_ssm_base_logp_from_onnx(_onnx_file, _params, _response)
+    if jax_loglik is not None:
+
+        def _factory(
+            _fn: Any = jax_loglik,
+            _params: list[str] = list_params_ssm,
+            _response: list[str] = response,
+        ) -> Any:
+            return _make_ssm_base_logp_from_jax_callable(_fn, _params, _response)
+
+    elif isinstance(loglik, (str, PathLike)):
+
+        def _factory(
+            _fn: Any = str(loglik),
+            _params: list[str] = list_params_ssm,
+            _response: list[str] = response,
+        ) -> Any:
+            return _make_ssm_base_logp_from_onnx(_fn, _params, _response)
+
+    else:
+        raise ValueError(
+            f"Model '{name}'s {kind} likelihood has no JAX implementation (an ONNX "
+            "network or a declared `jax_loglik`), so it cannot be used as an "
+            "RLSSM decision process."
+        )
 
     return {
         "ssm_base_logp_func_factory": _factory,
         "list_params_ssm": list_params_ssm,
         "bounds_ssm": bounds_ssm,
-        "params_default_ssm": params_default_ssm,
+        "params_default_ssm": [
+            _default_within(bounds_ssm.get(p, (-math.inf, math.inf)))
+            for p in list_params_ssm
+        ],
         "response": response,
         "name": name,
         # The backbone's support-edge declaration travels with the spec.
-        "ndt_edge_shift": deepcopy(ad.get("ndt_edge_shift")),
+        "ndt_edge_shift": deepcopy(likelihood.get("ndt_edge_shift")),
     }
+
+
+def _default_within(bounds: tuple[float, float]) -> float:
+    """Return a finite default inside *bounds*: the midpoint, or 1 from a bound."""
+    lower, upper = bounds
+    if math.isfinite(lower) and math.isfinite(upper):
+        return (lower + upper) / 2
+    if math.isfinite(lower):
+        return lower + 1.0
+    if math.isfinite(upper):
+        return upper - 1.0
+    return 0.0
 
 
 def _get_decision_process_spec(
     decision_process: str | dict[str, Any],
+    kind: LoglikKind = "approx_differentiable",
 ) -> dict[str, Any]:
     """Return a defensive copy of a decision-process specification.
 
-    Custom SSMs (registered via `register_ssm`) take precedence. For
-    everything else the spec is derived on the fly from HSSM's modelconfig
-    system, meaning any built-in model with an ``approx_differentiable``
-    likelihood (e.g. ``"ddm"``, ``"angle"``, ``"weibull"``) works out of the
-    box without explicit registration.
+    Custom SSMs (registered via `register_ssm`) take precedence and are
+    kind-agnostic. For everything else the spec is derived on the fly from
+    HSSM's modelconfig system for the requested likelihood *kind*, so any
+    built-in model with an ONNX network (e.g. ``"angle"``) or a declared
+    ``jax_loglik`` (the ``"analytical"`` ``"ddm"``) works without registration.
     """
     if isinstance(decision_process, dict):
         return deepcopy(decision_process)
@@ -333,31 +397,32 @@ def _get_decision_process_spec(
         return spec
 
     # Fall back to HSSM's modelconfig for built-in SSMs.
-    return _build_ssm_spec_from_modelconfig(decision_process)
+    return _build_ssm_spec_from_modelconfig(decision_process, kind)
 
 
-def _get_ssm_logp(name: str) -> Any:
+def _get_ssm_logp(name: str, kind: LoglikKind = "approx_differentiable") -> Any:
     """Return the annotated SSM base logp function, building it on first use.
 
-    ONNX models are downloaded / loaded only when first called (lazy
-    initialisation).  Subsequent calls return the cached object.
+    Custom entries are cached by name; built-in models by ``(name, kind)``. ONNX
+    networks are downloaded / loaded only when first called (lazy
+    initialisation), and only for the requested kind.
     """
-    if name in _SSM_LOGP_CACHE:
+    if name in _SSM_REGISTRY:
+        if name not in _SSM_LOGP_CACHE:
+            entry = _SSM_REGISTRY[name]
+            _SSM_LOGP_CACHE[name] = (
+                entry["ssm_base_logp_func_factory"]()
+                if "ssm_base_logp_func_factory" in entry
+                # Pre-built function registered via register_ssm().
+                else entry["ssm_base_logp_func"]
+            )
         return _SSM_LOGP_CACHE[name]
 
-    if name not in _SSM_REGISTRY:
-        # Build from HSSM's modelconfig for built-in SSMs.
-        spec = _build_ssm_spec_from_modelconfig(name)
-        _SSM_LOGP_CACHE[name] = spec["ssm_base_logp_func_factory"]()
-        return _SSM_LOGP_CACHE[name]
-
-    entry = _SSM_REGISTRY[name]
-    if "ssm_base_logp_func_factory" in entry:
-        _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func_factory"]()
-    else:
-        # Pre-built function registered via register_ssm().
-        _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func"]
-    return _SSM_LOGP_CACHE[name]
+    key = (name, kind)
+    if key not in _SSM_LOGP_CACHE:
+        spec = _build_ssm_spec_from_modelconfig(name, kind)
+        _SSM_LOGP_CACHE[key] = spec["ssm_base_logp_func_factory"]()
+    return _SSM_LOGP_CACHE[key]
 
 
 # ---------------------------------------------------------------------------
@@ -504,6 +569,7 @@ def get_rlssm_model_config(
     choices: list[int] | None = None,
     learning_process: dict[str, Any] | None = None,
     decision_process: str | None = None,
+    decision_process_loglik_kind: LoglikKind | None = None,
 ) -> RLSSMConfig:
     """Build an `RLSSMConfig` from a named model.
 
@@ -518,6 +584,11 @@ def get_rlssm_model_config(
         Override the learning process dict stored in the registry.
     decision_process:
         Override the SSM name stored in the registry.
+    decision_process_loglik_kind:
+        Which likelihood of the decision process to use, e.g. ``"analytical"``
+        for the exact DDM instead of its ``"approx_differentiable"`` LAN.
+        ``None`` keeps the registry entry's kind (``"approx_differentiable"``
+        for ssms presets). Accepted for ssms presets too.
 
     Returns
     -------
@@ -527,7 +598,8 @@ def get_rlssm_model_config(
     Raises
     ------
     ValueError
-        If *model* or the resolved *decision_process* is not registered.
+        If *model* or the resolved *decision_process* is not registered, or the
+        decision process has no JAX implementation for the requested kind.
     """
     if model not in _RLSSM_REGISTRY:
         ssms_model = _resolve_ssms_model(model)
@@ -544,7 +616,11 @@ def get_rlssm_model_config(
                     "to RLSSMConfig.from_ssms_model(), or pass model_config= "
                     "directly to RLSSM()."
                 )
-            return RLSSMConfig.from_ssms_model(ssms_model)
+            if decision_process_loglik_kind is None:
+                return RLSSMConfig.from_ssms_model(ssms_model)
+            return RLSSMConfig.from_ssms_model(
+                ssms_model, decision_process_loglik_kind=decision_process_loglik_kind
+            )
 
         available = list(list_models().keys())
         raise ValueError(
@@ -558,12 +634,18 @@ def get_rlssm_model_config(
     entry = _RLSSM_REGISTRY[model].copy()
     learning_metadata = entry.learning_process_metadata.copy()
 
+    # The kind is resolved first: it selects which likelihood every spec below uses.
+    if decision_process_loglik_kind is not None:
+        entry.decision_process_loglik_kind = decision_process_loglik_kind
+    _validate_decision_process_loglik_kind(entry.decision_process_loglik_kind)
+    kind = cast("LoglikKind", entry.decision_process_loglik_kind)
+
     if decision_process is not None:
-        entry.decision_process = _get_decision_process_spec(decision_process)
+        entry.decision_process = _get_decision_process_spec(decision_process, kind)
     if choices is not None:
         entry.choices = list(choices)
 
-    ssm_entry = _get_decision_process_spec(entry.decision_process)
+    ssm_entry = _get_decision_process_spec(entry.decision_process, kind)
     response = list(ssm_entry["response"])
     if learning_process is not None:
         learning_metadata = learning_metadata.with_learning_process_override(
@@ -571,7 +653,7 @@ def get_rlssm_model_config(
         )
 
     dp: str = ssm_entry["name"]
-    ssm_base = _get_ssm_logp(dp)
+    ssm_base = _get_ssm_logp(dp, kind)
     lp: dict[str, Any] = dict(learning_metadata.learning_process)
 
     # The support-edge declaration travels with the decision process. Specs
@@ -687,7 +769,7 @@ def register_rlssm_model(
     extra_fields: list[str] | None = None,
     choices: list[int] | None = None,
     description: str | None = None,
-    decision_process_loglik_kind: str = "approx_differentiable",
+    decision_process_loglik_kind: LoglikKind = "approx_differentiable",
     learning_process_kind: str = "blackbox",
 ) -> None:
     """Register a named RLSSM model in the global registry.
@@ -715,10 +797,14 @@ def register_rlssm_model(
     description:
         Optional human-readable description.
     decision_process_loglik_kind:
-        Loglik kind tag. Defaults to ``"approx_differentiable"``.
+        Which likelihood of a built-in decision process to use, e.g.
+        ``"analytical"`` for the exact DDM. Defaults to
+        ``"approx_differentiable"``. Custom SSMs from `register_ssm` have a single
+        likelihood and ignore it.
     learning_process_kind:
         Learning process kind tag. Defaults to ``"blackbox"``.
     """
+    _validate_decision_process_loglik_kind(decision_process_loglik_kind)
     if name in _RLSSM_REGISTRY:
         _logger.warning(
             "Model '%s' is already in the RLSSM registry and will be overwritten.",

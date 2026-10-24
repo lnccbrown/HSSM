@@ -12,10 +12,12 @@ import importlib
 import logging
 from copy import deepcopy
 from dataclasses import MISSING, dataclass, field, fields
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, get_args
+
+from .._types import LoglikKind
 
 if TYPE_CHECKING:
-    from .._types import LoglikKind, NDTEdgeShift, SupportedModels
+    from .._types import NDTEdgeShift, SupportedModels
 
 from ..config import (
     DEFAULT_SSM_CHOICES,
@@ -27,6 +29,15 @@ from ..config import (
 from ..utils import annotate_function
 
 _logger = logging.getLogger("hssm")
+
+
+def _validate_decision_process_loglik_kind(kind: str) -> None:
+    """Raise unless *kind* is one of HSSM's likelihood kinds."""
+    kinds = list(get_args(LoglikKind))
+    if kind not in kinds:
+        raise ValueError(
+            f"decision_process_loglik_kind must be one of {kinds}, got {kind!r}."
+        )
 
 
 @dataclass
@@ -194,7 +205,7 @@ class RLSSMConfig(BaseModelConfig):
         model: str | Any,
         *,
         backend: Literal["auto", "jax"] = "jax",
-        decision_process_loglik_kind: str = "approx_differentiable",
+        decision_process_loglik_kind: LoglikKind = "approx_differentiable",
     ) -> "RLSSMConfig":
         """Build an HSSM RLSSM config from a canonical ``ssms.rl`` model.
 
@@ -203,7 +214,8 @@ class RLSSMConfig(BaseModelConfig):
         the decision-process SSM log-likelihood and inference. The learning
         recursion (and the ``response_to_choice`` mapping) is taken from the ssms
         assembled participant function; the decision-process SSM logp is built
-        HSSM-side from ``hssm.modelconfig`` + ONNX via :mod:`hssm.rl.registry`.
+        HSSM-side from the ``hssm.modelconfig`` likelihood of the requested kind
+        (an ONNX network, or a declared ``jax_loglik``) via :mod:`hssm.rl.registry`.
 
         Parameters
         ----------
@@ -214,8 +226,9 @@ class RLSSMConfig(BaseModelConfig):
             Learning backend requested from ssms; must yield gradient support.
             Defaults to ``"jax"``.
         decision_process_loglik_kind
-            Loglik kind for the HSSM decision process. Defaults to
-            ``"approx_differentiable"``.
+            Which likelihood of the decision process to use: ``"analytical"``
+            for the exact DDM, or the default ``"approx_differentiable"`` (the
+            LAN). Only that kind's likelihood is built.
 
         Returns
         -------
@@ -251,14 +264,17 @@ class RLSSMConfig(BaseModelConfig):
         # Local import avoids a config <-> registry import cycle.
         from . import registry  # noqa: PLC0415
 
-        ssm_base_logp_func = registry._get_ssm_logp(assembled.decision_process)
+        _validate_decision_process_loglik_kind(decision_process_loglik_kind)
+        ssm_base_logp_func = registry._get_ssm_logp(
+            assembled.decision_process, decision_process_loglik_kind
+        )
         ssm_logp_func = registry._build_ssm_logp_func(
             ssm_base_logp_func, computed_functions
         )
         # The spec lookup is lazy (no ONNX load); it carries the backbone's
         # support-edge declaration, which the learning kernel knows nothing of.
         decision_process_spec = registry._get_decision_process_spec(
-            assembled.decision_process
+            assembled.decision_process, decision_process_loglik_kind
         )
 
         config = cls.from_rlssm_dict(
