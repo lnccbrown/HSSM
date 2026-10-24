@@ -320,7 +320,10 @@ def _(mo):
       helper `hssm.rl.likelihoods.two_armed_bandit.compute_v_subject_wise`
       uses the response as an array index, so it gives wrong drifts for `-1`/`1`
       responses.
-    - **Precision.** The conversion was checked in double precision.
+    - **Precision.** Keep HSSM's default double precision, as set above. The
+      RLSSM tutorials switch to `float32`; with this converted likelihood that
+      gives non-finite gradients for `a` and `z` on trials whose response time
+      falls below `t`.
     - **The LAN still loads once.** `get_rlssm_model_config("2AB_RW_DDM")`
       loads the preset's network (and downloads it on first use) before you
       replace it.
