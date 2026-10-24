@@ -336,9 +336,9 @@ def test_float32_gradients_are_finite(data):
 def test_parameter_recovery():
     """The analytical RLSSM recovers the generating parameters.
 
-    Simulated at delta_t = 1e-4, which removes the ~0.02 Euler bias in `a` that
-    ssms's default 1 ms step gives the exact likelihood; at this sample size that
-    bias is below the 3-SD tolerance, so the check targets gross errors.
+    Simulated at delta_t = 1e-4, which shrinks the ~0.02 Euler bias in `a` that
+    ssms's default 1 ms step gives the exact likelihood to about 0.005; either is
+    below the 3-SD tolerance at this sample size, so the check targets gross errors.
     """
     config = rl.preset.get("2AB_RW_DDM")
     config.ssm_kwargs = {"delta_t": 1e-4, "max_t": 20.0}
