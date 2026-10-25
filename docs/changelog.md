@@ -22,7 +22,7 @@ This version includes the following changes:
 
 9. **Documentation: using the analytical DDM in an RLSSM** (#1423, towards #1420). A new how-to fits a simulated two-armed bandit with `decision_process_loglik_kind="analytical"`, compares the fit with the LAN, and checks `logp_ddm_jax` against `logp_ddm`. See [Use the analytical DDM in an RLSSM](how_to/rlssm_analytical_ddm.ipynb).
 
-9. **The HSSM-side two-armed-bandit learner handles `-1`/`1` responses** (#1419, closes #1418). `hssm.rl.likelihoods.two_armed_bandit.compute_v_subject_wise` and its copy in `hssm.likelihoods.rldm_optimized` used the response as the arm index, so with `-1`/`1` responses JAX wrapped `-1` to arm 1 and every trial updated arm 1, silently giving wrong drifts. The response now maps to arm `response > 0`. Data coded 0/1 and the `ssms.rl` presets (`2AB_RW_DDM`, ...) were not affected; refit any custom RLSSM that used this learner with `-1`/`1` responses.
+10. **The HSSM-side two-armed-bandit learner handles `-1`/`1` responses** (#1419, closes #1418). `hssm.rl.likelihoods.two_armed_bandit.compute_v_subject_wise` and its copy in `hssm.likelihoods.rldm_optimized` used the response as the arm index, so with `-1`/`1` responses JAX wrapped `-1` to arm 1 and every trial updated arm 1, silently giving wrong drifts. The response now maps to arm `response > 0`. Data coded 0/1 and the `ssms.rl` presets (`2AB_RW_DDM`, ...) were not affected; refit any custom RLSSM that used this learner with `-1`/`1` responses.
 
 ### 0.5.0
 
