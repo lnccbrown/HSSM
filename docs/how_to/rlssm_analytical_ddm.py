@@ -36,14 +36,18 @@ def _():
     # builds away from host CUDA plugins before importing HSSM/JAX.
     os.environ["JAX_PLATFORMS"] = "cpu"
     os.environ["JAX_SKIP_CUDA_CONSTRAINTS_CHECK"] = "1"
-    # Silence only PyMC's notice that numpyro ignores the `init` HSSM passes, and
-    # numpyro's notice that one CPU device runs the chains in sequence; every
-    # other warning, including sampling diagnostics, stays visible.
+    # Silence only PyMC's notice that numpyro ignores the `init` HSSM passes,
+    # numpyro's notice that one CPU device runs the chains in sequence, and Bambi
+    # deprecation notices raised inside HSSM itself; every other warning,
+    # including sampling diagnostics, stays visible.
     warnings.filterwarnings(
         "ignore", message=r"`init='adapt_diag'` is ignored", category=UserWarning
     )
     warnings.filterwarnings(
         "ignore", message=r"There are not enough devices", category=UserWarning
+    )
+    warnings.filterwarnings(
+        "ignore", message=r".*is deprecated; use", category=FutureWarning
     )
     logging.getLogger("jax._src.xla_bridge").setLevel(logging.CRITICAL)
 
@@ -148,14 +152,14 @@ def _(mo):
     `ssms` simulates the DDM with Euler steps of 1 ms by default. That widens the
     effective boundary slightly, and an exact likelihood then recovers `a` about
     0.02 above its generating value. A step of 0.1 ms shrinks that offset to
-    about 0.005, well inside the posterior uncertainty, so we set it through the
-    preset's `ssm_kwargs`.
+    about 0.005–0.01, well inside the posterior uncertainty, so we set it through
+    the preset's `ssm_kwargs`.
     """)
     return
 
 
 @app.cell
-def _(mo, rl):
+def _(rl):
     true_params = {"rl_alpha": 0.3, "scaler": 3.0, "a": 1.2, "z": 0.5, "t": 0.3}
     preset = rl.preset.get("2AB_RW_DDM")
     preset.ssm_kwargs = {"delta_t": 1e-4, "max_t": 20.0}
@@ -163,7 +167,7 @@ def _(mo, rl):
     data = simulator.simulate(
         theta=true_params, n_trials=200, n_participants=5, random_state=1
     )
-    mo.md(data.head().to_markdown(index=False))
+    data.head()
     return data, simulator, true_params
 
 
