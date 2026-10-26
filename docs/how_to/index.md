@@ -34,7 +34,9 @@ focuses on a concrete modeling, inference, analysis, or extension task.
 
 Begin with the [custom-likelihood route table](external_trainers.md). For ONNX,
 read the [ONNX likelihood contract](custom_onnx_likelihoods.md) before using
-the sbi, BayesFlow, JAX-callable, or black-box walkthrough linked there.
+the sbi, BayesFlow, JAX-callable, or black-box walkthrough linked there. To fit
+a reinforcement-learning model with the analytical DDM instead of its LAN,
+[use the analytical DDM in an RLSSM](rlssm_analytical_ddm.ipynb).
 
 For a contribution to HSSM itself, follow the
 [local development setup](../local_development.md) and then the
