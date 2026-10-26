@@ -100,10 +100,14 @@ class TestValidateBalancedPanelContiguity:
             validate_balanced_panel(df)
 
     def test_sorted_data_passes(self) -> None:
-        """Sorting an interleaved panel by participant_id makes it valid."""
+        """Stably sorting an interleaved panel by participant_id makes it valid."""
         ids = np.tile([0, 1, 2], 4)
         df = pd.DataFrame({"participant_id": ids, "rt": np.random.rand(12)})
-        df_sorted = df.sort_values("participant_id").reset_index(drop=True)
+        # kind="stable", as the error message recommends: the default sort may
+        # reorder trials within a participant (#1410).
+        df_sorted = df.sort_values("participant_id", kind="stable").reset_index(
+            drop=True
+        )
         n_p, n_t = validate_balanced_panel(df_sorted)
         assert n_p == 3
         assert n_t == 4
