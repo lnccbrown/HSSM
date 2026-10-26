@@ -56,6 +56,9 @@ class LoglikConfig(TypedDict):
     bounds: dict[str, tuple[float, float]]
     extra_fields: Optional[list[str]]
     ndt_edge_shift: NotRequired[NDTEdgeShift]
+    # A JAX implementation of this same likelihood, f(data, *list_params) -> (N,),
+    # for callers that need JAX (the RLSSM registry); plain HSSM uses `loglik`.
+    jax_loglik: NotRequired[Callable[..., Any]]
 
 
 LoglikConfigs = dict[LoglikKind, LoglikConfig]

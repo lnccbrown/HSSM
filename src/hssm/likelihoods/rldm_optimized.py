@@ -37,7 +37,8 @@ def compute_v_trial_wise(
         trial.
     inputs
         A 2D jnp array containing the RL parameters (rl_alpha, scaler),
-        action (response), and reward (feedback) for the current trial.
+        action (response, coded 0/1 or -1/1), and reward (feedback) for the
+        current trial.
 
     Returns
     -------
@@ -45,7 +46,8 @@ def compute_v_trial_wise(
         A tuple containing the updated q-values and the computed drift rate (v).
     """
     rl_alpha, scaler, action, reward = inputs
-    action = jnp.astype(action, jnp.int32)
+    # Responses may be coded 0/1 or -1/1; the positive response is arm 1.
+    action = jnp.astype(action > 0, jnp.int32)
 
     # drift rate on each trial depends on difference in expected rewards for
     # the two alternatives:
