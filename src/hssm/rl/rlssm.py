@@ -34,6 +34,8 @@ import pymc as pm
 if TYPE_CHECKING:
     from pytensor.graph import Op
 
+    from hssm._types import LoglikKind
+
 
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
@@ -468,6 +470,13 @@ class RLSSM(_RLSSM):
         Whether to post-process initial values. Defaults to ``True``.
     initval_jitter : float, optional
         Jitter magnitude for initial values.
+    decision_process_loglik_kind : LoglikKind | None, optional
+        Which likelihood of the decision process to use, e.g. ``"analytical"``
+        for the exact DDM instead of the default ``"approx_differentiable"``
+        LAN. ``None`` uses the registry default. With *model_config*, it must
+        match ``model_config.decision_process_loglik_kind``. A decision process
+        registered with `hssm.rl.register_ssm` has a single likelihood, so for
+        it the kind is only a label.
     **kwargs
         Additional keyword arguments forwarded to `bmb.Model`.
     """
@@ -511,6 +520,7 @@ class RLSSM(_RLSSM):
         extra_namespace: dict[str, Any] | None = None,
         process_initvals: bool = True,
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
+        decision_process_loglik_kind: "LoglikKind | None" = None,
         **kwargs: Any,
     ) -> None:
         # Capture simplified args BEFORE calling super so they can be
@@ -529,12 +539,28 @@ class RLSSM(_RLSSM):
                 "model_config was provided; ignoring model, learning_process, "
                 "decision_process, and choices arguments."
             )
+        # Unlike the structural overrides, a likelihood kind is not ignored:
+        # silently fitting the LAN after asking for "analytical" would be wrong.
+        if (
+            model_config is not None
+            and decision_process_loglik_kind is not None
+            and decision_process_loglik_kind
+            != model_config.decision_process_loglik_kind
+        ):
+            raise ValueError(
+                f"decision_process_loglik_kind={decision_process_loglik_kind!r} "
+                "conflicts with model_config.decision_process_loglik_kind="
+                f"{model_config.decision_process_loglik_kind!r}. Build the config "
+                "with get_rlssm_model_config(..., decision_process_loglik_kind=...) "
+                "or drop one of the two."
+            )
 
         model_config = model_config or get_rlssm_model_config(
             model=model or DEFAULT_RLSSM_MODEL,
             choices=choices,
             learning_process=learning_process,
             decision_process=decision_process,
+            decision_process_loglik_kind=decision_process_loglik_kind,
         )
 
         # missing_data / deadline are intentionally omitted — _RLSSM defaults

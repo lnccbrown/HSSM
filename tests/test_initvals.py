@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+import pymc as pm
 import pytest
 import hssm
 import logging
@@ -609,3 +611,30 @@ def test_explicit_log_link_keeps_default_start(
     assert model.params[name].link == "log"
     initval = model._initvals[f"{name}_Intercept"]
     assert initval == np.array(expected_initval).astype(initval.dtype)
+
+
+@pytest.mark.parametrize("n_choices", [2, 3, 4])
+@pytest.mark.parametrize(
+    "include",
+    [None, [{"name": "b", "formula": "b ~ 1 + x"}]],
+    ids=["simple", "b-regression"],
+)
+def test_lba_default_start_has_finite_logp(n_choices, include):
+    """The default start satisfies the LBA's b > A, so log p is finite (#1426).
+
+    ``p_outlier=None``: the default lapse mixture keeps log p finite even when
+    the LBA term is -inf.
+    """
+    data = pd.DataFrame(
+        {
+            "rt": np.tile([0.35, 0.5], n_choices),
+            "response": np.repeat(np.arange(n_choices), 2),
+            "x": np.linspace(-1.0, 1.0, 2 * n_choices),
+        }
+    )
+    model = hssm.HSSM(data, model=f"lba{n_choices}", include=include, p_outlier=None)
+    start = pm.initial_point.make_initial_point_fn(
+        model=model.pymc_model, overrides=model.initvals, jitter_rvs=set()
+    )(None)
+
+    assert np.isfinite(model.pymc_model.compile_logp()(start))

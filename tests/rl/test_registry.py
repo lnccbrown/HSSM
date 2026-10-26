@@ -111,6 +111,49 @@ class TestBuildSsmSpecFromModelconfig:
         with pytest.raises(ValueError, match="no approx_differentiable likelihood"):
             registry._build_ssm_spec_from_modelconfig("ddm")
 
+    def test_declared_jax_loglik_is_adapted_to_the_rl_matrix(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An entry's jax_loglik f(data, *params) is called with the matrix columns."""
+        import hssm.modelconfig as mc_module
+
+        def _jax_loglik(data, v, a):  # type: ignore[no-untyped-def]
+            return data[:, 0] * v + data[:, 1] * a
+
+        def _fake_get(name):  # type: ignore[no-untyped-def]
+            return {
+                "list_params": ["v", "a"],
+                "response": ["rt", "response"],
+                "likelihoods": {
+                    "analytical": {
+                        "loglik": lambda: None,
+                        "jax_loglik": _jax_loglik,
+                        "bounds": {"v": (-np.inf, np.inf), "a": (0.0, np.inf)},
+                        "backend": None,
+                    },
+                },
+            }
+
+        monkeypatch.setattr(mc_module, "get_default_model_config", _fake_get)
+        spec = registry._build_ssm_spec_from_modelconfig("ddm", "analytical")
+        base = spec["ssm_base_logp_func_factory"]()
+        matrix = jnp.asarray(np.random.default_rng(0).normal(size=(6, 4)))
+
+        assert base.inputs == ["v", "a", "rt", "response"]
+        np.testing.assert_array_equal(
+            base(matrix), _jax_loglik(matrix[:, 2:], matrix[:, 0], matrix[:, 1])
+        )
+        assert spec["params_default_ssm"] == [0.0, 1.0]
+
+    def test_missing_kind_lists_the_declared_kinds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Asking for an undeclared kind names the kinds the model has."""
+        with pytest.raises(
+            ValueError, match=r"It declares: \['approx_differentiable'\]"
+        ):
+            registry._build_ssm_spec_from_modelconfig("angle", "analytical")
+
     def test_factory_calls_onnx_loader(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -224,7 +267,8 @@ class TestGetSsmLogp:
         result = registry._get_ssm_logp("angle")
 
         assert callable(result)
-        assert "angle" in registry._SSM_LOGP_CACHE
+        # Built-in models are cached per likelihood kind.
+        assert ("angle", "approx_differentiable") in registry._SSM_LOGP_CACHE
         # Second call returns cached value without re-building.
         assert registry._get_ssm_logp("angle") is result
 
