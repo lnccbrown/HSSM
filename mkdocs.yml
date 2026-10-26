@@ -114,7 +114,7 @@ nav:
           - hssm.set_floatX: api/set_floatx.md
           - hssm.show_defaults: api/show_defaults.md
           - hssm.check_data_for_rl: api/check_data_for_rl.md
-          - hssm.track: api/tracking.md
+          - hssm.tracking: api/tracking.md
       - Likelihoods:
           - hssm.likelihoods: api/likelihoods.md
       - Working with distributions:
