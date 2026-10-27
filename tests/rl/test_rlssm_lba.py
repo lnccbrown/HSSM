@@ -112,30 +112,18 @@ def test_observed_logp_matches_reference(n, point):
 def test_start_satisfies_b_greater_than_A():
     """The model starts at ssms's defaults (A 0.3, b 0.5), not the box midpoints.
 
-    Both midpoints are 0.5, where the LBA's log-likelihood is -inf.
+    Both midpoints are 0.5, where the LBA's log-likelihood is -inf. A user's
+    prior keeps its own start, which the default (0.5) may lie outside of.
     """
     data = _simulate(3, n_trials=40, n_participants=2, seed=0)
 
     initvals = _lba_model(3, data).initvals
-    user = _lba_model(
-        3,
-        data,
-        include=[
-            {
-                "name": "b",
-                "prior": {
-                    "name": "Uniform",
-                    "lower": 0.0,
-                    "upper": 1.0,
-                    "initval": 0.9,
-                },
-            }
-        ],
-    ).initvals
+    user_prior = {"name": "Uniform", "lower": 0.8, "upper": 0.95}
+    user = _lba_model(3, data, include=[{"name": "b", "prior": user_prior}]).initvals
 
     np.testing.assert_allclose([initvals["A"], initvals["b"]], [0.3, 0.5], atol=0.02)
     assert np.isfinite(_observed_logp(_lba_model(3, data))({**TRUTH, **initvals}))
-    np.testing.assert_allclose(user["b"], 0.9, atol=0.02)
+    np.testing.assert_allclose([user["A"], user["b"]], [0.3, 0.875], atol=0.02)
 
 
 @pytest.mark.slow

@@ -45,7 +45,7 @@ from hssm.distribution_utils import make_distribution
 from hssm.rl.likelihoods.builder import make_rl_logp_op
 from hssm.rl.utils import validate_balanced_panel
 
-from ..base import HSSMBase, _get_prior_args, classproperty
+from ..base import HSSMBase, classproperty
 from ..param.utils import _clamp_default_initval_to_bounds
 from .config import RLSSMConfig
 from .registry import DEFAULT_RLSSM_MODEL, get_rlssm_model_config, list_models
@@ -247,8 +247,8 @@ class _RLSSM(HSSMBase):
 
         A bounds-derived prior starts at its midpoint, which need not be a valid
         point of the decision process: the LBA requires ``b > A``, and in the
-        ssms box both start at 0.5. User initial values and HSSM's shared
-        defaults in ``initval_settings`` keep precedence.
+        ssms box both start at 0.5. A user-specified prior keeps its own start,
+        and HSSM's shared defaults in ``initval_settings`` keep precedence.
         """
         super()._postprocess_initvals_deterministic(initval_settings)
         shared = initval_settings[None]
@@ -259,7 +259,9 @@ class _RLSSM(HSSMBase):
             # Regressions start through their terms, not under the bare name.
             if name not in self._initvals or name in shared:
                 continue
-            if "initval" in _get_prior_args(self.params[name].prior):
+            # The default may lie outside a user's prior, e.g. b ~ Uniform(0.8, 0.95).
+            user_param = self.params[name].user_param
+            if user_param is not None and user_param.prior is not None:
                 continue
             start = _clamp_default_initval_to_bounds(
                 value, name, self.params[name].bounds
