@@ -300,9 +300,9 @@ def _(mo):
 
     - **Which decision processes.** `"analytical"` works for decision processes
       whose analytical likelihood declares a JAX implementation (`jax_loglik` in
-      its model configuration); today that is the DDM. Asking for it on another
-      preset, such as `"2AB_RW_Angle"`, raises an error that names what is
-      missing.
+      its model configuration): the DDM, and the LBA with 2, 3 or 4 choices
+      (`lba2`, `lba3`, `lba4`; see below). Asking for it on a preset without one,
+      such as `"2AB_RW_Angle"`, raises an error that names what is missing.
     - **Other entry points.** `hssm.rl.get_rlssm_model_config` and
       `hssm.rl.RLSSMConfig.from_ssms_model` take the same
       `decision_process_loglik_kind`. A model registered with
@@ -320,6 +320,36 @@ def _(mo):
       `sampler="pymc"`, use `cores=1` (or `mp_ctx="forkserver"`) on Apple-silicon
       Macs: PyMC's default process start method can hang with HSSM's JAX
       likelihoods there.
+
+    ### An LBA decision process
+
+    No `ssms` preset pairs a learner with the LBA yet, so build the model as an
+    `ssms.rl.ModelConfig`. `RescorlaWagnerRaceDrifts` gives arm `i` the drift
+    `v_i = scaler * q_i`, and responses are coded `0, ..., n - 1`:
+
+    ```python
+    from ssms import rl
+    from ssms.rl.env import Bandit
+    from ssms.rl.learning import RescorlaWagnerRaceDrifts
+
+    rw_lba3 = rl.ModelConfig(
+        model_name="3AB_RW_LBA3",
+        description="Three-armed bandit, Rescorla-Wagner learner, LBA decision process.",
+        decision_process="lba3",
+        learning_process=RescorlaWagnerRaceDrifts(n_actions=3, initial_q=0.5),
+        task_environment=Bandit.bernoulli(
+            probabilities=[0.7, 0.2, 0.1], response_labels=[0, 1, 2]
+        ),
+    )
+    config = hssm.rl.RLSSMConfig.from_ssms_model(
+        rw_lba3, decision_process_loglik_kind="analytical"
+    )
+    model = hssm.rl.RLSSM(data, model_config=config, p_outlier=None)
+    ```
+
+    `rl.Simulator(rw_lba3).simulate(...)` gives data in the expected layout. The
+    free parameters are `rl_alpha`, `scaler`, `A` and `b`; this LBA has no
+    non-decision time.
     """)
     return
 
