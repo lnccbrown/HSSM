@@ -681,7 +681,8 @@ def _pt_normpdf(t):
 
 
 def _pt_normcdf(t):
-    return (1 / 2) * (1 + pt.erf(t / pt.sqrt(2)))
+    # np.sqrt: pt.sqrt(2) of an integer constant is float32 even under float64.
+    return (1 / 2) * (1 + pt.erf(t / np.sqrt(2)))
 
 
 def _pt_tpdf(t, A, b, v, s):
