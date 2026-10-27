@@ -55,7 +55,7 @@ from hssm.utils import (
     _split_array,
 )
 
-from . import plotting
+from . import plotting, tracking
 from .config import BaseModelConfig
 from .modelconfig import list_models
 from .param import Params
@@ -440,7 +440,19 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         self._post_check_data_sanity()
 
+        # Which network this model runs on. The loader records downloads to a
+        # module-global, so clear it first and read it straight after: what is
+        # left belongs to this model's likelihood and nothing else. Reading it
+        # lazily at log time would attribute a later model's network to this
+        # one, and reading it without clearing would hand an analytical model
+        # whichever network the previous model loaded.
+        tracking.reset_network_record()
         self.model_distribution = self._make_model_distribution()
+        networks = tracking.recorded_networks()
+        self._tracking_network = networks.get(tracking.LIKELIHOOD_ROLE, {})
+        self._tracking_missing_data_network = networks.get(
+            tracking.MISSING_DATA_ROLE, {}
+        )
 
         self.family = make_family(
             self.model_distribution,
@@ -809,6 +821,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         if sampler in ("numpyro", "blackjax"):
             nuts = {"jitter": False, **(kwargs.get("nuts") or {})}
             kwargs["nuts"] = nuts
+
+        tracker = tracking.active()
+        if tracker is not None:
+            tracker.sample_started()
+
         self._inference_obj = self.model.fit(
             inference_method=sampler,
             init=init,
@@ -823,6 +840,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Subset data vars in posterior
         self._clean_posterior_group(dt=self._inference_obj)
+
+        # Opt-in MLflow tracking (hssm.track): params, metrics, artifacts.
+        if tracker is not None:
+            tracker.log_sample(self, sampler, kwargs)
         return self.traces
 
     def vi(
@@ -888,6 +909,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 backend = "numba"
 
+        tracker = tracking.active()
+        if tracker is not None:
+            tracker.vi_started()
+
         # Run variational inference directly from pymc model
         # pyrefly: ignore[bad-context-manager]
         with self.pymc_model:
@@ -914,6 +939,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Post-processing
         self._clean_posterior_group(dt=cast("DataTree | None", self._inference_obj_vi))
+
+        if tracker is not None:
+            tracker.log_vi(
+                self,
+                {
+                    "method": method,
+                    "niter": niter,
+                    "draws": draws,
+                    "backend": backend,
+                },
+            )
 
         # Return the DataTree object if return_idata is True
         if return_idata:
@@ -1693,6 +1729,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # Save vi_traces to netcdf file
         if isinstance(self._inference_obj_vi, DataTree):
             self._inference_obj_vi.to_netcdf(model_path.joinpath("vi_traces.nc"))
+
+        # Opt-in MLflow tracking: attach model.pkl when log_artifacts="all".
+        # A traces-only save writes no pickle, so any in the directory is older.
+        if not save_traces_only and (tracker := tracking.active()) is not None:
+            tracker.log_saved_model(model_path)
 
     @classmethod
     def load_model(cls, path: Union[str, Path]) -> Union["HSSMBase", DataTree]:

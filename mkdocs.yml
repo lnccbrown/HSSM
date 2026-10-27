@@ -20,6 +20,7 @@ not_in_nav: |
   tutorials/parameterization_per_parameter.py
   tutorials/poisson_race.py
   tutorials/random_slope_safe_priors.py
+  tutorials/track_with_mlflow.py
   how_to/rlssm_analytical_ddm.py
 
 exclude_docs: |
@@ -73,6 +74,8 @@ nav:
           - Run Bayesian t-tests on the posterior: tutorials/tutorial_bayesian_t_test.ipynb
           - Simulate data with the do-operator: tutorials/do_operator.ipynb
           - Save and load models: tutorials/save_load_tutorial.ipynb
+          - Track fits with MLflow: how_to/track_with_mlflow.md
+          - Track fits with MLflow (notebook): tutorials/track_with_mlflow.ipynb
       - Custom likelihoods and models:
           - Bring your own likelihood (external trainers): how_to/external_trainers.md
           - Custom models from JAX callables: tutorials/jax_callable_contribution_onnx_example.ipynb
@@ -113,6 +116,7 @@ nav:
           - hssm.set_floatX: api/set_floatx.md
           - hssm.show_defaults: api/show_defaults.md
           - hssm.check_data_for_rl: api/check_data_for_rl.md
+          - hssm.track: api/tracking.md
       - Likelihoods:
           - hssm.likelihoods: api/likelihoods.md
       - Working with distributions:
@@ -150,6 +154,7 @@ plugins:
         - tutorials/parameterization_per_parameter.py
         - tutorials/poisson_race.py
         - tutorials/random_slope_safe_priors.py
+        - tutorials/track_with_mlflow.py
         - how_to/rlssm_analytical_ddm.py
       execute: true
       execute_ignore:
@@ -198,6 +203,7 @@ plugins:
         - tutorials/bayesflow_nre_onnx_integration.ipynb
         - tutorials/sbi_nre_integration.ipynb
         - tutorials/poisson_race.ipynb
+        - tutorials/track_with_mlflow.ipynb
         - how_to/rlssm_analytical_ddm.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
