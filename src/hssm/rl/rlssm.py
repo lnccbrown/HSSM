@@ -39,12 +39,14 @@ if TYPE_CHECKING:
 
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
+    INITVAL_SETTINGS,
 )
 from hssm.distribution_utils import make_distribution
 from hssm.rl.likelihoods.builder import make_rl_logp_op
 from hssm.rl.utils import validate_balanced_panel
 
-from ..base import HSSMBase, classproperty
+from ..base import HSSMBase, _get_prior_args, classproperty
+from ..param.utils import _clamp_default_initval_to_bounds
 from .config import RLSSMConfig
 from .registry import DEFAULT_RLSSM_MODEL, get_rlssm_model_config, list_models
 
@@ -237,6 +239,32 @@ class _RLSSM(HSSMBase):
             initval_jitter=initval_jitter,
             **kwargs,
         )
+
+    def _postprocess_initvals_deterministic(
+        self, initval_settings: dict = INITVAL_SETTINGS
+    ) -> None:
+        """Start simple parameters at the config's ``params_default``.
+
+        A bounds-derived prior starts at its midpoint, which need not be a valid
+        point of the decision process: the LBA requires ``b > A``, and in the
+        ssms box both start at 0.5. User initial values and HSSM's shared
+        defaults in ``initval_settings`` keep precedence.
+        """
+        super()._postprocess_initvals_deterministic(initval_settings)
+        shared = initval_settings[None]
+        for name, value in zip(
+            self.model_config.list_params or [],
+            self.model_config.params_default,  # type: ignore[attr-defined]
+        ):
+            # Regressions start through their terms, not under the bare name.
+            if name not in self._initvals or name in shared:
+                continue
+            if "initval" in _get_prior_args(self.params[name].prior):
+                continue
+            start = _clamp_default_initval_to_bounds(
+                value, name, self.params[name].bounds
+            )
+            self._initvals[name] = np.asarray(start, self._initvals[name].dtype)
 
     @staticmethod
     def _validate_choice_only_responses(
