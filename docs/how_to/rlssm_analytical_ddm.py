@@ -328,6 +328,7 @@ def _(mo):
     `v_i = scaler * q_i`, and responses are coded `0, ..., n - 1`:
 
     ```python
+    import numpy as np
     from ssms import rl
     from ssms.rl.env import Bandit
     from ssms.rl.learning import RescorlaWagnerRaceDrifts
@@ -341,10 +342,13 @@ def _(mo):
             probabilities=[0.7, 0.2, 0.1], response_labels=[0, 1, 2]
         ),
     )
+    # random_state seeds the bandit; the LBA draws use NumPy's global RNG (ssm-simulators#399).
+    np.random.seed(0)
     lba_data = rl.Simulator(rw_lba3).simulate(
         theta={"rl_alpha": 0.3, "scaler": 3.0, "A": 0.3, "b": 0.6},
         n_trials=200,
         n_participants=5,
+        random_state=0,
     )
     config = hssm.rl.RLSSMConfig.from_ssms_model(
         rw_lba3, decision_process_loglik_kind="analytical"
@@ -353,8 +357,7 @@ def _(mo):
     ```
 
     The free parameters are `rl_alpha`, `scaler`, `A` and `b`; this LBA has no
-    non-decision time. Its simulator ignores `random_state` (ssm-simulators#399),
-    so seed `np.random` for reproducible data.
+    non-decision time.
     """)
     return
 
