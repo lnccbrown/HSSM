@@ -863,7 +863,7 @@ def logp_lba_jax(data: np.ndarray, A: float, b: float, *v: float) -> np.ndarray:
     rt = jnp.abs(data_reshaped[:, 0])
     response = data_reshaped[:, 1]
     response_int = response.astype(jnp.int32)
-    logp = _jax_lba_ll(rt, response_int, A, b, *v).squeeze()
+    logp = _jax_lba_ll(rt, response_int, A, b, *v).reshape(-1)
     return jax_check_parameters(logp, b > A, msg="b > A")
 
 
