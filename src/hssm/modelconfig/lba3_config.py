@@ -3,6 +3,7 @@ from ..likelihoods.analytical import (
     lba3_bounds,
     lba3_params,
     logp_lba3,
+    logp_lba_jax,
 )
 
 
@@ -25,6 +26,7 @@ def get_lba3_config() -> DefaultConfig:
         "likelihoods": {
             "analytical": {
                 "loglik": logp_lba3,
+                "jax_loglik": logp_lba_jax,
                 "backend": None,
                 "default_priors": {
                     # The bounds-derived prior, started below b's default start

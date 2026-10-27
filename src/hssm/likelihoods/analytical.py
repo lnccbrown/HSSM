@@ -815,10 +815,10 @@ def _jax_lba_tcdf(t, A, b, v, s):
     )
 
 
-def _jax_lba4_ll(t, ch, A, b, v0, v1, v2, v3):
-    """Return the four-choice LBA log-likelihood at the JAX level."""
+def _jax_lba_ll(t, ch, A, b, *v):
+    """Return the LBA log-likelihood at the JAX level, one accumulator per ``v``."""
     s = 0.1
-    drift_rates = jnp.stack(jnp.broadcast_arrays(v0, v1, v2, v3))
+    drift_rates = jnp.stack(jnp.broadcast_arrays(*v))
     all_pdfs = vmap(lambda v: _jax_lba_tpdf(t, A, b, v, s))(drift_rates)
     all_cdfs = vmap(lambda v: _jax_lba_tcdf(t, A, b, v, s))(drift_rates)
 
@@ -849,11 +849,21 @@ def logp_lba4(
     v3: float,
 ) -> np.ndarray:
     """Compute the log-likelihood of the LBA model with 4 drift rates."""
+    return logp_lba_jax(data, A, b, v0, v1, v2, v3)
+
+
+def logp_lba_jax(data: np.ndarray, A: float, b: float, *v: float) -> np.ndarray:
+    """Compute the JAX log-likelihood of the LBA model, one drift rate per choice.
+
+    The number of drift rates sets the number of choices, so this one function is
+    the ``jax_loglik`` of ``lba2``, ``lba3`` and ``lba4``. Responses are coded
+    ``0, ..., len(v) - 1``.
+    """
     data_reshaped = jnp.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
     rt = jnp.abs(data_reshaped[:, 0])
     response = data_reshaped[:, 1]
     response_int = response.astype(jnp.int32)
-    logp = _jax_lba4_ll(rt, response_int, A, b, v0, v1, v2, v3).squeeze()
+    logp = _jax_lba_ll(rt, response_int, A, b, *v).squeeze()
     return jax_check_parameters(logp, b > A, msg="b > A")
 
 
