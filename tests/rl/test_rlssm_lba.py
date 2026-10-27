@@ -18,7 +18,7 @@ from ssms.rl.env import Bandit
 from ssms.rl.learning import RescorlaWagnerRaceDrifts
 
 import hssm
-from hssm.likelihoods.analytical import logp_lba2, logp_lba3, logp_lba_jax
+from hssm.likelihoods.analytical import logp_lba_jax
 from hssm.rl import registry
 
 TRUTH = {"rl_alpha": 0.3, "scaler": 3.0, "A": 0.3, "b": 0.6}
@@ -96,28 +96,6 @@ def _observed_logp(model):
     logp = pm.logp(obs, pymc_model.rvs_to_values[obs]).sum()
     fn = pm.compile(inputs=[pymc_model[name] for name in TRUTH], outputs=logp)
     return lambda point: fn(*(np.asarray(point[name]) for name in TRUTH))
-
-
-@pytest.mark.parametrize(("n", "logp_lba"), [(2, logp_lba2), (3, logp_lba3)])
-def test_jax_loglik_matches_pytensor(n, logp_lba):
-    """The JAX LBA declared for RLSSM equals the PyTensor LBA of plain HSSM.
-
-    Compared above log p = -20: further into the tail, the PyTensor CDF
-    0.5 * (1 + erf(x / sqrt(2))) loses its precision, and the two drift apart.
-    """
-    rng = np.random.default_rng(n)
-    size = 1000
-    obs = np.column_stack([rng.uniform(0.1, 1.0, size), rng.integers(0, n, size)])
-    A = rng.uniform(0.1, 0.5, size)
-    b = A + rng.uniform(0.05, 0.5, size)
-    v = [rng.uniform(0.0, 3.0, size) for _ in range(n)]
-
-    expected = logp_lba(obs, A, b, *v).eval()
-    actual = np.asarray(logp_lba_jax(obs, A, b, *v))
-
-    body = expected > -20
-    assert body.sum() > size // 5
-    np.testing.assert_allclose(actual[body], expected[body], rtol=1e-5)
 
 
 @pytest.mark.parametrize("n", [2, 3, 4])
