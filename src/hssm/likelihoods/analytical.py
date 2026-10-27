@@ -831,12 +831,11 @@ def _jax_lba_ll(t, ch, A, b, *v):
     )
 
     prob_neg = jnp.prod(norm.cdf(-drift_rates / s), axis=0)
+    # In the data's dtype: LOGP_LB is fixed at import, and an f64 bound in an f32
+    # trace breaks JAX's cached clip once a process switches precision.
+    log_lb = jnp.asarray(LOGP_LB, dtype=t.dtype)
     return jnp.log(
-        jnp.clip(
-            likelihood / (1.0 - prob_neg),
-            jnp.exp(LOGP_LB),
-            jnp.exp(-LOGP_LB),
-        )
+        jnp.clip(likelihood / (1.0 - prob_neg), jnp.exp(log_lb), jnp.exp(-log_lb))
     )
 
 
