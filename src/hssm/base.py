@@ -1532,6 +1532,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     def compile_logp(self, keep_transformed: bool = False, **kwargs):
         """Compile the model's log probability: log-prior plus log-likelihood.
 
+        Any potentials passed to Bambi (``potentials=``) are included as well.
+
         Parameters
         ----------
         keep_transformed : bool, optional
