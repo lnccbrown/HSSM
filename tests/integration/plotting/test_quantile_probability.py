@@ -133,6 +133,28 @@ def test__plot_quantile_probability_1D_ignores_legend_entries_without_color():
     plt.close(fig)
 
 
+def test__plot_quantile_probability_1D_ellipses_keep_observed_line_colors():
+    """Predictive points in another palette do not recolor the ellipses."""
+    fig, ax = plt.subplots()
+
+    _plot_quantile_probability_1D(
+        _qp_df_with_wide_predictions(),
+        cond="stim",
+        ax=ax,
+        predictive_style="both",
+        predictive_samples_kwargs={"palette": "Reds"},
+    )
+
+    # The observed quantile lines are the lines that hold data; legend proxies
+    # are empty.
+    observed_colors = {
+        mcolors.to_rgb(line.get_color()) for line in ax.lines if len(line.get_xdata())
+    }
+    assert ax.patches
+    assert {p.get_edgecolor()[:3] for p in ax.patches} == observed_colors
+    plt.close(fig)
+
+
 @pytest.mark.parametrize("margin", [None, 0.0])
 def test__plot_quantile_probability_1D_view_includes_ellipses(margin):
     """The view is rescaled to the ellipses, and the top axis follows it.

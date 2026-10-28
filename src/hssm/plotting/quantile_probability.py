@@ -202,6 +202,17 @@ def _plot_quantile_probability_1D(
         **data_kwargs,  # pyrefly: ignore[bad-argument-type]
     )
 
+    # The ellipses take the colors of the observed quantile lines. Read them now,
+    # before predictive points add legend lines with the same labels. Only lines
+    # carry the quantile colors; the axes may already hold other labelled
+    # artists (e.g. the bands of `plot_predictive`)
+    handles, labels = ax.get_legend_handles_labels()
+    color_map = {
+        label: handle.get_color()
+        for handle, label in zip(handles, labels)
+        if isinstance(handle, Line2D)
+    }
+
     if plot_predictive:
         df_predictive = plot_data.loc[plot_data["observed"] == "predicted", :]
 
@@ -247,17 +258,6 @@ def _plot_quantile_probability_1D(
             quantiles = df_predictive[hue].unique()
             conditions = df_predictive[cond].unique()
             correct_vals = df_predictive["is_correct"].unique()
-
-            # Get the color mapping from the current plot
-            # The line plot has already been created, so we can extract colors from it
-            # Only lines carry the quantile colors; the axes may already hold other
-            # labelled artists (e.g. the bands of `plot_predictive`)
-            handles, labels = ax.get_legend_handles_labels()
-            color_map = {
-                label: handle.get_color()
-                for handle, label in zip(handles, labels)
-                if isinstance(handle, Line2D)
-            }
 
             # Group by quantile, condition, and x-value
             for quantile in quantiles:
