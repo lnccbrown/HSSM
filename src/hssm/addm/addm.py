@@ -152,6 +152,8 @@ class aDDM(HSSMBase):
             lapse=self.lapse,
             extra_fields=extra_fields_data,
             params_is_trialwise=params_is_trialwise,
+            n_choices=self.n_choices,
+            has_deadline=bool(self.deadline),
         )
         # Expose the observed fixations to the RV's generative path so
         # posterior-predictive draws condition on them (see _push_rv_extra_fields).
