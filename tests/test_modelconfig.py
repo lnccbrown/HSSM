@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import ssms
 
 import hssm
 from hssm.likelihoods.analytical import lba4_bounds, logp_lba4
@@ -157,7 +158,19 @@ def test_get_gamma_drift_angle_config():
 
 
 @pytest.mark.parametrize(
-    "model", ["gamma_drift", "gamma_drift_angle", "angle_extended"]
+    "model",
+    [
+        "gamma_drift",
+        "gamma_drift_angle",
+        "angle_extended",
+        pytest.param(
+            "full_ddm_lan",
+            marks=pytest.mark.skipif(
+                "full_ddm_lan" not in ssms.config.model_config,
+                reason="needs the ssm-simulators release that registers full_ddm_lan",
+            ),
+        ),
+    ],
 )
 def test_config_matches_ssms_registry(model):
     """The declared box must be the box the network was trained on.
@@ -266,3 +279,51 @@ def test_softmax_inv_temperature_3_choices():
         "mu": 0.0,
         "sigma": 1.0,
     }
+
+
+def test_get_full_ddm_lan_config():
+    config = get_default_model_config("full_ddm_lan")
+    assert config["response"] == ["rt", "response"]
+    assert config["choices"] == [-1, 1]
+    assert config["list_params"] == ["v", "a", "z", "t", "sz", "sv", "st"]
+    assert config["list_params"] == get_default_model_config("full_ddm")["list_params"]
+
+    assert list(config["likelihoods"]) == ["approx_differentiable"]
+    lk = config["likelihoods"]["approx_differentiable"]
+    assert lk["loglik"] == "full_ddm_lan.onnx"
+    assert lk["backend"] == "jax"
+
+    # the bounds are the LAN's training box, so they are pinned in full: a
+    # widening samples the network outside the region it was trained on
+    assert lk["bounds"] == {
+        "v": (-3.0, 3.0),
+        "a": (0.3, 2.5),
+        "z": (0.3, 0.7),
+        "t": (0.25, 2.25),
+        "sz": (1e-3, 0.2),
+        "sv": (0.3, 2.5),
+        "st": (1e-3, 0.35),
+    }
+
+    assert lk["default_priors"] == {}
+    assert lk["extra_fields"] is None
+
+
+def test_full_ddm_lan_declares_support_edge_at_t_minus_st():
+    """The network's simulator draws ndt as t + U(-st, st), so the edge is t - st.
+
+    full_ddm's blackbox declares scale 0.5 because hddm_wfpt reads st as the
+    full width; this network was trained on the half-width convention.
+    """
+    from hssm.config import Config
+
+    likelihood = get_default_model_config("full_ddm_lan")["likelihoods"][
+        "approx_differentiable"
+    ]
+    assert likelihood["ndt_edge_shift"] == {"param": "st", "scale": 1.0}
+    assert get_default_model_config("full_ddm")["likelihoods"]["blackbox"][
+        "ndt_edge_shift"
+    ] == {"param": "st", "scale": 0.5}
+
+    config = Config.from_defaults("full_ddm_lan", "approx_differentiable")
+    assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}

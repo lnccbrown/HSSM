@@ -13,6 +13,7 @@ model.
 | `ddm` | `analytical`, `approx_differentiable`, `blackbox` | `analytical` | `v`, `a`, `z`, `t` | `-1`, `1` |
 | `ddm_sdv` | `analytical`, `approx_differentiable`, `blackbox` | `analytical` | `v`, `a`, `z`, `t`, `sv` | `-1`, `1` |
 | `full_ddm` | `blackbox` | `blackbox` | `v`, `a`, `z`, `t`, `sz`, `sv`, `st` | `-1`, `1` |
+| `full_ddm_lan` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `t`, `sz`, `sv`, `st` | `-1`, `1` |
 | `angle` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `t`, `theta` | `-1`, `1` |
 | `angle_extended` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `t`, `theta` | `-1`, `1` |
 | `levy` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `alpha`, `t` | `-1`, `1` |
