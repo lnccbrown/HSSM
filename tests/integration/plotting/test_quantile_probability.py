@@ -1,5 +1,6 @@
 """Tests for quantile-probability plotting helpers and public API."""
 
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -74,6 +75,127 @@ def test_plot_quantile_probability_forwards_marker_to_seaborn():
 
     # "s" is not a default marker of either seaborn call, so it must come from kwargs.
     assert {line.get_marker() for line in ax.lines} == {"s"}
+    plt.close(fig)
+
+
+def _qp_df_with_wide_predictions():
+    """Observed data plus 10 predictive draws whose RTs spread far beyond the data."""
+    rng = np.random.default_rng(0)
+    frames = []
+    for stim in ["LL", "WW"]:
+        frames.append(
+            pd.DataFrame(
+                {
+                    "observed": "observed",
+                    "chain": -1,
+                    "draw": -1,
+                    "stim": stim,
+                    "rt": rng.uniform(0.8, 1.6, 200),
+                    "response": rng.choice([-1, 1], 200),
+                }
+            )
+        )
+        for draw in range(10):
+            frames.append(
+                pd.DataFrame(
+                    {
+                        "observed": "predicted",
+                        "chain": 0,
+                        "draw": draw,
+                        "stim": stim,
+                        "rt": rng.uniform(0.3, 1.0, 200) * rng.uniform(1.0, 4.0),
+                        "response": rng.choice([-1, 1], 200),
+                    }
+                )
+            )
+    return pd.concat(frames, ignore_index=True)
+
+
+def test__plot_quantile_probability_1D_ignores_legend_entries_without_color():
+    """Labelled artists already in the axes do not break the ellipse colors."""
+    fig, ax = plt.subplots()
+    ax.fill_between([0, 1], [0, 1], label="94% interval")  # as left by plot_predictive
+
+    _plot_quantile_probability_1D(
+        _qp_df_with_wide_predictions(), cond="stim", ax=ax, predictive_style="ellipse"
+    )
+
+    line_colors = {
+        label: handle.get_color()
+        for handle, label in zip(*ax.get_legend_handles_labels())
+        if label != "94% interval"
+    }
+    assert ax.patches
+    # Every quantile line lends its color to its ellipses.
+    assert {p.get_edgecolor()[:3] for p in ax.patches} == {
+        mcolors.to_rgb(c) for c in line_colors.values()
+    }
+    plt.close(fig)
+
+
+def test__plot_quantile_probability_1D_ellipses_keep_observed_line_colors():
+    """Predictive points in another palette do not recolor the ellipses."""
+    fig, ax = plt.subplots()
+
+    _plot_quantile_probability_1D(
+        _qp_df_with_wide_predictions(),
+        cond="stim",
+        ax=ax,
+        predictive_style="both",
+        predictive_samples_kwargs={"palette": "Reds"},
+    )
+
+    # The observed quantile lines are the lines that hold data; legend proxies
+    # are empty.
+    observed_colors = {
+        mcolors.to_rgb(line.get_color()) for line in ax.lines if len(line.get_xdata())
+    }
+    assert ax.patches
+    assert {p.get_edgecolor()[:3] for p in ax.patches} == observed_colors
+    plt.close(fig)
+
+
+@pytest.mark.parametrize("margin", [None, 0.0])
+def test__plot_quantile_probability_1D_view_includes_ellipses(margin):
+    """The view is rescaled to the ellipses, and the top axis follows it.
+
+    With zero margins the view must still hold the exact extent of each rotated
+    ellipse, not only the endpoints of its Bezier segments.
+    """
+    fig, ax = plt.subplots()
+    if margin is not None:
+        ax.margins(margin)
+
+    _plot_quantile_probability_1D(
+        _qp_df_with_wide_predictions(), cond="stim", ax=ax, predictive_style="ellipse"
+    )
+    fig.canvas.draw()
+
+    (x0, x1), (y0, y1) = ax.get_xlim(), ax.get_ylim()
+    to_data = ax.transData.inverted()
+    tol = 1e-9  # display-to-data round trip
+    assert ax.patches
+    for patch in ax.patches:
+        box = patch.get_window_extent().transformed(to_data)
+        assert x0 - tol <= box.x0 and box.x1 <= x1 + tol
+        assert y0 - tol <= box.y0 and box.y1 <= y1 + tol
+    (top_ax,) = [a for a in fig.axes if a is not ax]
+    assert top_ax.get_xlim() == ax.get_xlim()
+    plt.close(fig)
+
+
+def test__plot_quantile_probability_1D_keeps_limits_fixed_by_user():
+    """Axis limits set before the call are not overridden by the ellipses."""
+    fig, ax = plt.subplots()
+    ax.set_xlim(0.15, 0.85)
+    ax.set_ylim(0, 1.5)
+
+    _plot_quantile_probability_1D(
+        _qp_df_with_wide_predictions(), cond="stim", ax=ax, predictive_style="ellipse"
+    )
+
+    assert ax.get_xlim() == (0.15, 0.85)
+    assert ax.get_ylim() == (0, 1.5)
     plt.close(fig)
 
 
