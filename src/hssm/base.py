@@ -1530,7 +1530,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return graph
 
     def compile_logp(self, keep_transformed: bool = False, **kwargs):
-        """Compile the log probability function for the model.
+        """Compile the model's log probability: log-prior plus log-likelihood.
 
         Parameters
         ----------
