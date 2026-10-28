@@ -1,3 +1,5 @@
+"""Unit tests for configuration defaults and model-config assembly."""
+
 import logging
 
 import pytest
@@ -92,6 +94,88 @@ def test_update_config():
     assert v_bounds == (-np.inf, np.inf)
 
 
+def test_from_defaults_reads_ndt_edge_shift():
+    """A registry entry's declaration lands on Config as its own copy."""
+    assert Config.from_defaults("ddm", "analytical").ndt_edge_shift is None
+
+    config = Config.from_defaults("full_ddm", "blackbox")
+    registry_entry = hssm.defaults.default_model_config["full_ddm"]["likelihoods"][
+        "blackbox"
+    ]["ndt_edge_shift"]
+
+    assert config.ndt_edge_shift == {"param": "st", "scale": 0.5}
+    # Deep-copied with the rest of the entry, like default_priors and bounds.
+    assert config.ndt_edge_shift is not registry_entry
+
+
+def test_update_config_ndt_edge_shift_precedence():
+    """A user-supplied declaration overrides the registry's; None keeps it."""
+    config = Config.from_defaults("full_ddm", "blackbox")
+
+    config.update_config(ModelConfig())
+    assert config.ndt_edge_shift == {"param": "st", "scale": 0.5}
+
+    config.update_config(ModelConfig(ndt_edge_shift={"param": "st", "scale": 1.0}))
+    assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}
+
+
+@pytest.mark.parametrize(
+    ("list_params", "ndt_edge_shift", "match"),
+    [
+        (["v", "a", "z", "t"], {"param": "st", "scale": 1.0}, "names the parameter"),
+        (["v", "a", "z", "st"], {"param": "st", "scale": 1.0}, "`t` is not in"),
+        (["v", "a", "z", "t", "st"], {"param": "st", "scale": -1.0}, "scale"),
+        (["v", "a", "z", "t", "st"], {"param": "st", "scale": float("nan")}, "scale"),
+        (["v", "a", "z", "t", "st"], {"param": "st", "scale": float("inf")}, "scale"),
+        (["v", "a", "z", "t", "st"], {"param": "st", "scale": True}, "scale"),
+        (["v", "a", "z", "t", "st"], {"param": "st", "scale": "1.0"}, "scale"),
+        (["v", "a", "z", "t", "st"], {"param": "st", "scale": None}, "scale"),
+        (["v", "a", "z", "t", "st"], {"param": "st"}, "keys 'param' and 'scale'"),
+        (["v", "a", "z", "t", "st"], {"scale": 1.0}, "keys 'param' and 'scale'"),
+    ],
+    ids=[
+        "param_not_in_list_params",
+        "no_t",
+        "negative",
+        "nan",
+        "inf",
+        "bool",
+        "string",
+        "none",
+        "missing_scale",
+        "missing_param",
+    ],
+)
+def test_validate_rejects_bad_ndt_edge_shift(list_params, ndt_edge_shift, match):
+    """Each of the three validation rules raises and names the offending key."""
+    with pytest.raises(ValueError, match=match):
+        Config._build_model_config(
+            "ddm",
+            "analytical",
+            ModelConfig(list_params=list_params, ndt_edge_shift=ndt_edge_shift),
+            None,
+        )
+
+
+@pytest.mark.parametrize(
+    "scale",
+    [0, 0.5, 1, 3.0, np.float32(0.5), np.int64(2)],
+    ids=["zero", "half", "int", "three", "np_float32", "np_int64"],
+)
+def test_validate_accepts_finite_non_negative_scale(scale):
+    """Zero is the fixed-t edge; numpy scalars count as numbers."""
+    config = Config._build_model_config(
+        "ddm",
+        "analytical",
+        ModelConfig(
+            list_params=["v", "a", "z", "t", "st"],
+            ndt_edge_shift={"param": "st", "scale": scale},
+        ),
+        None,
+    )
+    assert config.ndt_edge_shift == {"param": "st", "scale": scale}
+
+
 class TestConfigBuildModelConfigExtraLogic:
     def test_build_model_config_dict_with_choices_conflict(self, caplog):
         # model 'ddm' has defaults in hssm.defaults; use a minimal dict override
@@ -113,6 +197,46 @@ class TestConfigBuildModelConfigExtraLogic:
         cfg = Config._build_model_config("ddm", None, mc, choices=(0, 1))
         # choices should be applied to resulting Config
         assert cfg.choices == (0, 1)
+
+    @pytest.mark.parametrize(
+        ("n_choices", "expected"),
+        [(2, (-1, 1)), (3, (0, 1, 2)), (np.int64(4), (0, 1, 2, 3))],
+        ids=["two", "three", "np_int64"],
+    )
+    def test_build_model_config_int_choices(self, n_choices, expected):
+        """An int `choices` is expanded to the default labels for that count.
+
+        The `np.int64` case guards the `np.integer` branch: numpy integers are not
+        `int` subclasses, and a count computed from data, such as
+        `df["response"].max() + 1`, is a numpy integer.
+        """
+        mc = ModelConfig(response=("rt", "response"), list_params=["v"])
+        cfg = Config._build_model_config(
+            "custom", "analytical", mc, choices=n_choices, loglik=lambda *a: None
+        )
+        assert cfg.choices == expected
+
+    @pytest.mark.parametrize("n_choices", [0, 1])
+    def test_build_model_config_int_choices_below_two(self, n_choices):
+        """Fewer than two choices is rejected."""
+        mc = ModelConfig(response=("rt", "response"), list_params=["v"])
+        with pytest.raises(ValueError, match="must be at least 2"):
+            Config._build_model_config(
+                "custom", "analytical", mc, choices=n_choices, loglik=lambda *a: None
+            )
+
+    @pytest.mark.parametrize(
+        ("model", "choices"),
+        [("custom", (-1, 1)), ("custom", 2), ("race_no_bias_2", None)],
+        ids=["explicit_arg", "int_arg", "ssms_fallback"],
+    )
+    def test_build_model_config_custom_model_config_choices_win(self, model, choices):
+        """Choices in `model_config` beat the argument and the ssms fallback."""
+        mc = {"list_params": ["v"], "choices": (5, 6, 7)}
+        cfg = Config._build_model_config(
+            model, "analytical", mc, choices=choices, loglik=lambda *a: None
+        )
+        assert cfg.choices == (5, 6, 7)
 
     def test_build_model_config_uses_ssms_model_config(self, monkeypatch):
         # High-level view of the test: ensures that when a model name is not in the built-in

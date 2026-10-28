@@ -34,15 +34,19 @@ import pymc as pm
 if TYPE_CHECKING:
     from pytensor.graph import Op
 
+    from hssm._types import LoglikKind
+
 
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
+    INITVAL_SETTINGS,
 )
 from hssm.distribution_utils import make_distribution
 from hssm.rl.likelihoods.builder import make_rl_logp_op
 from hssm.rl.utils import validate_balanced_panel
 
 from ..base import HSSMBase, classproperty
+from ..param.utils import _clamp_default_initval_to_bounds
 from .config import RLSSMConfig
 from .registry import DEFAULT_RLSSM_MODEL, get_rlssm_model_config, list_models
 
@@ -236,6 +240,34 @@ class _RLSSM(HSSMBase):
             **kwargs,
         )
 
+    def _postprocess_initvals_deterministic(
+        self, initval_settings: dict = INITVAL_SETTINGS
+    ) -> None:
+        """Start simple parameters at the config's ``params_default``.
+
+        A bounds-derived prior starts at its midpoint, which need not be a valid
+        point of the decision process: the LBA requires ``b > A``, and in the
+        ssms box both start at 0.5. A user-specified prior keeps its own start,
+        and HSSM's shared defaults in ``initval_settings`` keep precedence.
+        """
+        super()._postprocess_initvals_deterministic(initval_settings)
+        shared = initval_settings[None]
+        for name, value in zip(
+            self.model_config.list_params or [],
+            self.model_config.params_default,  # type: ignore[attr-defined]
+        ):
+            # Regressions start through their terms, not under the bare name.
+            if name not in self._initvals or name in shared:
+                continue
+            # The default may lie outside a user's prior, e.g. b ~ Uniform(0.8, 0.95).
+            user_param = self.params[name].user_param
+            if user_param is not None and user_param.prior is not None:
+                continue
+            start = _clamp_default_initval_to_bounds(
+                value, name, self.params[name].bounds
+            )
+            self._initvals[name] = np.asarray(start, self._initvals[name].dtype)
+
     @staticmethod
     def _validate_choice_only_responses(
         data: pd.DataFrame,
@@ -364,6 +396,8 @@ class _RLSSM(HSSMBase):
             extra_fields=extra_fields_data,
             params_is_trialwise=params_is_trialwise,
             is_choice_only=self.model_config.is_choice_only,
+            # __init__ takes an RLSSMConfig, which is where ndt_edge_shift lives.
+            ndt_edge_shift=cast("RLSSMConfig", self.model_config).ndt_edge_shift,
         )
 
 
@@ -425,7 +459,9 @@ class RLSSM(_RLSSM):
     Parameters
     ----------
     data : pd.DataFrame
-        Trial-level data (balanced panel required).
+        Trial-level data (balanced panel required). Rows must be grouped by
+        participant and, within each participant, in trial order: the learning
+        sequence is read from row order.
     model : str | None, optional
         Name of an ``ssms.rl`` preset or custom registered RLSSM model. Defaults
         to ``"2AB_RW_DDM"``.
@@ -464,6 +500,13 @@ class RLSSM(_RLSSM):
         Whether to post-process initial values. Defaults to ``True``.
     initval_jitter : float, optional
         Jitter magnitude for initial values.
+    decision_process_loglik_kind : LoglikKind | None, optional
+        Which likelihood of the decision process to use, e.g. ``"analytical"``
+        for the exact DDM instead of the default ``"approx_differentiable"``
+        LAN. ``None`` uses the registry default. With *model_config*, it must
+        match ``model_config.decision_process_loglik_kind``. A decision process
+        registered with `hssm.rl.register_ssm` has a single likelihood, so for
+        it the kind is only a label.
     **kwargs
         Additional keyword arguments forwarded to `bmb.Model`.
     """
@@ -507,6 +550,7 @@ class RLSSM(_RLSSM):
         extra_namespace: dict[str, Any] | None = None,
         process_initvals: bool = True,
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
+        decision_process_loglik_kind: "LoglikKind | None" = None,
         **kwargs: Any,
     ) -> None:
         # Capture simplified args BEFORE calling super so they can be
@@ -525,12 +569,28 @@ class RLSSM(_RLSSM):
                 "model_config was provided; ignoring model, learning_process, "
                 "decision_process, and choices arguments."
             )
+        # Unlike the structural overrides, a likelihood kind is not ignored:
+        # silently fitting the LAN after asking for "analytical" would be wrong.
+        if (
+            model_config is not None
+            and decision_process_loglik_kind is not None
+            and decision_process_loglik_kind
+            != model_config.decision_process_loglik_kind
+        ):
+            raise ValueError(
+                f"decision_process_loglik_kind={decision_process_loglik_kind!r} "
+                "conflicts with model_config.decision_process_loglik_kind="
+                f"{model_config.decision_process_loglik_kind!r}. Build the config "
+                "with get_rlssm_model_config(..., decision_process_loglik_kind=...) "
+                "or drop one of the two."
+            )
 
         model_config = model_config or get_rlssm_model_config(
             model=model or DEFAULT_RLSSM_MODEL,
             choices=choices,
             learning_process=learning_process,
             decision_process=decision_process,
+            decision_process_loglik_kind=decision_process_loglik_kind,
         )
 
         # missing_data / deadline are intentionally omitted — _RLSSM defaults

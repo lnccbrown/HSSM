@@ -29,8 +29,16 @@ def validate_balanced_panel(
     Raises
     ------
     ValueError
-        If *participant_col* is not present in *data*, or if the panel is
-        unbalanced (participants have different trial counts).
+        If *participant_col* is not present in *data*, if the panel is
+        unbalanced (participants have different trial counts), or if the rows
+        of a participant are not contiguous.
+
+    Notes
+    -----
+    Only the grouping of rows by participant is checked. The order of trials
+    within each participant cannot be checked here (no trial column is
+    inspected): the RL likelihood takes it from row order, so the rows of each
+    participant must already be in trial order.
     """
     if participant_col not in data.columns:
         raise ValueError(
@@ -57,14 +65,23 @@ def validate_balanced_panel(
     # make_rl_logp_op reshapes data as (n_participants, n_trials, ...) by row
     # order, so interleaved rows would silently mix subjects and corrupt the
     # RL learning dynamics.
+    # The suggested fix must keep each participant's trials in order: pandas'
+    # default sort (kind="quicksort") is not stable, so sorting on the
+    # participant column alone scrambles the trial order within participants.
     n_runs = int((data[participant_col] != data[participant_col].shift()).sum())
     if n_runs != len(counts):
         raise ValueError(
             "Data rows must be contiguous per participant. "
             "The RL likelihood reshapes data by row position; interleaved "
             "participant rows will corrupt per-participant trial sequences. "
-            "Please sort the data by participant before passing it to RLSSM "
-            f"(e.g. data.sort_values('{participant_col}'))."
+            "Please sort the data by participant and, within participant, by "
+            "trial order before passing it to RLSSM, e.g. "
+            f"data.sort_values(['{participant_col}', 'trial_id'], kind='stable') "
+            "with your trial-order column in place of 'trial_id', or, if the "
+            "rows are already in trial order within each participant, "
+            f"data.sort_values('{participant_col}', kind='stable'). "
+            "The default sort is not stable and scrambles the order of trials "
+            "within participants."
         )
 
     return int(len(counts)), int(counts.iloc[0])

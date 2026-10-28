@@ -1,6 +1,6 @@
 [project]
 name = "HSSM"
-version = "0.5.0"
+version = "0.5.1"
 description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
@@ -34,6 +34,9 @@ dependencies = [
     "numpy>=2.4.0,<2.5.0",
     "numpyro>=0.20",
     "onnx>=1.16.0",
+    # Imported directly throughout hssm; 6.3.0 is the first release where nuts={"jitter": False}
+    # reaches sample_jax_nuts (pymc#8380), which replaced HSSM's monkeypatch of pymc.sampling.jax.
+    "pymc>=6.3.0",
     # Direct import in hssm.plotting (gaussian_kde, chi2), not merely transitive via pymc.
     "scipy>=1.10",
     "ssm-simulators>=0.14.0",
@@ -47,6 +50,7 @@ repository = "https://github.com/lnccbrown/HSSM"
 [project.optional-dependencies]
 cuda12 = ["jax[cuda12]>=0.7.0"]
 cuda13 = ["jax[cuda13]>=0.7.0"]
+tracking = ["mlflow>=3.14.0", "pyarrow>=20.0.0"]
 
 [dependency-groups]
 dev = [
@@ -63,7 +67,8 @@ dev = [
     "onnxruntime>=1.27.0",
     "ruff>=0.16.1",
     "pytest>=9.1.1",
-    "pyrefly>=1.2.0",
+    "pyrefly>=1.3.2",
+    "hssm[tracking]",
 ]
 
 notebook = [
@@ -80,7 +85,8 @@ notebook = [
     "onnxruntime>=1.27.0",
     "ptpython>=3.0.29",
     "pyarrow>=20.0.0",
-    "lanfactory>=0.7.0",
+    # 0.9.0 is the first release whose trainers run under pandas 3 (LANfactory#140).
+    "lanfactory>=0.9.0",
     "zeus-mcmc>=2.5.4",
     "bayesflow>=2.0.12",
     "keras>=3.12",
@@ -229,15 +235,17 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 log_cli = true
-log_cli_level = "INFO" # set minimum log level for console output
+# WARNING keeps the live log readable; the slow CI path raises it to INFO for
+# the per-test RSS lines (run_tests.yml). Coverage is opt-in: pass --cov=src/hssm
+# explicitly (coverage.yml does), so plain runs are not instrumented.
+log_cli_level = "WARNING"
+# Reruns are untimed: pytest-timeout arms one timer per test, not per attempt.
+# Add --rerun-except=pytest-timeout once test_addm_waic_loo is well under 600 s (#1074).
 addopts = [
-    "--cov=.",
-    "--cov-report=term-missing",
-    "--cov-report=xml",
-    "--exitfirst",
-    "--capture=no",
-    "--timeout=360",
-    "--reruns=2",
+    "--durations=50",
+    "--durations-min=1",
+    "--timeout=600",
+    "--reruns=1",
     "--reruns-delay=5",
 ]
 markers = [
@@ -264,3 +272,6 @@ hssm = { workspace = true }
 preset = "legacy"
 project-includes = ["src/hssm"]
 ignore-missing-imports = ["*"]
+# pyrefly >=1.3's legacy preset turns packages without py.typed (pymc, bambi,
+# pandas, seaborn, ...) into Any; keep type-checking HSSM's calls into them.
+replace-untyped-imports-with-any = []

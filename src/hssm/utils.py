@@ -178,13 +178,17 @@ def _compute_log_likelihood(
 
     required_kwargs = {
         "model": model,
-        "posterior": dt["posterior"],
+        # `.children[...]` is typed as DataTree; `dt[...]` is DataTree | DataArray
+        "posterior": dt.children["posterior"],
         "data": data,
         "compile_mode": compile_mode,
     }
 
     if not model.family:
         raise ValueError("Model family is not defined. Cannot compute log-likelihood.")
+    # bambi annotates `posterior` as a DataArray, but a DataTree's "posterior"
+    # child is itself a DataTree, which is what it is handed and handles.
+    # pyrefly: ignore[bad-argument-type]
     log_likelihood_out = log_likelihood(model.family, **required_kwargs).to_dataset(
         name=response_aliased_name
     )
@@ -206,7 +210,7 @@ def _compute_log_likelihood(
 def log_likelihood(
     family: bmb.Family,
     model: bmb.Model,
-    posterior: xr.DataArray,
+    posterior: xr.Dataset | xr.DataTree,
     data: pd.DataFrame | None = None,
     compile_mode: str | None = None,
     **kwargs,
@@ -221,9 +225,9 @@ def log_likelihood(
     ----------
     model : bambi.Model
         The model
-    posterior : xr.Dataset
-        The xarray dataset that contains the draws for
-        all the parameters in the posterior.
+    posterior : xr.Dataset | xr.DataTree
+        The xarray dataset (or the `posterior` group of a DataTree) that
+        contains the draws for all the parameters in the posterior.
         It must contain the parameters that are needed
         in the distribution of the response, or
         the parameters that allow to derive them.
@@ -630,58 +634,6 @@ class SuppressOutput:
         self._stderr_context.__exit__(exc_type, exc_value, traceback)
         self._null_file.close()
         logging.disable(logging.NOTSET)  # Re-enable logging
-
-
-@contextlib.contextmanager
-def _force_jax_nuts_no_jitter(active: bool = True):
-    """Temporarily disable the JAX-NUTS initial-value jitter inside ``pm.sample``.
-
-    PyMC 6's ``pm.sample(nuts_sampler="numpyro"|"blackjax")`` always calls
-    ``pymc.sampling.jax.sample_jax_nuts`` with its default ``jitter=True`` and exposes
-    no supported way to turn it off (passing ``jitter`` via ``nuts=`` routes it into the
-    NumPyro/BlackJAX *kernel* and raises ``TypeError``). HSSM applies its own controlled
-    jitter to the initial values (``initval_jitter``, default 0.01), so the sampler's
-    extra ``uniform(-1, 1)`` jitter is unwanted. Because ``pymc.sampling.mcmc`` resolves
-    the sampler as a module attribute at call time, temporarily replacing that attribute
-    with a wrapper that forces ``jitter=False`` is picked up by ``pm.sample``.
-
-    Parameters
-    ----------
-    active
-        When ``False`` the context manager is a no-op (used for the non-JAX samplers).
-        This lets callers wrap the ``fit`` call unconditionally without importing
-        ``contextlib`` themselves. Defaults to ``True``.
-
-    Notes
-    -----
-    If a future PyMC release removes or renames ``sample_jax_nuts``, the context manager
-    degrades to a no-op instead of raising.
-    """
-    if not active:
-        yield
-        return
-
-    try:
-        import pymc.sampling.jax as pymc_jax
-    except ImportError:  # pragma: no cover - jax extras always present in HSSM
-        yield
-        return
-
-    original = getattr(pymc_jax, "sample_jax_nuts", None)
-    if original is None:  # pragma: no cover - guards a future pymc refactor
-        yield
-        return
-
-    @functools.wraps(original)
-    def _no_jitter_sample_jax_nuts(*args, **kwargs):
-        kwargs["jitter"] = False
-        return original(*args, **kwargs)
-
-    pymc_jax.sample_jax_nuts = _no_jitter_sample_jax_nuts
-    try:
-        yield
-    finally:
-        pymc_jax.sample_jax_nuts = original
 
 
 def annotate_function(**kwargs):

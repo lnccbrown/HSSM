@@ -10,17 +10,34 @@ from __future__ import annotations
 
 import importlib
 import logging
+from copy import deepcopy
 from dataclasses import MISSING, dataclass, field, fields
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, get_args
+
+from .._types import LoglikKind
 
 if TYPE_CHECKING:
-    from .._types import LoglikKind, SupportedModels
-    from ..config import ModelConfig
+    from .._types import NDTEdgeShift, SupportedModels
 
-from ..config import DEFAULT_SSM_CHOICES, DEFAULT_SSM_OBSERVED_DATA, BaseModelConfig
+from ..config import (
+    DEFAULT_SSM_CHOICES,
+    DEFAULT_SSM_OBSERVED_DATA,
+    BaseModelConfig,
+    ModelConfig,
+    _validate_ndt_edge_shift,
+)
 from ..utils import annotate_function
 
 _logger = logging.getLogger("hssm")
+
+
+def _validate_decision_process_loglik_kind(kind: str) -> None:
+    """Raise unless *kind* is one of HSSM's likelihood kinds."""
+    kinds = list(get_args(LoglikKind))
+    if kind not in kinds:
+        raise ValueError(
+            f"decision_process_loglik_kind must be one of {kinds}, got {kind!r}."
+        )
 
 
 @dataclass
@@ -36,9 +53,18 @@ class RLSSMConfig(BaseModelConfig):
       parameter is specified (see below).
     - ``decision_process``: the name (string) or `ModelConfig` instance
       that identifies the SSM decision process (e.g. ``"ddm"``, ``"angle"``).
-    - ``decision_process_loglik_kind`` / ``learning_process_kind``: string
-      tags that record which kind of likelihood and which kind of learning rule
-      are used (e.g. ``"approx_differentiable"`` / ``"blackbox"``).
+    - ``decision_process_loglik_kind``: which likelihood of the decision
+      process is used (e.g. ``"approx_differentiable"`` or ``"analytical"``).
+      `from_ssms_model` and `hssm.rl.get_rlssm_model_config` build the
+      decision process from it; on a hand-built config it only records it.
+    - ``learning_process_kind``: a string tag recording the kind of learning
+      rule (e.g. ``"blackbox"``).
+    - ``ndt_edge_shift``: the decision process's declaration of which
+      parameter shifts the lower edge of the response-time support and by
+      how much (``{"param": "st", "scale": 0.5}`` floors the log-likelihood
+      at ``t - 0.5 * st`` instead of ``t``). It travels with the decision
+      process (see ``register_ssm``) and has the same meaning as
+      ``Config.ndt_edge_shift``; ``None`` keeps the edge at ``t``.
 
     ssm_logp_func:
         A JAX function decorated with ``@annotate_function``.  It must carry:
@@ -93,6 +119,8 @@ class RLSSMConfig(BaseModelConfig):
     decision_process: str | "ModelConfig" = field(kw_only=True)
     learning_process: dict[str, Any] = field(kw_only=True)
     ssm_logp_func: Any = field(default=None, kw_only=True)
+    # Declared by the decision process; same meaning as Config.ndt_edge_shift.
+    ndt_edge_shift: NDTEdgeShift | None = field(default=None, kw_only=True)
 
     # Private metadata attached by from_ssms_model(); not constructor arguments.
     _ssms_model_config: Any = field(default=None, init=False, repr=False)
@@ -109,6 +137,11 @@ class RLSSMConfig(BaseModelConfig):
                 "RLSSMConfig: loglik_kind not specified; "
                 "defaulting to 'approx_differentiable'."
             )
+        # A ModelConfig decision process brings its own declaration along.
+        if self.ndt_edge_shift is None and isinstance(
+            self.decision_process, ModelConfig
+        ):
+            self.ndt_edge_shift = deepcopy(self.decision_process.ndt_edge_shift)
 
     @classmethod
     def from_defaults(  # noqa: D102
@@ -152,6 +185,7 @@ class RLSSMConfig(BaseModelConfig):
             bounds=config_dict.get("bounds", {}),
             decision_process_loglik_kind=config_dict["decision_process_loglik_kind"],
             learning_process_kind=config_dict["learning_process_kind"],
+            ndt_edge_shift=config_dict.get("ndt_edge_shift"),
         )
 
         def _get_or_warn(key: str, default: Any) -> None:
@@ -174,7 +208,7 @@ class RLSSMConfig(BaseModelConfig):
         model: str | Any,
         *,
         backend: Literal["auto", "jax"] = "jax",
-        decision_process_loglik_kind: str = "approx_differentiable",
+        decision_process_loglik_kind: LoglikKind = "approx_differentiable",
     ) -> "RLSSMConfig":
         """Build an HSSM RLSSM config from a canonical ``ssms.rl`` model.
 
@@ -183,7 +217,8 @@ class RLSSMConfig(BaseModelConfig):
         the decision-process SSM log-likelihood and inference. The learning
         recursion (and the ``response_to_choice`` mapping) is taken from the ssms
         assembled participant function; the decision-process SSM logp is built
-        HSSM-side from ``hssm.modelconfig`` + ONNX via :mod:`hssm.rl.registry`.
+        HSSM-side from the ``hssm.modelconfig`` likelihood of the requested kind
+        (an ONNX network, or a declared ``jax_loglik``) via :mod:`hssm.rl.registry`.
 
         Parameters
         ----------
@@ -194,8 +229,9 @@ class RLSSMConfig(BaseModelConfig):
             Learning backend requested from ssms; must yield gradient support.
             Defaults to ``"jax"``.
         decision_process_loglik_kind
-            Loglik kind for the HSSM decision process. Defaults to
-            ``"approx_differentiable"``.
+            Which likelihood of the decision process to use: ``"analytical"``
+            for the exact DDM, or the default ``"approx_differentiable"`` (the
+            LAN). Only that kind's likelihood is built.
 
         Returns
         -------
@@ -227,13 +263,22 @@ class RLSSMConfig(BaseModelConfig):
         computed_functions = _make_ssms_computed_functions(assembled)
 
         # Decision-process SSM logp is owned by HSSM: reuse the registry's
-        # modelconfig+ONNX builder, then attach the ssms-derived computed funcs.
+        # modelconfig builder (an ONNX network or a declared jax_loglik), then
+        # attach the ssms-derived computed funcs.
         # Local import avoids a config <-> registry import cycle.
         from . import registry  # noqa: PLC0415
 
-        ssm_base_logp_func = registry._get_ssm_logp(assembled.decision_process)
+        _validate_decision_process_loglik_kind(decision_process_loglik_kind)
+        ssm_base_logp_func = registry._get_ssm_logp(
+            assembled.decision_process, decision_process_loglik_kind
+        )
         ssm_logp_func = registry._build_ssm_logp_func(
             ssm_base_logp_func, computed_functions
+        )
+        # The spec lookup is lazy (no ONNX load); it carries the backbone's
+        # support-edge declaration, which the learning kernel knows nothing of.
+        decision_process_spec = registry._get_decision_process_spec(
+            assembled.decision_process, decision_process_loglik_kind
         )
 
         config = cls.from_rlssm_dict(
@@ -246,6 +291,7 @@ class RLSSMConfig(BaseModelConfig):
                 "decision_process": assembled.decision_process,
                 "learning_process": computed_functions,
                 "ssm_logp_func": ssm_logp_func,
+                "ndt_edge_shift": decision_process_spec.get("ndt_edge_shift"),
                 "response": list(assembled.response),
                 "choices": tuple(assembled.choices),
                 # ssms exposes task/design columns (feedback, condition, block,
@@ -318,6 +364,10 @@ class RLSSMConfig(BaseModelConfig):
                     "Every parameter in `list_params` must have a corresponding "
                     "entry in `bounds`."
                 )
+
+        # list_params holds the sampled parameters only, so a declaration that
+        # names a parameter the learning process computes is rejected here too.
+        _validate_ndt_edge_shift(self.ndt_edge_shift, self.list_params)
 
     def get_defaults(  # noqa: D102
         self, param: str
