@@ -2,7 +2,7 @@
 
 import logging
 from itertools import product
-from typing import TYPE_CHECKING, Any, Iterable, Literal, cast
+from typing import Any, Iterable, Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,12 +10,10 @@ import pandas as pd
 import seaborn as sns
 import xarray as xr
 from matplotlib.axes import Axes
+from matplotlib.lines import Line2D
 from matplotlib.patches import Ellipse
 from scipy.stats import chi2
 from seaborn import FacetGrid
-
-if TYPE_CHECKING:
-    from matplotlib.lines import Line2D
 
 from .utils import (
     _check_groups_and_groups_order,
@@ -252,10 +250,13 @@ def _plot_quantile_probability_1D(
 
             # Get the color mapping from the current plot
             # The line plot has already been created, so we can extract colors from it
+            # Only lines carry the quantile colors; the axes may already hold other
+            # labelled artists (e.g. the bands of `plot_predictive`)
             handles, labels = ax.get_legend_handles_labels()
             color_map = {
-                label: cast("Line2D", handle).get_color()
+                label: handle.get_color()
                 for handle, label in zip(handles, labels)
+                if isinstance(handle, Line2D)
             }
 
             # Group by quantile, condition, and x-value
@@ -322,6 +323,17 @@ def _plot_quantile_probability_1D(
                             **ellipse_kwargs,
                         )
                         ax.add_patch(ellipse)
+                        # add_patch bounds a rotated ellipse by its Bezier segment
+                        # endpoints only; add its exact extents to the data limits
+                        ax.update_datalim(
+                            ellipse.get_path()
+                            .get_extents(ellipse.get_patch_transform())
+                            .get_points()
+                        )
+
+            # add_patch does not rescale the view, so rescale it to include the
+            # ellipses (limits the user fixed before the call are kept)
+            ax.autoscale_view()
 
     ticks_and_labels = (
         df_data.groupby(x, observed=True)[cond].first().reset_index(x, drop=False)
