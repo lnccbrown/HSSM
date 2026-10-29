@@ -85,7 +85,7 @@ nav:
           - Integrate a BayesFlow LRE (JAX callable): tutorials/bayesflow_lre_integration.ipynb
           - Use the analytical DDM in an RLSSM: how_to/rlssm_analytical_ddm.ipynb
           - Use the low-level API with PyMC: tutorials/pymc.ipynb
-          - Compile a log-likelihood function: tutorials/compile_logp.ipynb
+          - Compile a log-posterior function: tutorials/compile_logp.ipynb
       - Contributing to HSSM:
           - Developing locally: local_development.md
           - Contribution guide: CONTRIBUTING.md

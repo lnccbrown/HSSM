@@ -692,8 +692,6 @@ def make_distribution(
     else:
         raise ValueError(f"rv is {rv}, which is not a valid type.")
 
-    # random_variable = make_ssm_rv(rv, list_params, lapse)
-    # if isinstance(rv, str) else rv
     extra_fields = [] if extra_fields is None else extra_fields
 
     # Pre-build PyTensor tensors for fixed-vector params. These replace the
