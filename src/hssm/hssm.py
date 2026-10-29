@@ -473,18 +473,19 @@ class HSSM(HSSMBase):
                     + ".onnx"
                 )
 
-            _check_missing_data_network_input_width(
-                self.loglik_missing_data,
-                self.missing_data_network,
-                n_params=len(params_is_trialwise),
-            )
-
             backend_tmp: Literal["pytensor", "jax", "other"] | None = (
                 "jax"
                 if self.model_config.backend != "pytensor"
                 else self.model_config.backend
             )
+            # The width check loads the network too, so it must run under the
+            # missing-data role or tracking records it as the likelihood.
             with tracking.network_role(tracking.MISSING_DATA_ROLE):
+                _check_missing_data_network_input_width(
+                    self.loglik_missing_data,
+                    self.missing_data_network,
+                    n_params=len(params_is_trialwise),
+                )
                 missing_data_callable = make_missing_data_callable(
                     self.loglik_missing_data,
                     backend_tmp,
