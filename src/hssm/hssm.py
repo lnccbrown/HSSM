@@ -86,7 +86,7 @@ def _check_missing_data_network_input_width(
     label, last_input = _MISSING_DATA_NETWORK_LAST_INPUT[network]
     raise ValueError(
         f"{label} artifacts take {last_input} as their last input since HSSM "
-        f"0.6.0 (input width n_params + 1 = {expected}); this network has input "
+        f"0.5.1 (input width n_params + 1 = {expected}); this network has input "
         f"width {width}. See https://github.com/lnccbrown/HSSM/issues/1324."
     )
 

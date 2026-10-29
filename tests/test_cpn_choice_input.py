@@ -1,6 +1,6 @@
 """The choice-probability network (CPN) input contract (lnccbrown/HSSM#1324).
 
-Since HSSM 0.6.0 a CPN takes the observed choice as its last input,
+Since HSSM 0.5.1 a CPN takes the observed choice as its last input,
 ``[theta..., choice] -> log P(choice | theta)``, exactly like an OPN takes the
 deadline, ``[theta..., deadline]``. HSSM passes each missing-RT row's
 ``response`` to the network, coded as in ``model_config.choices``. These tests
@@ -36,7 +36,7 @@ THETA = dict(v=0.5, a=1.5, z=0.5, t=0.3)
 FLOOR = 1e-29
 WIDTH_MESSAGE = (
     r"CPN artifacts take the observed choice as their last input since HSSM "
-    r"0\.6\.0 \(input width n_params \+ 1 = 5\); this network has input width 4\. "
+    r"0\.5\.1 \(input width n_params \+ 1 = 5\); this network has input width 4\. "
     r"See https://github\.com/lnccbrown/HSSM/issues/1324\."
 )
 
@@ -69,7 +69,7 @@ def _simulated_missing_data(n_trials: int = 40, n_missing: int = 6) -> pd.DataFr
 
 
 def _write_params_only_graph(path: Path, width: int = 4, batch: int | str = 1) -> Path:
-    """A hand-built ``(batch, width)`` Gemm graph: the pre-0.6.0 params-only CPN.
+    """A hand-built ``(batch, width)`` Gemm graph: the pre-0.5.1 params-only CPN.
 
     A string ``batch`` produces a symbolic first dimension.
     """

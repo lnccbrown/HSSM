@@ -1,35 +1,5 @@
 # Changelog
 
-### 0.6.0
-
-This version includes the following changes:
-
-1. **Choice-probability networks (CPNs) receive the observed choice as their last input** (#1324). Missing-RT rows (`rt == -999.0`, no deadline) are now scored by the CPN on `[θ…, extra_fields…, choice] -> log P(choice | θ)`, the same layout the omission network already uses with the deadline (`[θ…, deadline]`), so both networks have input width `n_params + 1`. HSSM passes each missing row's `response` exactly as coded in `choices`, and missing rows whose response is not a valid choice now raise a clear `ValueError`. The lapse term on these rows is unchanged from 0.5.1 (`1 / n_choices`). The test fixture `tests/fixtures/ddm_cpn.onnx` was regenerated from the DDM LAN fixture with the choice as its last input column; its provenance (source LAN, derivation settings, training summary) is recorded in `tests/fixtures/ddm_cpn.provenance.json`.
-
-#### Breaking changes that require migration:
-
-1. **CPN input contract is `[θ…, choice]`** (#1324). Previously a CPN was called with the
-   parameters only (input width `n_params`) and had to encode, by a convention invisible to
-   HSSM, *which* choice's probability it returned. A network trained to that convention is now
-   rejected when the model is built, with a message pointing to
-   [#1324](https://github.com/lnccbrown/HSSM/issues/1324):
-
-   ```text
-   CPN artifacts take the observed choice as their last input since HSSM 0.6.0
-   (input width n_params + 1 = 5); this network has input width 4.
-   ```
-
-   The new contract works for any choice coding and any number of choices, and removes the
-   hidden category: the network returns the probability of the choice it is handed. To migrate,
-   retrain the CPN on a corpus whose last input column is the choice (the `[θ…, choice]` rows,
-   labelled with `P(choice | θ)`); LANfactory's trainers export the matching single-trial ONNX,
-   and tooling that derives such a corpus from a trained LAN is being added there (tracked in
-   [#1324](https://github.com/lnccbrown/HSSM/issues/1324)). The `hssm.HSSM(...)` API always passes
-   the choice; when assembling likelihoods yourself with
-   `hssm.distribution_utils.assemble_callables(..., params_only=True)`, a params-only callable is
-   still accepted and is then invoked as `f(None, *params)`. No CPN artifact was ever published on
-   the `franklab/HSSM` Hub repository, so only user-trained networks are affected.
-
 ### 0.5.1
 
 This version includes the following changes:
@@ -67,6 +37,32 @@ This version includes the following changes:
 16. **`plot_quantile_probability` with ellipses no longer fails on other legend entries or cuts off ellipses** (closes #1430, closes #1431). With `predictive_style="ellipse"` or `"both"`, the ellipse colours were read from every legend entry in the axes, so drawing into axes that already held, for example, the bands of `plot_predictive` (which `plt.gca()` returns right after a `plot_predictive` call in a script or marimo) failed with `AttributeError: 'FillBetweenPolyCollection' object has no attribute 'get_color'`; only lines are read now. The ellipses were also added without rescaling the view, which stayed fitted to the observed quantiles and cut off ellipses reaching beyond them; the view now includes them, and axis limits you set before the call are kept.
 
 17. **The lapse mixture no longer drops the lapse mass on missing-RT and omission rows** (closes #1322). The lapse mixture evaluated the lapse RT density at the `-999.0` placeholder of every missing-RT and deadline row, so the default `Uniform(0, 20)` lapse contributed `-inf` (no lapse mass at all) and other lapse priors contributed a meaningless finite value, biasing `p_outlier` and the SSM parameters whenever such rows were present. The lapse term is now marginalised like the SSM term: observed rows keep the lapse density at `rt`, missing-RT rows (choice observed, no deadline) use `1 / n_choices`, and omission rows use the lapse survival probability at the deadline, `1 - CDF_lapse(deadline)`. Lapse priors without a PyMC `logcdf` now raise a clear error on deadline data. The missing `1 / n_choices` factor on observed rows is tracked separately in #1323. Refit any model with a lapse (`p_outlier`, 0.05 by default) whose data has missing-RT or deadline rows.
+
+18. **Choice-probability networks (CPNs) receive the observed choice as their last input** (closes #1324). Missing-RT rows (`rt == -999.0`, no deadline) are now scored by the CPN on `[θ…, extra_fields…, choice] -> log P(choice | θ)`, the same layout the omission network already uses with the deadline (`[θ…, deadline]`), so both networks have input width `n_params + 1`. HSSM passes each missing row's `response` exactly as coded in `choices`, and missing rows whose response is not a valid choice now raise a clear `ValueError`. The lapse term on these rows is the `1 / n_choices` of item 17. The test fixture `tests/fixtures/ddm_cpn.onnx` was regenerated from the DDM LAN fixture with the choice as its last input column; its provenance (source LAN, derivation settings, training summary) is recorded in `tests/fixtures/ddm_cpn.provenance.json`.
+
+#### Breaking changes that require migration:
+
+1. **CPN input contract is `[θ…, choice]`** (#1324). Previously a CPN was called with the
+   parameters only (input width `n_params`) and had to encode, by a convention invisible to
+   HSSM, *which* choice's probability it returned. A network trained to that convention is now
+   rejected when the model is built, with a message pointing to
+   [#1324](https://github.com/lnccbrown/HSSM/issues/1324):
+
+   ```text
+   CPN artifacts take the observed choice as their last input since HSSM 0.5.1
+   (input width n_params + 1 = 5); this network has input width 4.
+   ```
+
+   The new contract works for any choice coding and any number of choices, and removes the
+   hidden category: the network returns the probability of the choice it is handed. To migrate,
+   retrain the CPN on a corpus whose last input column is the choice (the `[θ…, choice]` rows,
+   labelled with `P(choice | θ)`); LANfactory's trainers export the matching single-trial ONNX,
+   and tooling that derives such a corpus from a trained LAN is being added there (tracked in
+   [#1324](https://github.com/lnccbrown/HSSM/issues/1324)). The `hssm.HSSM(...)` API always passes
+   the choice; when assembling likelihoods yourself with
+   `hssm.distribution_utils.assemble_callables(..., params_only=True)`, a params-only callable is
+   still accepted and is then invoked as `f(None, *params)`. No CPN artifact was ever published on
+   the `franklab/HSSM` Hub repository, so only user-trained networks are affected.
 
 ### 0.5.0
 
