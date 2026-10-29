@@ -12,7 +12,8 @@ own PyMC models, they can use these functions to create `pm.Distribution` and
         - download_hf
         - load_onnx_model
         - make_distribution
-        - make_ssm_rv
+        - make_distribution_for_supported_model
+        - make_hssm_rv
         - make_family
         - make_likelihood_callable
         - make_missing_data_callable
