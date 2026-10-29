@@ -91,6 +91,8 @@ model.sample()
 
     **Capstone:** [A complete scientific workflow](tutorials/scientific_workflow_hssm.ipynb) — one dataset, start to finish.
 
+    *Fitting several models?* [Track fits with MLflow](how_to/track_with_mlflow.md) keeps a record of each one — settings, diagnostics and traces — so a study stays legible weeks later.
+
     *Want every option?* Take the optional [scenic route](tutorials/main_tutorial_scenic_route.ipynb) through model families, priors, regressions, hierarchies, comparison, and low-level extensions.
 
     *Used HDDM before?* [Coming from HDDM](explanations/coming_from_hddm.md) maps what you know onto HSSM.
@@ -136,6 +138,8 @@ ownership boundaries, contributor routes, and the complete site directory.
   black-box Python function.
 - Built on PyMC, Bambi, and ArviZ, so the wider Python Bayesian ecosystem
   applies directly.
+- Optional run tracking, so every fit leaves a record of the model, the sampler
+  settings, the diagnostics and the traces behind it.
 
 ## Citation
 
