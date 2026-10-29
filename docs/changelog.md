@@ -40,6 +40,32 @@ This version includes the following changes:
 
 18. **Documentation: `compile_logp()` returns the log-posterior; `distribution_utils` API page fixed** (closes #1436). `HSSM.compile_logp()` compiles the model's log-prior plus log-likelihood, plus any Bambi `potentials` (the unnormalized log-posterior), as a function of natural-scale parameter values, not the log-likelihood alone; the tutorial, renamed "Compile a log-posterior function", and the method's docstring now say so. It also gives `pip install zeus-mcmc` for `zeus`: `hssm[notebook]` installs no `zeus`, since `notebook` is a dependency group, not an extra. The `distribution_utils` API page now lists `make_hssm_rv` in place of the nonexistent `make_ssm_rv`, and adds `make_distribution_for_supported_model`.
 
+19. **Choice-probability networks (CPNs) receive the observed choice as their last input** (closes #1324). Missing-RT rows (`rt == -999.0`, no deadline) are now scored by the CPN on `[θ…, extra_fields…, choice] -> log P(choice | θ)`, the same layout the omission network already uses with the deadline (`[θ…, deadline]`), so both networks have input width `n_params + 1`. HSSM passes each missing row's `response` exactly as coded in `choices`, and missing rows whose response is not a valid choice now raise a clear `ValueError`. The lapse term on these rows is the `1 / n_choices` of item 17. The test fixture `tests/fixtures/ddm_cpn.onnx` was regenerated from the DDM LAN fixture with the choice as its last input column; its provenance (source LAN, derivation settings, training summary) is recorded in `tests/fixtures/ddm_cpn.provenance.json`.
+
+#### Breaking changes that require migration:
+
+1. **CPN input contract is `[θ…, choice]`** (#1324). Previously a CPN was called with the
+   parameters only (input width `n_params`) and had to encode, by a convention invisible to
+   HSSM, *which* choice's probability it returned. A network trained to that convention is now
+   rejected when the model is built, with a message pointing to
+   [#1324](https://github.com/lnccbrown/HSSM/issues/1324):
+
+   ```text
+   CPN artifacts take the observed choice as their last input since HSSM 0.5.1
+   (input width n_params + 1 = 5); this network has input width 4.
+   ```
+
+   The new contract works for any choice coding and any number of choices, and removes the
+   hidden category: the network returns the probability of the choice it is handed. To migrate,
+   retrain the CPN on a corpus whose last input column is the choice (the `[θ…, choice]` rows,
+   labelled with `P(choice | θ)`); LANfactory's trainers export the matching single-trial ONNX,
+   and tooling that derives such a corpus from a trained LAN is being added there (tracked in
+   [#1324](https://github.com/lnccbrown/HSSM/issues/1324)). The `hssm.HSSM(...)` API always passes
+   the choice; when assembling likelihoods yourself with
+   `hssm.distribution_utils.assemble_callables(..., params_only=True)`, a params-only callable is
+   still accepted and is then invoked as `f(None, *params)`. No CPN artifact was ever published on
+   the `franklab/HSSM` Hub repository, so only user-trained networks are affected.
+
 ### 0.5.0
 
 This version includes the following changes:

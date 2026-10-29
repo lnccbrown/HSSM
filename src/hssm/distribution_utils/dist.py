@@ -967,8 +967,11 @@ def make_likelihood_callable(
         [rt, choice].  This is the standard case for LANs and other
         likelihoods that condition on observed data.
         If True, the callable signature is ``f(*params)`` with no data
-        argument.  This is used for Choice Probability Networks (CPNs)
-        and Outcome Probability Networks (OPNs).
+        argument, for networks that take only the parameters. CPN and OPN
+        artifacts do **not** use this: they take the observed choice (CPN)
+        or the deadline (OPN) as their last input, so ``data`` is the
+        corresponding single column and the input vector is
+        ``[*params, column]`` (see `make_missing_data_callable`).
         Defaults to None (treated as False).
     """
     if isinstance(loglik, pytensor.graph.Op):
@@ -1056,7 +1059,23 @@ def make_missing_data_callable(
 ) -> pytensor.graph.Op | Callable:
     """Make a secondary network for the likelihood function.
 
-    Please refer to the documentation of `make_likelihood_callable` for more.
+    The secondary network scores the rows whose RT is ``-999.0``. Its input
+    follows the single-trial convention of the main likelihood -- the model
+    parameters (in ``list_params`` order, without ``p_outlier``), then any
+    extra fields, then one data column **last** -- so its input width is
+    ``n_params + 1``:
+
+    - choice-probability network (CPN, no deadline):
+      ``[*params, choice] -> log P(choice | params)``; the data column is the
+      missing rows' ``response``, coded as in the model's ``choices``;
+    - omission-probability network (OPN, deadline):
+      ``[*params, deadline] -> log P(rt > deadline | params)``.
+
+    HSSM builds both with ``params_only=False``. ``params_only=True`` is only
+    for user-supplied callables that take the parameters alone; it is then
+    invoked as ``f(None, *params)`` by `assemble_callables`. See
+    lnccbrown/HSSM#1324 for the CPN contract and the documentation of
+    `make_likelihood_callable` for the remaining arguments.
     """
     # AF-TODO: Remove this once clear that it is actually not needed
     if backend == "jax":
@@ -1099,9 +1118,16 @@ def assemble_callables(
     missing_data_callable
         The callable for the secondary network for the likelihood function.
     params_only
-        Whether the missing data likelihood is takes its first argument as the data.
+        Whether the missing-data likelihood takes only the model parameters
+        (``f(None, *params)``). When ``False`` it takes a data column as its
+        first argument: the deadline column when ``has_deadline`` is ``True``
+        (omission networks, OPN), the response column otherwise
+        (choice-probability networks, CPN). ONNX CPN/OPN artifacts consumed
+        by HSSM always take that column as their last input, so HSSM passes
+        ``params_only=False`` for both; ``True`` remains available for
+        user-supplied callables that take only parameters.
     has_deadline
-        Whether the model has a deadline.
+        Whether the last column of the data holds a per-trial deadline.
     params_is_trialwise : optional
         A list of booleans, one per entry in ``dist_params`` (model params +
         extra fields, excluding p_outlier), indicating whether each input is
@@ -1144,7 +1170,6 @@ def assemble_callables(
             raise ValueError("No missing data in the data.")
 
         observed_data = data[n_missing:, :]
-        missing_data = data[:n_missing, -1:]
 
         dist_params_observed = [
             param[n_missing:] if param.ndim >= 1 else param for param in dist_params
@@ -1155,21 +1180,22 @@ def assemble_callables(
         ]
 
         if has_deadline:
+            # Omission rows: the OPN takes the deadline (last column) as its
+            # last input, [theta..., deadline] -> log P(rt > deadline | theta).
             logp_observed = callable(observed_data[:, :-1], *dist_params_observed)
-            logp_missing = missing_data_callable(missing_data, *dist_params_missing)
+            missing_data = data[:n_missing, -1:]
         else:
-            if not params_only:
-                raise ValueError(
-                    "When `has_deadline` is False, `params_only` must be True. \n"
-                    "The provided settings are inconsistent."
-                )
+            # Missing-RT rows: the CPN takes the observed choice (response
+            # column) as its last input, [theta..., choice] -> log P(choice |
+            # theta). See lnccbrown/HSSM#1324.
             logp_observed = callable(observed_data, *dist_params_observed)
-            logp_missing = missing_data_callable(None, *dist_params_missing)
+            missing_data = data[:n_missing, 1:2]
 
-        # if has_deadline:
-        #     logp_missing = missing_data_callable(missing_data, *dist_params_missing)
-        # else:
-        # logp_missing = missing_data_callable(None, *dist_params_missing)
+        if params_only:
+            # User-supplied callables that take only the parameters.
+            logp_missing = missing_data_callable(None, *dist_params_missing)
+        else:
+            logp_missing = missing_data_callable(missing_data, *dist_params_missing)
 
         logp = pt.empty_like(data[:, 0], dtype=pytensor.config.floatX)
         logp = pt.set_subtensor(logp[n_missing:], logp_observed)

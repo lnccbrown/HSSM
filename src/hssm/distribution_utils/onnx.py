@@ -60,8 +60,11 @@ def make_jax_logp_funcs_from_onnx(
         standard case for LANs and other likelihoods that condition on
         observed data.
         If True, the callable signature is ``f(*params)`` with no data
-        argument.  This is used for Choice Probability Networks (CPNs)
-        and Outcome Probability Networks (OPNs).
+        argument, for networks that take only the parameters. CPN and OPN
+        artifacts do **not** use this: they take the observed choice
+        (CPN) or the deadline (OPN) as their last input, so ``data`` is
+        the corresponding single column and the input vector is
+        ``[*params, column]``.
     return_jit
         If `True`, the function will return a JIT-compiled version of the vectorized
         logp function, its VJP, and the non-jitted version of the logp function.
