@@ -32,13 +32,7 @@ from typing import get_args
 # Pinned exactly: a new mismatch fails this test, and so does *fixing* one
 # without removing it here — which is the point. A silently-growing waiver
 # list is how this kind of drift becomes permanent.
-KNOWN_MISMATCHES = {
-    # HSSM allows z in (0, 1) while ddm.onnx was trained on [0.1, 0.9], so the
-    # sampler can explore 20% of the interval where the network extrapolates.
-    # Widening the training box or narrowing this bound is a user-facing
-    # change to the most-used model in the ecosystem; tracked separately.
-    ("ddm", "z"),
-}
+KNOWN_MISMATCHES: set[tuple[str, str]] = set()
 
 
 def _models_with_lan_bounds():
@@ -62,10 +56,10 @@ def test_declared_bounds_match_the_training_box():
             if param not in train:
                 continue
             train_lo, train_hi = train[param]
-            # The lower edge is conventionally rounded (0.001 -> 0.0); the
-            # upper edge and any real difference are not.
+            # No rounding of the lower edge: 0.0 for a trained 0.001 is still
+            # outside the box (#1440).
             mismatch = (
-                abs(declared_hi - train_hi) > 1e-6 or abs(declared_lo - train_lo) > 0.01
+                abs(declared_hi - train_hi) > 1e-6 or abs(declared_lo - train_lo) > 1e-6
             )
             if mismatch:
                 found.add((name, param))
@@ -196,10 +190,20 @@ def test_support_edge_guard_resolves_the_simulator_via_rv(monkeypatch):
         assert ("angle", None, shift) in _support_edge_mismatches()
 
 
-def test_ddm_sdv_sv_covers_the_full_trained_range():
-    # Regression: this was (0.0, 1.0) — written before any ddm_sdv.onnx
-    # existed — while training and the density gate both cover sv up to 2.5.
-    bounds = get_default_model_config("ddm_sdv")["likelihoods"][
-        "approx_differentiable"
-    ]["bounds"]
-    assert bounds["sv"] == (0.0, 2.5)
+@pytest.mark.parametrize(
+    ("model", "param", "expected"),
+    [
+        # sv was (0.0, 1.0), written before any ddm_sdv.onnx existed, while
+        # training and the density gate both cover sv up to 2.5.
+        ("ddm_sdv", "sv", (0.001, 2.5)),
+        # #1440: ddm.onnx was trained on z in [0.1, 0.9], not (0, 1); the
+        # ddm_sdv network on t, sv >= 0.001.
+        ("ddm", "z", (0.1, 0.9)),
+        ("ddm_sdv", "t", (0.001, 2.0)),
+    ],
+)
+def test_lan_bounds_pinned_to_the_training_box(model, param, expected):
+    bounds = get_default_model_config(model)["likelihoods"]["approx_differentiable"][
+        "bounds"
+    ]
+    assert bounds[param] == expected
