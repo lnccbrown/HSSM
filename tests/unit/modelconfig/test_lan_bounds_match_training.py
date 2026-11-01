@@ -40,6 +40,19 @@ KNOWN_MISMATCHES = {
     ("ddm", "z"),
 }
 
+# LAN support edges HSSM declares that do NOT match ssms', as the full
+# (model, hssm, ssms) row, with the reason. Pinned exactly, as above: a new
+# mismatch fails the test, and so does an exempted row that stops mismatching.
+KNOWN_EDGE_POLICIES = [
+    # ddm_normal_st's ndt kernel is an unbounded Normal(t, st), so the
+    # simulator has no support edge and ssms correctly declares none. HSSM
+    # floors the likelihood at t - 3 * st as a policy, not as a simulator
+    # edge: measured on 12 subjects x 300 trials, a floor at t - st gives
+    # rhat 3.39 / ESS 4, at t - 3 * st rhat 1.010 / ESS 697, and no floor
+    # rhat 1.010 / ESS 606.
+    ("ddm_normal_st", {"param": "st", "scale": 3.0}, None),
+]
+
 
 def _models_with_lan_bounds():
     for name in get_args(SupportedModels):
@@ -127,9 +140,12 @@ def test_declared_support_edge_matches_the_simulator():
     if not any("ndt_edge_shift" in mc for mc in ssms.config.model_config.values()):
         pytest.skip("installed ssms declares no ndt_edge_shift; nothing to compare")
     mismatched = _support_edge_mismatches()
-    assert not mismatched, (
-        "support edge drifted from the simulator (model, hssm, ssms):\n"
-        + "\n".join(f"  {row}" for row in mismatched)
+    new = [row for row in mismatched if row not in KNOWN_EDGE_POLICIES]
+    fixed = [row for row in KNOWN_EDGE_POLICIES if row not in mismatched]
+    assert not new and not fixed, (
+        "support edge drifted from the simulator (model, hssm, ssms).\n"
+        f"  newly mismatched: {new}\n"
+        f"  fixed (remove from KNOWN_EDGE_POLICIES): {fixed}"
     )
 
 
