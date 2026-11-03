@@ -507,7 +507,9 @@ def _rearrange_data(data: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarra
     if isinstance(data, pd.DataFrame):
         # `rt` need not be the first column, e.g. after a `participant_id` column.
         rt = data["rt"] if "rt" in data.columns else data.iloc[:, 0]
-        missing_indices = rt == -999.0
+        # `fillna`: with a nullable dtype, `pd.NA` compares to `pd.NA`, and such a row
+        # would fall out of both splits below.
+        missing_indices = (rt == -999.0).fillna(False)
         split_missing = data.loc[missing_indices, :]
         split_not_missing = data.loc[~missing_indices, :]
 

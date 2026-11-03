@@ -231,6 +231,19 @@ def test_rearrange_data_finds_rt_column_by_name():
     assert _rearrange_data(df).index.tolist() == [1, 3, 0, 2]
 
 
+def test_rearrange_data_keeps_rows_with_nullable_na_rt():
+    """A ``pd.NA`` in a nullable ``rt`` column does not drop the row."""
+    df = pd.DataFrame(
+        {
+            "participant_id": [0, 0, 0],
+            "rt": pd.array([0.5, -999.0, pd.NA], dtype="Float64"),
+            "response": [1.0, -1.0, 1.0],
+        }
+    )
+
+    assert _rearrange_data(df).index.tolist() == [1, 0, 2]
+
+
 def test_missing_data_loglik_does_not_depend_on_column_order(fixture_path):
     """The model log-density is the same wherever the ``rt`` column sits.
 
