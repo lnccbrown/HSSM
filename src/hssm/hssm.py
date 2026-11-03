@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import pymc as pm
 
+from hssm import tracking
 from hssm._types import LoglikKind, SupportedModels
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
@@ -67,12 +68,14 @@ class HSSM(HSSMBase):
         is passed, the model will be considered custom, in which case all
         `model_config`, `loglik`, and `loglik_kind` have to be provided by the user.
     choices : optional
-        When an `int`, the number of choices that the participants can make. If `2`, the
-        choices are [-1, 1] by default. If anything greater than `2`, the choices are
-        [0, 1, ..., n_choices - 1] by default. If a `list` is provided, it should be the
-        list of choices that the participants can make. Defaults to `2`. If any value
-        other than the choices provided is found in the "response" column of the data,
-        an error will be raised.
+        The choices that participants can make. An integer (Python `int` or numpy
+        integer) gives the number of choices: `2` means [-1, 1] and any `n > 2`
+        means [0, 1, ..., n - 1]. A `list` or `tuple` gives the choice values
+        directly. Ignored for supported models unless `model_config` is also passed,
+        and choices set in `model_config` take precedence. Defaults to `None`, which
+        uses the model's default choices (from ssm-simulators for custom models it
+        knows). If any value other than the choices provided is found in the
+        "response" column of the data, an error will be raised.
     include : optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
@@ -157,7 +160,11 @@ class HSSM(HSSMBase):
         be included in estimation.
     lapse : optional
         The lapse distribution. This argument is required only if `p_outlier` is not
-        `None`. Defaults to Uniform(0.0, 10.0).
+        `None`. Defaults to Uniform(0.0, 20.0). The lapse process is mixed into the
+        likelihood with weight `p_outlier`, marginalised per row type: observed
+        rows use the lapse density at the observed `rt`; missing-RT rows (choice
+        observed, no deadline) use `1 / n_choices`; omission rows (deadline) use
+        the lapse survival probability at the deadline.
     global_formula : optional
         A string that specifies a regressions formula which will be used for all model
         parameters. If you specify parameter-wise regressions in addition, these will
@@ -270,7 +277,7 @@ class HSSM(HSSMBase):
         self,
         data: pd.DataFrame,
         model: SupportedModels | str = "ddm",
-        choices: list[int] | None = None,
+        choices: int | np.integer | list[int] | tuple[int, ...] | None = None,
         include: list[dict[str, Any] | Any] | None = None,
         model_config: ModelConfig | dict | None = None,
         loglik: (
@@ -403,9 +410,13 @@ class HSSM(HSSMBase):
                 if self.model_config.backend != "pytensor"
                 else self.model_config.backend
             )
-            missing_data_callable = make_missing_data_callable(
-                self.loglik_missing_data, backend_tmp, params_is_trialwise, params_only
-            )
+            with tracking.network_role(tracking.MISSING_DATA_ROLE):
+                missing_data_callable = make_missing_data_callable(
+                    self.loglik_missing_data,
+                    backend_tmp,
+                    params_is_trialwise,
+                    params_only,
+                )
 
             self.loglik_missing_data = missing_data_callable
 
@@ -487,4 +498,6 @@ class HSSM(HSSMBase):
             # TODO: add to HSSMBase
             is_choice_only=self.is_choice_only,
             ndt_edge_shift=ndt_edge_shift,
+            n_choices=self.n_choices,
+            has_deadline=bool(self.deadline),
         )

@@ -61,6 +61,9 @@ class LoglikConfig(TypedDict):
     # posterior/prior predictive sampling, for models whose HSSM name differs
     # from their upstream simulator name. Defaults to the HSSM model name.
     rv: NotRequired[str]
+    # A JAX implementation of this same likelihood, f(data, *list_params) -> (N,),
+    # for callers that need JAX (the RLSSM registry); plain HSSM uses `loglik`.
+    jax_loglik: NotRequired[Callable[..., Any]]
 
 
 LoglikConfigs = dict[LoglikKind, LoglikConfig]

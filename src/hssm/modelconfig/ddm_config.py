@@ -1,5 +1,5 @@
 from .._types import DefaultConfig  # noqa: D100
-from ..likelihoods.analytical import ddm_bounds, ddm_params, logp_ddm
+from ..likelihoods.analytical import ddm_bounds, ddm_params, logp_ddm, logp_ddm_jax
 from ..likelihoods.blackbox import logp_ddm_bbox
 
 
@@ -23,6 +23,7 @@ def get_ddm_config() -> DefaultConfig:
             "analytical": {
                 "loglik": logp_ddm,
                 "backend": None,
+                "jax_loglik": logp_ddm_jax,
                 "bounds": ddm_bounds,
                 "default_priors": {
                     "t": {

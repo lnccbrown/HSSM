@@ -243,3 +243,66 @@ if __name__ == "__main__":
         fn()
         print(f"PASSED: {fn.__name__}")
     print("\nAll Commit 4 subclass checks passed.")
+
+
+def _addm_lapse_terms(model, p_outlier):
+    """Solve the mixture for the per-row lapse term at ``p_outlier``."""
+    import pymc as pm
+
+    data = model.data[model.response].to_numpy(dtype=float)
+    params = dict(
+        zip(
+            [name for name in model.list_params if name != "p_outlier"],
+            model.model_config.params_default,
+            strict=True,
+        )
+    )
+    dist = model.model_distribution
+    logp_p = pm.logp(dist.dist(**params, p_outlier=p_outlier), data).eval()
+    logp_0 = pm.logp(dist.dist(**params, p_outlier=0.0), data).eval()
+    assert np.all(np.isfinite(logp_p)) and np.all(np.isfinite(logp_0))
+    lapse_terms = (np.exp(logp_p) - (1.0 - p_outlier) * np.exp(logp_0)) / p_outlier
+    return data, lapse_terms
+
+
+def test_missing_data_lapse_uses_uniform_choice():
+    """aDDM(missing_data=True) builds under the default lapse (#1322).
+
+    Missing-RT rows contribute ``1 / n_choices`` to the lapse mixture; observed
+    rows keep the ``Uniform(0, 20)`` density.
+    """
+    df = make_addm_dataframe(30, seed=1)
+    df.loc[[0, 5, 9], "rt"] = -999.0
+
+    model = hssm.aDDM(data=df, missing_data=True)
+    assert np.isfinite(
+        model.pymc_model.compile_logp()(model.pymc_model.initial_point())
+    )
+
+    data, lapse_terms = _addm_lapse_terms(model, p_outlier=0.05)
+    is_missing = data[:, 0] == -999.0
+    assert is_missing.sum() == 3
+    np.testing.assert_allclose(lapse_terms[is_missing], 1.0 / model.n_choices)
+    np.testing.assert_allclose(lapse_terms[~is_missing], 1.0 / 20.0)
+
+
+def test_deadline_lapse_uses_survival_at_deadline():
+    """aDDM(deadline=True) builds under the default lapse (#1322).
+
+    Omission rows contribute the lapse survival ``1 - deadline / 20``.
+    """
+    df = make_addm_dataframe(30, seed=1)
+    df["deadline"] = 0.3
+    assert (df["rt"] >= 0.3).any()
+
+    model = hssm.aDDM(data=df, deadline=True)
+    assert model.response == ["rt", "response", "deadline"]
+    assert np.isfinite(
+        model.pymc_model.compile_logp()(model.pymc_model.initial_point())
+    )
+
+    data, lapse_terms = _addm_lapse_terms(model, p_outlier=0.05)
+    is_missing = data[:, 0] == -999.0
+    assert is_missing.any() and not is_missing.all()
+    np.testing.assert_allclose(lapse_terms[is_missing], 1.0 - 0.3 / 20.0)
+    np.testing.assert_allclose(lapse_terms[~is_missing], 1.0 / 20.0)

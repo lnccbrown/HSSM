@@ -310,6 +310,117 @@ def logp_ddm(
     return checked_logp
 
 
+def _jax_k_small(tt, err):
+    """JAX port of `k_small`."""
+    sqrt_tt = jnp.sqrt(tt)
+    ks = 2 + jnp.sqrt(-err * tt * (np.log(4) + np.log(τ) + jnp.log(tt)))
+    ks = jnp.maximum(ks, sqrt_tt + 1)
+    return jnp.where(2 * np.sqrt(τ) * sqrt_tt * err < 1, ks, 2)
+
+
+def _jax_k_large(tt, err):
+    """JAX port of `k_large`."""
+    sqrt_tt = jnp.sqrt(tt)
+    kl = jnp.sqrt(-2 * (np.log(π) + jnp.log(err) + jnp.log(tt))) / (π * sqrt_tt)
+    kl = jnp.maximum(kl, 1.0 / jnp.sqrt(π * sqrt_tt))
+    return jnp.where(π * tt * err < 1, kl, 1.0 / (π * sqrt_tt))
+
+
+def _jax_ftt01w(tt, w, err, k_terms):
+    """JAX port of `ftt01w`, taking the normalized times ``tt = rt / a**2``.
+
+    As in `compare_k`, `_jax_k_small` is NaN for ``tt > 1 / (8π)``; the NaN makes
+    the comparison False, which selects the large-time series. It never reaches a
+    gradient, because comparisons are not differentiated.
+    """
+    k = np.arange(-np.floor((k_terms - 1) / 2), np.ceil((k_terms - 1) / 2) + 1)
+    y = w + 2 * jnp.asarray(k, dtype=tt.dtype)[:, None]
+    r = -(y**2) / (2 * tt)
+    c = jnp.max(r, axis=0)
+    # The 1 / sqrt(2π tt³) normalization goes into the exponent: dividing by it
+    # overflows the float32 gradient for densities near the LOGP_LB floor.
+    log_norm = c - 0.5 * np.log(2 * π) - 1.5 * jnp.log(tt)
+    p_fast = jnp.exp(log_norm) * jnp.sum(y * jnp.exp(r - c), axis=0)
+
+    k = jnp.asarray(np.arange(1, k_terms + 1), dtype=tt.dtype)[:, None]
+    p_slow = π * jnp.sum(
+        k * jnp.sin(k * π * w) * jnp.exp(-(k**2) * π**2 * tt / 2), axis=0
+    )
+
+    return jnp.where(_jax_k_small(tt, err) < _jax_k_large(tt, err), p_fast, p_slow)
+
+
+def logp_ddm_jax(
+    data: np.ndarray,
+    v: float,
+    a: float,
+    z: float,
+    t: float,
+    err: float = 1e-15,
+    k_terms: int = 20,
+    epsilon: float = 1e-15,
+) -> np.ndarray:
+    """Compute the analytical DDM log-likelihood in JAX.
+
+    A JAX port of `logp_ddm` (Navarro & Fuss, 2009) with the same
+    parameterization (``a`` is doubled internally), response coding (a response
+    above 0 is the upper boundary), series switch and lower bound ``LOGP_LB``.
+
+    Parameters
+    ----------
+    data
+        2-column array of (response time, response).
+    v
+        Mean drift rate. (-inf, inf).
+    a
+        Value of decision upper bound. (0, inf).
+    z
+        Normalized decision starting point. (0, 1).
+    t
+        Non-decision time [0, inf).
+    err
+        Error bound.
+    k_terms
+        Number of terms to use to approximate the PDF.
+    epsilon
+        A small positive number to prevent division by zero or taking the log of
+        zero.
+
+    Returns
+    -------
+    np.ndarray
+        The per-trial log-likelihoods, with -inf where a parameter is invalid.
+    """
+    data_reshaped = jnp.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
+    rt = jnp.abs(data_reshaped[:, 0])
+    response = data_reshaped[:, 1]
+    flip = response > 0
+    a = a * 2.0
+    v_flipped = jnp.where(flip, -v, v)
+    z_flipped = jnp.where(flip, 1 - z, z)
+    rt = rt - t
+    rt = jnp.where(rt < 0, epsilon, rt)
+    floored = rt <= epsilon
+    log_lb = jnp.asarray(LOGP_LB, dtype=rt.dtype)
+
+    # Floored trials get LOGP_LB below; evaluating their series at a dummy time
+    # keeps the unused branch, and so the gradient, finite in float32.
+    tt = jnp.where(floored, 1.0, rt) / a**2
+    p = jnp.maximum(_jax_ftt01w(tt, z_flipped, err, k_terms), jnp.exp(log_lb))
+
+    logp = jnp.where(
+        floored,
+        log_lb,
+        jnp.log(p)
+        - v_flipped * a * z_flipped
+        - (v_flipped**2 * rt / 2.0)
+        - 2.0 * jnp.log(a),
+    )
+    return jax_check_parameters(
+        logp, (a >= 0) & (z >= 0) & (z <= 1), msg="a >= 0, 0 <= z <= 1"
+    )
+
+
 def logp_ddm_sdv(
     data: np.ndarray,
     v: float,
@@ -389,7 +500,7 @@ def logp_ddm_sdv(
     # pyrefly: ignore[bad-argument-type]
     checked_logp = check_parameters(checked_logp, z <= 1, msg="z <= 1")
     # pyrefly: ignore[bad-argument-type]
-    checked_logp = check_parameters(checked_logp, sv > 0, msg="sv > 0")
+    checked_logp = check_parameters(checked_logp, sv >= 0, msg="sv >= 0")
     return checked_logp
 
 
@@ -490,11 +601,11 @@ def _jax_rdm3_ll(t, ch, A, b, v0, v1, v2, eps_t: float = 1e-8):
 
 def logp_rdm3(
     data: np.ndarray,
-    A: float,
-    b: float,
     v0: float,
     v1: float,
     v2: float,
+    A: float,
+    b: float,
     t: float,
     epsilon: float = 1e-10,
 ) -> np.ndarray:
@@ -540,7 +651,12 @@ def jax_check_parameters(logp, condition, msg="Condition failed", print_msg=Fals
     return jnp.where(condition, logp, -jnp.inf)
 
 
-rdm3_params = ["A", "b", "v0", "v1", "v2", "t"]
+# Order is load-bearing, and it must match
+# ssms.config.model_config["racing_diffusion_3"]["params"] element for element.
+# HSSM passes parameters positionally in this order both to `logp_rdm3` (whose
+# signature follows it) and to the ssm-simulators random variable used by
+# prior and posterior predictive sampling, which reads theta in registry order.
+rdm3_params = ["v0", "v1", "v2", "A", "b", "t"]
 
 rdm3_bounds = {
     "A": (0.0, inf),
@@ -565,7 +681,8 @@ def _pt_normpdf(t):
 
 
 def _pt_normcdf(t):
-    return (1 / 2) * (1 + pt.erf(t / pt.sqrt(2)))
+    # np.sqrt: pt.sqrt(2) of an integer constant is float32 even under float64.
+    return (1 / 2) * (1 + pt.erf(t / np.sqrt(2)))
 
 
 def _pt_tpdf(t, A, b, v, s):
@@ -699,10 +816,10 @@ def _jax_lba_tcdf(t, A, b, v, s):
     )
 
 
-def _jax_lba4_ll(t, ch, A, b, v0, v1, v2, v3):
-    """Return the four-choice LBA log-likelihood at the JAX level."""
+def _jax_lba_ll(t, ch, A, b, *v):
+    """Return the LBA log-likelihood at the JAX level, one accumulator per ``v``."""
     s = 0.1
-    drift_rates = jnp.stack(jnp.broadcast_arrays(v0, v1, v2, v3))
+    drift_rates = jnp.stack(jnp.broadcast_arrays(*v))
     all_pdfs = vmap(lambda v: _jax_lba_tpdf(t, A, b, v, s))(drift_rates)
     all_cdfs = vmap(lambda v: _jax_lba_tcdf(t, A, b, v, s))(drift_rates)
 
@@ -714,12 +831,11 @@ def _jax_lba4_ll(t, ch, A, b, v0, v1, v2, v3):
     )
 
     prob_neg = jnp.prod(norm.cdf(-drift_rates / s), axis=0)
+    # In the data's dtype: LOGP_LB is fixed at import, and an f64 bound in an f32
+    # trace breaks JAX's cached clip once a process switches precision.
+    log_lb = jnp.asarray(LOGP_LB, dtype=t.dtype)
     return jnp.log(
-        jnp.clip(
-            likelihood / (1.0 - prob_neg),
-            jnp.exp(LOGP_LB),
-            jnp.exp(-LOGP_LB),
-        )
+        jnp.clip(likelihood / (1.0 - prob_neg), jnp.exp(log_lb), jnp.exp(-log_lb))
     )
 
 
@@ -733,11 +849,21 @@ def logp_lba4(
     v3: float,
 ) -> np.ndarray:
     """Compute the log-likelihood of the LBA model with 4 drift rates."""
+    return logp_lba_jax(data, A, b, v0, v1, v2, v3)
+
+
+def logp_lba_jax(data: np.ndarray, A: float, b: float, *v: float) -> np.ndarray:
+    """Compute the JAX log-likelihood of the LBA model, one drift rate per choice.
+
+    The number of drift rates sets the number of choices, so this one function is
+    the ``jax_loglik`` of ``lba2``, ``lba3`` and ``lba4``. Responses are coded
+    ``0, ..., len(v) - 1``.
+    """
     data_reshaped = jnp.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
     rt = jnp.abs(data_reshaped[:, 0])
     response = data_reshaped[:, 1]
     response_int = response.astype(jnp.int32)
-    logp = _jax_lba4_ll(rt, response_int, A, b, v0, v1, v2, v3).squeeze()
+    logp = _jax_lba_ll(rt, response_int, A, b, *v).reshape(-1)
     return jax_check_parameters(logp, b > A, msg="b > A")
 
 

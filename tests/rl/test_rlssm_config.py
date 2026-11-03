@@ -807,7 +807,9 @@ def _install_fake_decision_logp(monkeypatch):
         return jnp.sum(lan_matrix, axis=1)
 
     monkeypatch.setattr(
-        "hssm.rl.registry._get_ssm_logp", lambda name: _fake_base, raising=False
+        "hssm.rl.registry._get_ssm_logp",
+        lambda name, kind="approx_differentiable": _fake_base,
+        raising=False,
     )
 
 
@@ -819,7 +821,9 @@ def _install_fake_choice_only_decision_logp(monkeypatch, n_choices):
         return jnp.sum(lan_matrix, axis=1)
 
     monkeypatch.setattr(
-        "hssm.rl.registry._get_ssm_logp", lambda name: _fake_base, raising=False
+        "hssm.rl.registry._get_ssm_logp",
+        lambda name, kind="approx_differentiable": _fake_base,
+        raising=False,
     )
 
 
