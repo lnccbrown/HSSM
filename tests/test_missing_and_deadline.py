@@ -5,7 +5,9 @@ import pytest
 import pytensor
 import pytensor.tensor as pt
 import numpy as np
+import pandas as pd
 
+import hssm
 from hssm.utils import _rearrange_data
 from hssm.distribution_utils import (
     assemble_callables,
@@ -214,3 +216,53 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
     # ).eval()
 
     # np.testing.assert_array_almost_equal(v_grad_jax, v_grad_pytensor, decimal=DECIMAL)
+
+
+def test_rearrange_data_finds_rt_column_by_name():
+    """Missing-RT rows go on top even when ``rt`` is not the first column."""
+    df = pd.DataFrame(
+        {
+            "participant_id": [0, 0, 1, 1],
+            "rt": [0.5, -999.0, 0.7, -999.0],
+            "response": [1.0, -1.0, 1.0, -1.0],
+        }
+    )
+
+    assert _rearrange_data(df).index.tolist() == [1, 3, 0, 2]
+
+
+def test_missing_data_loglik_does_not_depend_on_column_order(fixture_path):
+    """The model log-density is the same wherever the ``rt`` column sits.
+
+    ``assemble_callables`` scores the first ``n_missing`` rows with the missing-data
+    network, so the missing-RT rows must be on top whatever the column order.
+    """
+    df = pd.DataFrame(
+        {
+            "rt": [0.9, -999.0, 1.2, -999.0, 0.6],
+            "response": [1.0, -1.0, 1.0, 1.0, -1.0],
+        }
+    )
+
+    def model_logp(data):
+        model = hssm.HSSM(
+            data=data,
+            model="ddm",
+            loglik_kind="analytical",
+            missing_data=True,
+            loglik_missing_data=fixture_path / "ddm_cpn.onnx",
+            p_outlier=None,
+            v={"prior": {"name": "Uniform", "lower": -3.0, "upper": 3.0}},
+            a=1.0,
+            z=0.5,
+            t=0.2,
+        )
+        assert (model.data["rt"].iloc[:2] == -999.0).all()
+        return model.pymc_model.compile_logp()({"v_interval__": np.array(0.3)})
+
+    rt_first = model_logp(df)
+    rt_second = model_logp(
+        df.assign(participant_id=0)[["participant_id", "rt", "response"]]
+    )
+
+    np.testing.assert_allclose(rt_second, rt_first, rtol=1e-6)

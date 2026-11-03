@@ -491,7 +491,8 @@ def _random_sample(
 def _rearrange_data(data: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarray:
     """Rearrange a dataframe so that missing values are on top.
 
-    We assume the dataframe's first column can contain missing values coded as -999.0.
+    Missing values are coded as -999.0 in the ``rt`` column of a dataframe (its
+    first column if it has no ``rt`` column) and in the first column of an array.
 
     Parameters
     ----------
@@ -504,7 +505,9 @@ def _rearrange_data(data: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarra
         The rearranged dataframe.
     """
     if isinstance(data, pd.DataFrame):
-        missing_indices = data.iloc[:, 0] == -999.0
+        # `rt` need not be the first column, e.g. after a `participant_id` column.
+        rt = data["rt"] if "rt" in data.columns else data.iloc[:, 0]
+        missing_indices = rt == -999.0
         split_missing = data.loc[missing_indices, :]
         split_not_missing = data.loc[~missing_indices, :]
 
