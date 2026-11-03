@@ -40,6 +40,8 @@ This version includes the following changes:
 
 18. **Documentation: `compile_logp()` returns the log-posterior; `distribution_utils` API page fixed** (closes #1436). `HSSM.compile_logp()` compiles the model's log-prior plus log-likelihood, plus any Bambi `potentials` (the unnormalized log-posterior), as a function of natural-scale parameter values, not the log-likelihood alone; the tutorial, renamed "Compile a log-posterior function", and the method's docstring now say so. It also gives `pip install zeus-mcmc` for `zeus`: `hssm[notebook]` installs no `zeus`, since `notebook` is a dependency group, not an extra. The `distribution_utils` API page now lists `make_hssm_rv` in place of the nonexistent `make_ssm_rv`, and adds `make_distribution_for_supported_model`.
 
+19. **`missing_data` finds the missing rows wherever the `rt` column sits** (closes #1449). `_rearrange_data` looked for `-999.0` in the first column of the DataFrame instead of in `rt`, so with another column first (`hssm.load_data("cavanagh_theta")` starts with `participant_id`) the missing rows stayed in place and `assemble_callables`, which scores the first `n_missing` rows with the missing-data network, scored the wrong rows without any warning (log-density -576.1 instead of -78.1 on a 40-trial example). Refit any model with `missing_data=True`, with or without `deadline`, whose `rt` was not the first column of `data`. A row whose nullable `rt` is `pd.NA` also stays in the data instead of being dropped, so building the model raises an error about the incomplete row.
+
 ### 0.5.0
 
 This version includes the following changes:
