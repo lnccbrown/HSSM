@@ -40,6 +40,8 @@ This version includes the following changes:
 
 18. **Documentation: `compile_logp()` returns the log-posterior; `distribution_utils` API page fixed** (closes #1436). `HSSM.compile_logp()` compiles the model's log-prior plus log-likelihood, plus any Bambi `potentials` (the unnormalized log-posterior), as a function of natural-scale parameter values, not the log-likelihood alone; the tutorial, renamed "Compile a log-posterior function", and the method's docstring now say so. It also gives `pip install zeus-mcmc` for `zeus`: `hssm[notebook]` installs no `zeus`, since `notebook` is a dependency group, not an extra. The `distribution_utils` API page now lists `make_hssm_rv` in place of the nonexistent `make_ssm_rv`, and adds `make_distribution_for_supported_model`.
 
+19. **Fixed-vector parameters stay with their rows when HSSM moves missing rows** (closes #1451). With `missing_data=True` (with or without `deadline`), HSSM moves the rows with `rt == -999.0` to the top of the data, because the missing-data network scores the first rows. A parameter fixed to a vector (`v=np.array(...)`, one value per row) kept the user's row order, so rows at or above the last missing row got another row's value; on an 8-row example the log-likelihood was off by 6.9. The vectors are now reordered with the rows. Models whose rows HSSM did not move are not affected; refit any other model with a fixed-vector parameter.
+
 ### 0.5.0
 
 This version includes the following changes:
