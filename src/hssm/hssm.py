@@ -463,11 +463,15 @@ class HSSM(HSSMBase):
                 is_choice_only=True,
             )
 
-        self.data = typing_cast("pd.DataFrame", _rearrange_data(self.data))
+        # Move missing rows on top, keeping the row positions in `order` so that
+        # fixed-vector params, given in the user's row order, follow their rows.
+        rearranged = _rearrange_data(self.data.reset_index(drop=True))
+        order = typing_cast("pd.DataFrame", rearranged).index.to_numpy()
+        self.data = self.data.iloc[order]
 
         # Collect fixed-vector params to substitute in the distribution logp
         fixed_vector_params = {
-            name: param.prior
+            name: param.prior[order]
             for name, param in self.params.items()
             if isinstance(param.prior, np.ndarray)
         }
