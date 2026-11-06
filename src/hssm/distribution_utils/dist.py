@@ -728,14 +728,23 @@ def make_distribution(
         rv_op = rv_instance
         _params = list_params
 
+        def __new__(cls, name, *args, **kwargs):
+            # Hand the parameters to PyMC by position. As keywords, a parameter
+            # named like a PyMC keyword (gamma_drift's `shape`) is read as that
+            # keyword, and the response is no longer sized from `observed` or
+            # `dims`: it becomes a single trial.
+            if not args:
+                args = tuple(kwargs.pop(param) for param in cls._params)
+            return super().__new__(cls, name, *args, **kwargs)
+
         @classmethod
-        def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
+        def dist(cls, *args, **kwargs):  # pylint: disable=arguments-renamed
+            if not args:
+                args = tuple(kwargs.pop(param) for param in cls._params)
             dist_params = [
-                pt.as_tensor_variable(pm.pytensorf.floatX(kwargs[param]))
-                for param in cls._params
+                pt.as_tensor_variable(pm.pytensorf.floatX(arg)) for arg in args
             ]
-            other_kwargs = {k: v for k, v in kwargs.items() if k not in cls._params}
-            return super().dist(dist_params, **other_kwargs)
+            return super().dist(dist_params, **kwargs)
 
         def logp(data, *dist_params):  # pylint: disable=E0213
             """Calculate log probability of the data given the parameters.

@@ -40,6 +40,8 @@ This version includes the following changes:
 
 18. **Documentation: `compile_logp()` returns the log-posterior; `distribution_utils` API page fixed** (closes #1436). `HSSM.compile_logp()` compiles the model's log-prior plus log-likelihood, plus any Bambi `potentials` (the unnormalized log-posterior), as a function of natural-scale parameter values, not the log-likelihood alone; the tutorial, renamed "Compile a log-posterior function", and the method's docstring now say so. It also gives `pip install zeus-mcmc` for `zeus`: `hssm[notebook]` installs no `zeus`, since `notebook` is a dependency group, not an extra. The `distribution_utils` API page now lists `make_hssm_rv` in place of the nonexistent `make_ssm_rv`, and adds `make_distribution_for_supported_model`.
 
+19. **Prior predictive sampling works for `gamma_drift` and `gamma_drift_angle`** (closes #1456). Both models have a parameter named `shape`, which reached PyMC as a keyword argument, where PyMC reads `shape` as the shape of the response. The response was therefore built as a single trial: `sample_prior_predictive` failed with "cannot broadcast a non-scalar to a scalar array" under the default lapse, and returned wrongly shaped draws with `p_outlier=None`. HSSM's distribution now passes its parameters to PyMC by position, so no parameter name can collide with a PyMC keyword. Fitting and posterior predictive sampling were not affected.
+
 ### 0.5.0
 
 This version includes the following changes:
