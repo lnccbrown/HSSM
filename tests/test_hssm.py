@@ -242,6 +242,27 @@ def test_sample_prior_predictive(data_ddm_reg):
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize("model", ["gamma_drift", "gamma_drift_angle"])
+def test_gamma_drift_prior_predictive_simulates_every_trial(data_ddm, model):
+    """One simulated (rt, response) pair per trial, under the default lapse.
+
+    As `shape`, the parameter now called `k` was read as PyMC's `shape`
+    keyword, which built the response as a single trial (#1456).
+    """
+    data = data_ddm.iloc[:20]
+    prior_predictive = HSSM(data=data, model=model).sample_prior_predictive(draws=3)
+
+    draws = prior_predictive["prior_predictive"]["rt,response"]
+    assert draws.shape[-2:] == (len(data), 2)
+
+
+def test_misspelled_parameter_names_the_model_parameters(data_ddm):
+    """A keyword that is neither a parameter nor a bambi argument is named."""
+    with pytest.raises(TypeError, match=r"\['vv'\] are not parameters of model 'ddm'"):
+        HSSM(data=data_ddm, vv=0.5)
+
+
+@pytest.mark.slow
 def test_override_default_link(caplog, data_ddm_reg):
     """Honor custom links while warning about unusual bounds."""
     param_v = {

@@ -15,12 +15,12 @@ def get_gamma_drift_config() -> DefaultConfig:
     """
     return {
         "response": ["rt", "response"],
-        "list_params": ["v", "a", "z", "t", "shape", "scale", "c"],
+        "list_params": ["v", "a", "z", "t", "k", "scale", "c"],
         "choices": [-1, 1],
         "description": (
             "DDM with a gamma-shaped drift component added to a constant "
-            "drift, as in conflict-task models: `shape` and `scale` set the "
-            "bump's time course and `c` its signed peak amplitude."
+            "drift, as in conflict-task models: the gamma shape `k` and `scale` "
+            "set the bump's time course and `c` its signed peak amplitude."
         ),
         "likelihoods": {
             "approx_differentiable": {
@@ -36,7 +36,7 @@ def get_gamma_drift_config() -> DefaultConfig:
                     "a": (0.3, 3.0),
                     "z": (0.1, 0.9),
                     "t": (0.001, 2.0),
-                    "shape": (2.0, 10.0),
+                    "k": (2.0, 10.0),
                     "scale": (0.01, 1.0),
                     "c": (-3.0, 3.0),
                 },

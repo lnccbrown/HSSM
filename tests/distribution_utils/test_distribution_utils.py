@@ -773,23 +773,12 @@ def test_full_ddm_keeps_likelihood_for_rt_below_t():
     )
 
 
-@pytest.mark.parametrize("param", ["shape", "size"])
-def test_parameter_named_like_a_pymc_keyword_keeps_the_response_size(param):
-    """A parameter named ``shape`` or ``size`` does not size the response.
-
-    Passed as a keyword, PyMC read gamma_drift's ``shape`` as the variable's
-    shape and skipped sizing it from ``observed``; the response was a single
-    trial, so prior and posterior predictive simulated one trial per draw.
-    """
-    list_params = ["v", "a", "z", "t", param]
-    Dist = make_distribution(
-        rv="fake",
-        loglik=lambda data, *params: pt.zeros_like(data[:, 0]),
-        list_params=list_params,
-    )
-    data = np.column_stack([np.full(5, 0.5), np.ones(5)])
-
-    with pm.Model():
-        y = Dist("y", **dict.fromkeys(list_params, 0.5), observed=data)
-
-    assert tuple(y.shape.eval()) == data.shape
+@pytest.mark.parametrize("param", ["shape", "size", "name", "observed", "dims"])
+def test_parameter_named_like_a_pymc_keyword_is_rejected(param):
+    """PyMC would read such a parameter as its keyword (#1456), so it is refused."""
+    with pytest.raises(ValueError, match=rf"\['{param}'\] cannot be used"):
+        make_distribution(
+            rv="fake",
+            loglik=lambda data, *params: pt.zeros_like(data[:, 0]),
+            list_params=["v", "a", "z", "t", param],
+        )

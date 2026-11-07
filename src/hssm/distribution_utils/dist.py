@@ -39,6 +39,26 @@ MISSING_RT = -999.0
 
 LOGP_LB = pm.pytensorf.floatX(-66.1)
 
+# Keyword arguments of `pm.Distribution` and its `.dist()` (plus `observed` and
+# `dims`, which Bambi adds). The parameters reach PyMC as keywords, so a
+# parameter with one of these names would be read as the keyword instead.
+PYMC_RESERVED_NAMES = frozenset(
+    {
+        "name",
+        "shape",
+        "size",
+        "dims",
+        "observed",
+        "rng",
+        "initval",
+        "total_size",
+        "transform",
+        "default_transform",
+        "dtype",
+        "return_next_rng",
+    }
+)
+
 
 def apply_param_bounds_to_loglik(
     logp: Any,
@@ -668,7 +688,21 @@ def make_distribution(
     -------
     type[pm.Distribution]
         A pymc.Distribution that uses the log-likelihood function.
+
+    Raises
+    ------
+    ValueError
+        If a name in ``list_params`` is one of ``PYMC_RESERVED_NAMES``.
     """
+    reserved = sorted(PYMC_RESERVED_NAMES.intersection(list_params))
+    if reserved:
+        raise ValueError(
+            f"Parameter name(s) {reserved} cannot be used: PyMC reads them as "
+            "keyword arguments of the distribution (`shape`, for example, sets "
+            "the shape of the response), not as parameters of the model. "
+            "Rename them in `list_params` and wherever the model refers to them."
+        )
+
     if isinstance(rv, type) and issubclass(rv, RandomVariable):
         rv_instance = rv()
     elif not isinstance(rv, type) and isinstance(rv, RandomVariable):
@@ -728,23 +762,14 @@ def make_distribution(
         rv_op = rv_instance
         _params = list_params
 
-        def __new__(cls, name, *args, **kwargs):
-            # Hand the parameters to PyMC by position. As keywords, a parameter
-            # named like a PyMC keyword (gamma_drift's `shape`) is read as that
-            # keyword, and the response is no longer sized from `observed` or
-            # `dims`: it becomes a single trial.
-            if not args:
-                args = tuple(kwargs.pop(param) for param in cls._params)
-            return super().__new__(cls, name, *args, **kwargs)
-
         @classmethod
-        def dist(cls, *args, **kwargs):  # pylint: disable=arguments-renamed
-            if not args:
-                args = tuple(kwargs.pop(param) for param in cls._params)
+        def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
             dist_params = [
-                pt.as_tensor_variable(pm.pytensorf.floatX(arg)) for arg in args
+                pt.as_tensor_variable(pm.pytensorf.floatX(kwargs[param]))
+                for param in cls._params
             ]
-            return super().dist(dist_params, **kwargs)
+            other_kwargs = {k: v for k, v in kwargs.items() if k not in cls._params}
+            return super().dist(dist_params, **other_kwargs)
 
         def logp(data, *dist_params):  # pylint: disable=E0213
             """Calculate log probability of the data given the parameters.
