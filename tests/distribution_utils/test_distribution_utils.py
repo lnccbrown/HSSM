@@ -771,3 +771,14 @@ def test_full_ddm_keeps_likelihood_for_rt_below_t():
         logp_full_ddm(data, *params),
         rtol=1e-6,
     )
+
+
+@pytest.mark.parametrize("param", ["shape", "size", "name", "observed", "dims"])
+def test_parameter_named_like_a_pymc_keyword_is_rejected(param):
+    """PyMC would read such a parameter as its keyword (#1456), so it is refused."""
+    with pytest.raises(ValueError, match=rf"\['{param}'\] cannot be used"):
+        make_distribution(
+            rv="fake",
+            loglik=lambda data, *params: pt.zeros_like(data[:, 0]),
+            list_params=["v", "a", "z", "t", param],
+        )

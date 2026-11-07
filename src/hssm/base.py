@@ -7,6 +7,7 @@ This file defines the entry class HSSM.
 """
 
 import datetime
+import inspect
 import logging
 import warnings
 from abc import ABC, abstractmethod
@@ -413,6 +414,15 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             p_outlier=p_outlier,
             noncentered=model_noncentered,
         )
+        # `Params` took the parameters out of `kwargs`; the rest go to bmb.Model.
+        # Name a misspelled or renamed parameter here, before bambi rejects it as
+        # one of its own arguments.
+        unknown = sorted(kwargs.keys() - inspect.signature(bmb.Model).parameters.keys())
+        if unknown:
+            raise TypeError(
+                f"{unknown} are not parameters of model '{self.model_name}', whose "
+                f"parameters are {self.list_params}, nor arguments of `bambi.Model`."
+            )
 
         # Explicit group priors are authoritative, so reject any specification
         # that bambi cannot build or would silently alter under the effective

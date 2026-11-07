@@ -136,7 +136,7 @@ def test_get_gamma_drift_angle_config():
         "z",
         "t",
         "theta",
-        "shape",
+        "k",
         "scale",
         "c",
     ]
@@ -150,7 +150,7 @@ def test_get_gamma_drift_angle_config():
         "z": (0.1, 0.9),
         "t": (0.001, 2.0),
         "theta": (-0.1, 1.3),
-        "shape": (2.0, 10.0),
+        "k": (2.0, 10.0),
         "scale": (0.01, 1.0),
         "c": (-3.0, 3.0),
     }
