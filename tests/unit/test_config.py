@@ -348,3 +348,41 @@ class TestSsmsRegisteredModel:
         from hssm.config import _bounds_from_ssms
 
         assert _bounds_from_ssms({"params": ["v", "a"]}) == {}
+
+
+class TestApproxDifferentiableBackendDefault:
+    """`backend` defaults to "jax" for an ONNX `loglik` (#1467)."""
+
+    @pytest.mark.parametrize("as_path", [True, False], ids=["path", "str"])
+    def test_onnx_loglik_defaults_to_jax(self, fixture_path, as_path):
+        onnx_file = fixture_path / "ddm.onnx"
+        config = Config._build_model_config(
+            "custom",
+            "approx_differentiable",
+            {"list_params": ["v", "a", "z", "t"]},
+            choices=None,
+            loglik=onnx_file if as_path else str(onnx_file),
+        )
+
+        assert config.backend == "jax"
+
+    def test_user_backend_wins(self, fixture_path):
+        config = Config._build_model_config(
+            "custom",
+            "approx_differentiable",
+            {"list_params": ["v", "a", "z", "t"], "backend": "pytensor"},
+            choices=None,
+            loglik=fixture_path / "ddm.onnx",
+        )
+
+        assert config.backend == "pytensor"
+
+    def test_callable_loglik_still_needs_backend(self):
+        with pytest.raises(ValueError, match="Please provide `backend`"):
+            Config._build_model_config(
+                "custom",
+                "approx_differentiable",
+                {"list_params": ["v", "a", "z", "t"]},
+                choices=None,
+                loglik=lambda *a: None,
+            )

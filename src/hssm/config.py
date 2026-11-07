@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field
 from numbers import Real
+from os import PathLike
 from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
 
 import numpy as np
@@ -440,6 +441,14 @@ class Config(BaseModelConfig):
                 )
 
         config.update_loglik(loglik)
+        # A str or PathLike `loglik` is an ONNX network (local or on the
+        # Hugging Face hub); "jax" is the backend every built-in LAN uses.
+        if (
+            config.loglik_kind == "approx_differentiable"
+            and config.backend is None
+            and isinstance(config.loglik, (str, PathLike))
+        ):
+            config.backend = "jax"
         config.validate()
         return config
 
