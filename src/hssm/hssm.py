@@ -17,8 +17,6 @@ import bambi as bmb
 import numpy as np
 import pandas as pd
 import pymc as pm
-from ssms.config import model_config as ssms_model_config
-from ssms.hssm_support import decorate_atomic_simulator, get_simulator_fun_internal
 
 from hssm import tracking
 from hssm._types import LoglikKind, SupportedModels
@@ -51,35 +49,6 @@ _new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
     "nuts_numpyro": "numpyro",
     "nuts_blackjax": "blackjax",
 }
-
-
-def _softmax_inv_temperature_simulator(
-    model_name: str, choices: list | tuple
-) -> Callable | None:
-    """Adapt the ssm-simulators ``inv_temp_softmax_<n>`` simulator to HSSM.
-
-    HSSM's ``softmax_inv_temperature_<n>`` models fix ``logit0 = 0`` and take
-    ``beta, logit1, ..., logit<n-1>``; ssm-simulators takes ``beta, q0, ...,
-    q<n-1>`` and returns choice indices. Returns ``None`` when there is no
-    ssm-simulators counterpart.
-    """
-    if not model_name.startswith("softmax_inv_temperature_"):
-        return None
-    ssms_model = f"inv_temp_softmax_{len(choices)}"
-    if ssms_model not in ssms_model_config:
-        return None
-
-    ssms_simulator = get_simulator_fun_internal(ssms_model)
-    choice_values = np.asarray(choices)
-
-    @decorate_atomic_simulator(model_name=model_name, choices=list(choices))
-    def simulator(theta, **kwargs):
-        theta = np.insert(np.atleast_2d(theta), 1, 0.0, axis=1)  # q0 = logit0 = 0
-        sims_out = ssms_simulator(theta=theta, **kwargs)
-        sims_out[..., 1] = choice_values[sims_out[..., 1].astype(int)]
-        return sims_out
-
-    return simulator
 
 
 class HSSM(HSSMBase):
@@ -468,12 +437,6 @@ class HSSM(HSSMBase):
                 self.missing_data_value,
             )
 
-        simulator = (
-            _softmax_inv_temperature_simulator(self.model_name, self.choices)
-            if self.is_choice_only
-            else None
-        )
-
         self.data = typing_cast("pd.DataFrame", _rearrange_data(self.data))
 
         # Collect fixed-vector params to substitute in the distribution logp
@@ -486,11 +449,7 @@ class HSSM(HSSMBase):
         # Use the typed `model_config` attributes directly
         _list_params = self.model_config.list_params
         assert _list_params is not None, "list_params should be set"  # for type checker
-        rv_name = (
-            getattr(self.model_config, "rv", None)
-            or simulator
-            or self.model_config.model_name
-        )
+        rv_name = getattr(self.model_config, "rv", None) or self.model_config.model_name
         # HSSM.__init__ always builds a Config, which is where ndt_edge_shift lives.
         ndt_edge_shift = typing_cast("Config", self.model_config).ndt_edge_shift
 
