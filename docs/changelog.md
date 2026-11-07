@@ -40,6 +40,8 @@ This version includes the following changes:
 
 18. **Documentation: `compile_logp()` returns the log-posterior; `distribution_utils` API page fixed** (closes #1436). `HSSM.compile_logp()` compiles the model's log-prior plus log-likelihood, plus any Bambi `potentials` (the unnormalized log-posterior), as a function of natural-scale parameter values, not the log-likelihood alone; the tutorial, renamed "Compile a log-posterior function", and the method's docstring now say so. It also gives `pip install zeus-mcmc` for `zeus`: `hssm[notebook]` installs no `zeus`, since `notebook` is a dependency group, not an extra. The `distribution_utils` API page now lists `make_hssm_rv` in place of the nonexistent `make_ssm_rv`, and adds `make_distribution_for_supported_model`.
 
+19. **`set_floatX("float32")` keeps JAX matrix multiplications at full float32 on GPUs** (closes #1463). JAX's default runs float32 matrix multiplications as TF32 (a 10-bit mantissa) on NVIDIA GPUs from Ampere on, so a LAN likelihood was computed below float32 precision: for `angle` with 10,000 trials, the log-likelihood at the initial point was off by about 1.3e-3 per trial, and 3 of 4 NumPyro fits failed to converge (R-hat 1.6–9.7). `set_floatX("float32")` now also sets `jax_default_matmul_precision` to `"highest"`, unless you have already chosen a precision (`JAX_DEFAULT_MATMUL_PRECISION` or `jax.config.update`). Full float32 costs speed: on one RTX A5000, a LAN log-likelihood and its gradient on 10,000 or more trials took about 1.3x as long as under TF32, and data-center GPUs (A100, H100) can lose more. Set `JAX_DEFAULT_MATMUL_PRECISION=tensorfloat32` before importing JAX to keep TF32. CPUs and older GPUs are not affected.
+
 ### 0.5.0
 
 This version includes the following changes:

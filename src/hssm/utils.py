@@ -362,6 +362,24 @@ def set_floatX(dtype: Literal["float32", "float64"], update_jax: bool = True):
     update_jax : optional
         Whether this function also sets float type for JAX by changing the
         `jax_enable_x64` setting in JAX config. Defaults to True.
+
+    Notes
+    -----
+    With `dtype="float32"` and `update_jax=True`, JAX's
+    `jax_default_matmul_precision` is also set to `"highest"`, unless you have
+    already chosen a precision (through the `JAX_DEFAULT_MATMUL_PRECISION`
+    environment variable or `jax.config.update`). JAX's default runs float32
+    matrix multiplications on NVIDIA GPUs from Ampere on as TF32, whose 10-bit
+    mantissa can stall NUTS on LAN likelihoods. On TPUs, `"highest"` likewise
+    replaces JAX's default of bfloat16 matrix multiplications. On CPUs the
+    setting changes nothing. Full float32 costs speed: on one RTX A5000, a LAN
+    log-likelihood and its gradient on 10,000 or more trials took about 1.3x as
+    long as under TF32, and data-center GPUs (A100, H100), whose TF32
+    throughput is much higher than their float32 throughput, can lose more. To
+    trade precision for speed, set
+    `JAX_DEFAULT_MATMUL_PRECISION=tensorfloat32` before importing JAX, or call
+    `jax.config.update("jax_default_matmul_precision", "tensorfloat32")` after
+    this function.
     """
     if dtype not in ["float32", "float64"]:
         raise ValueError('`dtype` must be either "float32" or "float64".')
@@ -378,6 +396,14 @@ def set_floatX(dtype: Literal["float32", "float64"], update_jax: bool = True):
             + "If this is not intended, please set `jax` to False.",
             jax_enable_x64,
         )
+
+        # None: nobody has chosen a precision, so JAX would use TF32 on GPUs.
+        if dtype == "float32" and jax.config.jax_default_matmul_precision is None:
+            jax.config.update("jax_default_matmul_precision", "highest")
+            _logger.info(
+                'Setting "jax_default_matmul_precision" to "highest" '
+                "(full float32 matrix multiplications, no TF32 on GPUs)."
+            )
 
 
 def _print_prior(term: CommonTerm | GroupSpecificTerm) -> str:

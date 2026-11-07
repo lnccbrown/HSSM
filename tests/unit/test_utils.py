@@ -103,6 +103,22 @@ def test_set_floatX():
     assert config.read("jax_enable_x64")
 
 
+def test_set_floatX_float32_disables_tf32():
+    """float32 means full float32 matmuls (no TF32), unless a precision was chosen."""
+    floatX, precision = pytensor.config.floatX, config.jax_default_matmul_precision
+    try:
+        config.update("jax_default_matmul_precision", None)  # JAX's default
+        set_floatX("float32")
+        assert config.jax_default_matmul_precision == "highest"
+
+        config.update("jax_default_matmul_precision", "tensorfloat32")
+        set_floatX("float32")
+        assert config.jax_default_matmul_precision == "tensorfloat32"
+    finally:
+        set_floatX(floatX)
+        config.update("jax_default_matmul_precision", precision)
+
+
 @pytest.fixture
 def minimal_log_likelihood_datatree(minimal_posterior_datatree):
     """Return a factory for compact log-likelihood DataTrees."""

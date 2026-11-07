@@ -39,6 +39,15 @@ pip install hssm[cuda12]  # CUDA 12
 pip install hssm[cuda13]  # CUDA 13
 ```
 
+GPUs are fastest in single precision: call `hssm.set_floatX("float32")` before
+building the model. This also keeps JAX's matrix multiplications at full float32
+precision. JAX would otherwise run them as TF32 on NVIDIA GPUs from Ampere on,
+which can stall the sampler on LAN likelihoods. Full float32 costs speed: on
+one RTX A5000, a LAN log-likelihood and its gradient on 10,000 or more trials
+took about 1.3x as long as under TF32, and data-center GPUs (A100, H100) can
+lose more. If you want TF32's speed, set
+`JAX_DEFAULT_MATMUL_PRECISION=tensorfloat32` before importing JAX.
+
 ### Install HSSM (with run tracking)
 
 To keep a record of each fit — the model, the sampler settings, the diagnostics
