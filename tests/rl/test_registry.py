@@ -636,12 +636,13 @@ class TestGetRlssmModelConfig:
             learning_process_bounds={"rl_alpha": (0.0, 1.0)},
             learning_process_params_default=[0.2],
             extra_fields=["feedback"],
-            choices=[0, 1],
         )
 
         config = registry.get_rlssm_model_config("unit_test_model")
 
         assert isinstance(config, RLSSMConfig)
+        # A custom SSM declares no response coding, so the generic default applies.
+        assert config.choices == (0, 1)
         assert config.list_params == ["rl_alpha", "a"]
         assert config.bounds == {"rl_alpha": (0.0, 1.0), "a": (0.3, 3.0)}
         assert config.params_default == [0.2, 1.5]
@@ -651,6 +652,26 @@ class TestGetRlssmModelConfig:
         # Mutating the returned config must not corrupt the registry's stored list.
         config.response.append("mutated")
         assert registry._SSM_REGISTRY["unit_test_ssm"]["response"] == ["rt", "response"]
+
+    def test_choices_follow_a_builtin_decision_process(
+        self, learning_process: dict[str, Any]
+    ) -> None:
+        """A built-in decision process keeps the response coding it declares (#1461)."""
+        registry.register_rlssm_model(
+            name="coding_model",
+            decision_process="angle",
+            learning_process=learning_process,
+            learning_process_params=["rl_alpha"],
+            learning_process_bounds={"rl_alpha": (0.0, 1.0)},
+            learning_process_params_default=[0.2],
+            extra_fields=["feedback"],
+        )
+
+        with pytest.raises(ValueError, match=r"reads responses coded as \[-1, 1\]"):
+            registry.get_rlssm_model_config("coding_model", choices=[0, 1])
+        assert registry.get_rlssm_model_config("coding_model").choices == (-1, 1)
+        reordered = registry.get_rlssm_model_config("coding_model", choices=[1, -1])
+        assert reordered.choices == (1, -1)
 
     def test_respects_explicit_empty_rl_fields(
         self,

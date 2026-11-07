@@ -89,6 +89,12 @@ def rldm_data() -> pd.DataFrame:
 
 
 @pytest.fixture(scope="module")
+def rldm_data_signed(rldm_data) -> pd.DataFrame:
+    """The RLDM fixture with responses coded -1/1, as ddm and angle expect."""
+    return rldm_data.assign(response=np.where(rldm_data["response"] > 0, 1.0, -1.0))
+
+
+@pytest.fixture(scope="module")
 def rlssm_config() -> RLSSMConfig:
     """Minimal but valid RLSSMConfig for the RLDM fixture dataset."""
     return RLSSMConfig(
@@ -156,7 +162,6 @@ def _register_custom_rldm(
         learning_process_bounds={"rl_alpha": (0.0, 1.0), "scaler": (0.0, 10.0)},
         learning_process_params_default=[0.1, 1.0],
         extra_fields=["feedback"],
-        choices=[0, 1],
     )
 
 
@@ -645,10 +650,13 @@ class TestRLSSMSimplifiedInterface:
         with pytest.raises(NotImplementedError, match="loglik_missing_data"):
             _ = model.loglik_missing_data
 
-    def test_register_rlssm_model(self, rldm_data) -> None:
+    def test_register_rlssm_model(self, rldm_data, rldm_data_signed) -> None:
         """A user-registered model should instantiate via the simplified API."""
         _register_custom_rldm()
-        model = RLSSM(data=rldm_data, model="rldm_custom_test")
+        # angle reads -1/1 responses, so 0/1 data must not reach it (#1461).
+        with pytest.raises(ValueError, match=r"Invalid responses .*: \[0\]"):
+            RLSSM(data=rldm_data, model="rldm_custom_test")
+        model = RLSSM(data=rldm_data_signed, model="rldm_custom_test")
         assert isinstance(model, RLSSM)
         assert "rl_alpha" in model.params
         assert "v" not in model.params
@@ -698,7 +706,7 @@ class TestRLSSMSimplifiedInterface:
         assert not any("ignoring" in r.message for r in caplog.records)
 
     def test_rlssm_learning_process_override_keeps_matching_metadata(
-        self, rldm_data
+        self, rldm_data_signed
     ) -> None:
         """Public RLSSM accepts LP overrides with the same sampled params."""
         _register_custom_rldm("rldm_custom_for_lp_override", decision_process="ddm")
@@ -711,7 +719,7 @@ class TestRLSSMSimplifiedInterface:
             return rl_alpha + scaler
 
         model = RLSSM(
-            data=rldm_data,
+            data=rldm_data_signed,
             model="rldm_custom_for_lp_override",
             learning_process={"v": alt_compute_v},
         )
@@ -721,13 +729,13 @@ class TestRLSSMSimplifiedInterface:
         assert "scaler" in model.params
 
     def test_rlssm_decision_process_override_updates_sampled_params(
-        self, rldm_data
+        self, rldm_data_signed
     ) -> None:
         """Public RLSSM constructor should respect decision_process overrides."""
         _register_custom_rldm("rldm_custom_for_dp_override", decision_process="ddm")
 
         model = RLSSM(
-            data=rldm_data,
+            data=rldm_data_signed,
             model="rldm_custom_for_dp_override",
             decision_process="angle",
         )

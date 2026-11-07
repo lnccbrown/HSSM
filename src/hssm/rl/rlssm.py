@@ -467,7 +467,7 @@ class RLSSM(_RLSSM):
         to ``"2AB_RW_DDM"``.
     choices : list[int] | None, optional
         Override the choice values in the registry. ``None`` uses the registry
-        default.
+        default, which for a custom model follows its decision process.
     include : list | None, optional
         Parameter specifications forwarded to `hssm.base.HSSMBase`.
     model_config : RLSSMConfig | None, optional
