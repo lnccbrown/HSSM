@@ -349,6 +349,12 @@ def make_hssm_rv(
             param_shapes = [arr.shape for arr in arg_arrays]
             p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
 
+            # A trial-wise p_outlier (a p_outlier regression) needs one simulated
+            # trial per p_outlier value, even when the model parameters are scalar.
+            if p_outlier is not None and p_outlier.size > 1:
+                batch_shape = np.broadcast_shapes(*param_shapes)
+                arg_arrays = [np.broadcast_to(arr, batch_shape) for arr in arg_arrays]
+
             # Forward observed per-trial covariates to the simulator when the RV
             # has been given them (covariate-conditioned PPC); a no-op otherwise.
             if cls._extra_fields is not None:
