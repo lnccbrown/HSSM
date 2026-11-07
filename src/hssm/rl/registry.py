@@ -232,6 +232,7 @@ def _register_inv_temp_softmax_ssm(n_choices: int) -> None:
         "bounds_ssm": {"beta": (0.0, jnp.inf)},
         "params_default_ssm": [1.0, *([0.0] * n_choices)],
         "response": ["response"],
+        "choices": list(range(n_choices)),
     }
 
 
@@ -603,8 +604,10 @@ def get_rlssm_model_config(
     Raises
     ------
     ValueError
-        If *model* or the resolved *decision_process* is not registered, or the
-        decision process has no JAX implementation for the requested kind.
+        If *model* or the resolved *decision_process* is not registered, the
+        decision process has no JAX implementation for the requested kind, or
+        *choices* (given here or at registration) differ from the choices the
+        decision process declares.
     """
     if model not in _RLSSM_REGISTRY:
         ssms_model = _resolve_ssms_model(model)

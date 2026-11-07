@@ -81,7 +81,8 @@ class DataValidatorMixin:
                 unique_responses[~np.isin(unique_responses, self.choices)].tolist()
             )
             raise ValueError(
-                f"Invalid responses found in your dataset: {invalid_responses}"
+                f"Invalid responses found in your dataset: {invalid_responses}. "
+                f"The model's choices are {list(self.choices)}."
             )
 
         if len(unique_responses) != self.n_choices:
