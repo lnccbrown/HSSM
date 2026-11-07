@@ -46,7 +46,11 @@ def softmax_inv_temperature_config(n_choices: int = 2) -> DefaultConfig:
         "response": ["response"],
         "list_params": ["beta"] + [f"logit{i}" for i in range(1, n_choices)],
         "choices": [-1, 1] if n_choices == 2 else list(range(n_choices)),
-        "description": f"The Softmax Inv. Temperature Model with {n_choices} choices",
+        "description": (
+            f"The Softmax Inv. Temperature Model with {n_choices} choices. "
+            "The likelihood identifies only the products of beta and the logits, "
+            "so beta should generally be fixed in choice-only fits."
+        ),
         "likelihoods": {
             "analytical": {
                 "loglik": softmax_inv_temperature,
