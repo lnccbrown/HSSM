@@ -34,14 +34,12 @@ model.
 
 For `softmax_inv_temperature_<n>` models, the choice probabilities are proportional to
 
-\[
-P(k) \propto \exp(\beta \cdot \text{logit}_k),
-\]
+`P(k) ∝ exp(beta * logit_k)`
 
 with `logit0 = 0`. The likelihood therefore identifies only the products
-\(\beta \cdot \text{logit}_k\), not `beta` and the logits separately.
-For any positive constant \(c\), replacing `beta` with \(c \cdot \beta\)
-and each logit with \(\text{logit}_k / c\) leaves the likelihood unchanged.
+`beta * logit_k`, not `beta` and the logits separately.
+For any positive constant `c`, replacing `beta` with `c * beta`
+and each logit with `logit_k / c` leaves the likelihood unchanged.
 
 For plain choice-only fits, we recommend fixing `beta` (for example, at
 `1.0`) rather than estimating it jointly with the logits. When `beta` is
