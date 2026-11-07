@@ -2068,7 +2068,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 # the likelihood must use the same uniform probability.
                 uniform = 1 / self.n_choices
                 if lapse is not None and not (
-                    isinstance(lapse, int | float) and np.isclose(lapse, uniform)
+                    isinstance(lapse, int | float | np.floating)
+                    and np.isclose(lapse, uniform)
                 ):
                     raise ValueError(
                         "Choice-only models only support a uniform lapse over "

@@ -194,7 +194,9 @@ class HSSM(HSSMBase):
         likelihood with weight `p_outlier`, marginalised per row type: observed
         rows use the lapse density at the observed `rt`; missing-RT rows (choice
         observed, no deadline) use `1 / n_choices`; omission rows (deadline) use
-        the lapse survival probability at the deadline.
+        the lapse survival probability at the deadline. Choice-only models accept
+        only the uniform lapse over choices, `1 / n_choices`, which is their
+        default; any other value raises a `ValueError`.
     global_formula : optional
         A string that specifies a regressions formula which will be used for all model
         parameters. If you specify parameter-wise regressions in addition, these will
