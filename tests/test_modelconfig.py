@@ -117,7 +117,9 @@ def test_get_lba4_config():
     likelihood = lba4_model_config["likelihoods"]["analytical"]
     assert likelihood["loglik"] is logp_lba4
     assert likelihood["backend"] == "jax"
-    assert likelihood["default_priors"] == {}
+    assert likelihood["default_priors"] == {
+        "A": {"name": "HalfNormal", "sigma": 2.0, "initval": 0.5}
+    }
     assert likelihood["bounds"] == lba4_bounds
     assert likelihood["extra_fields"] is None
 

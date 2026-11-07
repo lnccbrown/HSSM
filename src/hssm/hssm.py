@@ -20,6 +20,7 @@ import pymc as pm
 from ssms.config import model_config as ssms_model_config
 from ssms.hssm_support import decorate_atomic_simulator, get_simulator_fun_internal
 
+from hssm import tracking
 from hssm._types import LoglikKind, SupportedModels
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
@@ -189,7 +190,11 @@ class HSSM(HSSMBase):
         be included in estimation.
     lapse : optional
         The lapse distribution. This argument is required only if `p_outlier` is not
-        `None`. Defaults to Uniform(0.0, 10.0).
+        `None`. Defaults to Uniform(0.0, 20.0). The lapse process is mixed into the
+        likelihood with weight `p_outlier`, marginalised per row type: observed
+        rows use the lapse density at the observed `rt`; missing-RT rows (choice
+        observed, no deadline) use `1 / n_choices`; omission rows (deadline) use
+        the lapse survival probability at the deadline.
     global_formula : optional
         A string that specifies a regressions formula which will be used for all model
         parameters. If you specify parameter-wise regressions in addition, these will
@@ -435,9 +440,13 @@ class HSSM(HSSMBase):
                 if self.model_config.backend != "pytensor"
                 else self.model_config.backend
             )
-            missing_data_callable = make_missing_data_callable(
-                self.loglik_missing_data, backend_tmp, params_is_trialwise, params_only
-            )
+            with tracking.network_role(tracking.MISSING_DATA_ROLE):
+                missing_data_callable = make_missing_data_callable(
+                    self.loglik_missing_data,
+                    backend_tmp,
+                    params_is_trialwise,
+                    params_only,
+                )
 
             self.loglik_missing_data = missing_data_callable
 
@@ -510,4 +519,6 @@ class HSSM(HSSMBase):
             # TODO: add to HSSMBase
             is_choice_only=self.is_choice_only,
             ndt_edge_shift=ndt_edge_shift,
+            n_choices=self.n_choices,
+            has_deadline=bool(self.deadline),
         )
