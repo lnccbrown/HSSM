@@ -467,9 +467,10 @@ class TestRLSSMModelStructure:
         )
 
         below = rt <= 0.4
-        np.testing.assert_array_equal(logp[below], LOGP_LB)
+        floor = logp.dtype.type(LOGP_LB)  # LOGP_LB in the graph's precision
+        np.testing.assert_array_equal(logp[below], floor)
         assert np.all(np.isfinite(logp[~below]))
-        assert np.all(logp[~below] != LOGP_LB)
+        assert np.all(logp[~below] != floor)
 
     def test_choice_only_response_validation_exits_when_metadata_is_incomplete(
         self,

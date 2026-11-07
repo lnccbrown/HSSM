@@ -376,16 +376,37 @@ def set_floatX(dtype: Literal["float32", "float64"], update_jax: bool = True):
     log-likelihood and its gradient on 10,000 or more trials took about 1.3x as
     long as under TF32, and data-center GPUs (A100, H100), whose TF32
     throughput is much higher than their float32 throughput, can lose more. To
-    trade precision for speed, set
-    `JAX_DEFAULT_MATMUL_PRECISION=tensorfloat32` before importing JAX, or call
+    trade precision for speed, set `JAX_DEFAULT_MATMUL_PRECISION=tensorfloat32`
+    before importing JAX. Calling
     `jax.config.update("jax_default_matmul_precision", "tensorfloat32")` after
-    this function.
+    this function works too, but only in the current process (see below).
+
+    The precision is also written to the environment (`floatX` into
+    `PYTENSOR_FLAGS`, and JAX's matmul precision into
+    `JAX_DEFAULT_MATMUL_PRECISION`). Processes started afterwards, such as
+    PyMC's chains under the `"spawn"` or `"forkserver"` start method, are fresh
+    interpreters that read these settings from the environment. A forkserver that
+    is already running keeps the environment it started with, so call this
+    function before the first multi-process PyMC fit. A `jax.config.update`
+    after this function does not reach the environment, so the workers keep the
+    precision written here; the environment variable set before importing JAX
+    covers both. With `update_jax=False`, `PYTENSOR_FLAGS` still carries
+    `floatX`, and PyTensor's JAX dispatch sets `jax_enable_x64` from it in the
+    workers, so float32 turns x64 off there.
     """
     if dtype not in ["float32", "float64"]:
         raise ValueError('`dtype` must be either "float32" or "float64".')
 
     pytensor.config.floatX = dtype
     _logger.info("Setting PyTensor floatX type to %s.", dtype)
+    # A fresh interpreter imports PyTensor with floatX from PYTENSOR_FLAGS, and
+    # PyTensor's JAX dispatch then sets jax_enable_x64 from it.
+    flags = [
+        flag
+        for flag in os.environ.get("PYTENSOR_FLAGS", "").split(",")
+        if flag.strip() and flag.split("=")[0].strip() != "floatX"
+    ]
+    os.environ["PYTENSOR_FLAGS"] = ",".join([*flags, f"floatX={dtype}"])
 
     if update_jax:
         jax_enable_x64 = dtype == "float64"
@@ -404,6 +425,8 @@ def set_floatX(dtype: Literal["float32", "float64"], update_jax: bool = True):
                 'Setting "jax_default_matmul_precision" to "highest" '
                 "(full float32 matrix multiplications, no TF32 on GPUs)."
             )
+        if precision := jax.config.jax_default_matmul_precision:
+            os.environ["JAX_DEFAULT_MATMUL_PRECISION"] = precision
 
 
 def _print_prior(term: CommonTerm | GroupSpecificTerm) -> str:
