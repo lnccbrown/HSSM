@@ -11,6 +11,7 @@ import hssm
 hssm.set_floatX("float32", update_jax=True)
 
 N_DRAWS = 20_000
+THETAS = [(2, [2.0, 0.7]), (3, [2.0, -1.0, 0.5]), (4, [1.5, -1.0, 0.5, 1.0])]
 
 
 def _model(n_choices, **kwargs):
@@ -19,10 +20,7 @@ def _model(n_choices, **kwargs):
     return hssm.HSSM(data=data, model=f"softmax_inv_temperature_{n_choices}", **kwargs)
 
 
-@pytest.mark.parametrize(
-    ("n_choices", "theta"),
-    [(2, [2.0, 0.7]), (3, [2.0, -1.0, 0.5]), (4, [1.5, -1.0, 0.5, 1.0])],
-)
+@pytest.mark.parametrize(("n_choices", "theta"), THETAS)
 def test_rv_matches_softmax(n_choices, theta):
     """Simulated choice frequencies follow softmax(beta * [0, logit1, ...])."""
     model = _model(n_choices, p_outlier=None)
@@ -61,38 +59,50 @@ def test_rv_lapse_draws_uniform_choices():
     np.testing.assert_allclose(observed, 1 / 3, atol=0.015)
 
 
-def test_lapse_logp_is_a_mixture_of_probabilities():
-    """logp = log((1 - p) * softmax + p / n_choices), never above 0."""
-    model = _model(2, p_outlier=0.5)
-    point = model.pymc_model.initial_point()
+@pytest.mark.parametrize(("n_choices", "theta"), THETAS)
+def test_lapse_logp_is_a_mixture_of_probabilities(n_choices, theta):
+    """logp = log((1 - p) * softmax + p / n_choices) for every choice."""
+    model = _model(n_choices, p_outlier=0.5)
+    beta, *logits = theta
+    params = {f"logit{i}": logit for i, logit in enumerate(logits, start=1)}
+    dist = model.model_distribution.dist(beta=beta, **params, p_outlier=0.5)
 
-    logp = model.pymc_model.compile_logp(sum=False)(point)[-1]
+    logp = pm.logp(dist, np.array(model.choices, dtype="float32")).eval()
 
-    # The initial point has logit1 = 0, so the softmax is 1/2 for each choice.
-    np.testing.assert_allclose(logp, np.log(0.5), rtol=1e-5)
+    expected = 0.5 * softmax(beta * np.array([0.0, *logits])) + 0.5 / n_choices
+    np.testing.assert_allclose(logp, np.log(expected), rtol=1e-5)
 
 
-def test_prior_predictive_draws_valid_choices():
+LAPSES = pytest.mark.parametrize(
+    "kwargs", [{}, {"p_outlier": None}], ids=["default_p_outlier", "no_p_outlier"]
+)
+
+
+@pytest.mark.parametrize("n_choices", [2, 3, 4])
+@LAPSES
+def test_prior_predictive_draws_valid_choices(n_choices, kwargs):
     """Prior predictive sampling runs end to end for choice-only models."""
-    model = _model(2)
+    model = _model(n_choices, **kwargs)
 
     prior = model.sample_prior_predictive(draws=5)
 
     response = prior["prior_predictive"]["response"].values
-    assert set(np.unique(response)) <= {-1, 1}
+    assert set(np.unique(response)) <= set(model.choices)
 
 
 @pytest.mark.slow
-def test_posterior_predictive_draws_valid_choices():
+@pytest.mark.parametrize("n_choices", [2, 3, 4])
+@LAPSES
+def test_posterior_predictive_draws_valid_choices(n_choices, kwargs):
     """Posterior predictive sampling runs end to end for choice-only models."""
-    model = _model(2)
+    model = _model(n_choices, **kwargs)
     model.sample(draws=10, tune=10, chains=1, cores=1, progressbar=False)
 
     model.sample_posterior_predictive(draws=5)
 
     response = model.traces["posterior_predictive"]["response"]
     assert response.dims == ("chain", "draw", "__obs__")
-    assert set(np.unique(response.values)) <= {-1, 1}
+    assert set(np.unique(response.values)) <= set(model.choices)
 
 
 def test_choice_only_ssms_model_keeps_only_responses():
