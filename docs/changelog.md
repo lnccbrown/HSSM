@@ -40,6 +40,8 @@ This version includes the following changes:
 
 18. **Documentation: `compile_logp()` returns the log-posterior; `distribution_utils` API page fixed** (closes #1436). `HSSM.compile_logp()` compiles the model's log-prior plus log-likelihood, plus any Bambi `potentials` (the unnormalized log-posterior), as a function of natural-scale parameter values, not the log-likelihood alone; the tutorial, renamed "Compile a log-posterior function", and the method's docstring now say so. It also gives `pip install zeus-mcmc` for `zeus`: `hssm[notebook]` installs no `zeus`, since `notebook` is a dependency group, not an extra. The `distribution_utils` API page now lists `make_hssm_rv` in place of the nonexistent `make_ssm_rv`, and adds `make_distribution_for_supported_model`.
 
+19. **A formula that uses a data column named like a model parameter now fails with a clear error** (closes #1471). For example, `cavanagh_theta`'s `theta` column in an angle-family model, which has a `theta` parameter: `a ~ 1 + theta` failed later with `Variable name a_theta already exists`, and with another regression in the model it built without any message. HSSM now raises a `ValueError` at construction that names the column and suggests renaming it.
+
 ### 0.5.0
 
 This version includes the following changes:
