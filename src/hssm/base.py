@@ -27,6 +27,7 @@ import seaborn as sns
 import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
+from bambi.utils import get_aliased_name
 from pymc.model.transform.conditioning import do
 from pymc.pytensorf import resolve_backend_compile_kwargs
 from pymc.variational import Approximation
@@ -1348,9 +1349,59 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return self.model.predict(**kwargs)
 
     def sample_do(
-        self, params: dict[str, Any], draws: int = 100, return_model=False, **kwargs
+        self,
+        params: dict[str, Any],
+        draws: int = 100,
+        return_model=False,
+        strict: bool = False,
+        **kwargs,
     ) -> DataTree | tuple[DataTree, pm.Model]:
-        """Generate samples from the predictive distribution using the `do-operator`."""
+        """Simulate data with some or all parameters fixed, using the `do-operator`.
+
+        Fixes the model's free variables named in `params` with `pymc.do`, then
+        draws from the prior predictive of the resulting model.
+
+        Parameters
+        ----------
+        params
+            Values for the PyMC model's free variables, by name, as listed by
+            `{rv.name for rv in model.pymc_model.free_RVs}`: for example
+            `v_Intercept`, `v_x`, `v_1|participant_id_sigma`, and
+            `v_1|participant_id` (with `noncentered=False`) or
+            `v_1|participant_id_offset` (with `noncentered=True`). A term with
+            several columns takes one value per column, e.g. `"v_stim": [0.4, -0.1]`
+            for the non-reference levels of `stim`, and a group-specific term one
+            value per group. Intercepts are on the original scale of the
+            predictors, as the posterior reports them, even though the model
+            centers its predictors (bambi's `center_predictors=True`, the default).
+            Free variables not in `params` are drawn from their priors.
+        draws : optional
+            The number of draws. Defaults to 100.
+        return_model : optional
+            Whether to also return the intervened PyMC model. Defaults to False.
+        strict : optional
+            If True, raise an error when a free variable of the model is not in
+            `params`, instead of drawing it from its prior. Defaults to False.
+        kwargs
+            Passed to `pymc.sample_prior_predictive` (e.g. `random_seed`).
+
+        Returns
+        -------
+        DataTree | tuple[DataTree, pm.Model]
+            The simulated draws (the `prior` group holds the trial-wise parameters,
+            the `prior_predictive` group the responses), and the intervened model if
+            `return_model` is True.
+        """
+        if strict:
+            unfixed = sorted(
+                {rv.name for rv in self.pymc_model.free_RVs}.difference(params)
+            )
+            if unfixed:
+                raise ValueError(
+                    "`strict=True`, but these free variables are not in `params` "
+                    f"and would be drawn from their priors: {unfixed}"
+                )
+        params = self._center_do_intercepts(params)
         do_model = do(
             self.pymc_model, cast("Mapping[str | TensorVariable, Any]", params)
         )
@@ -1372,6 +1423,51 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         if return_model:
             return do_dt, do_model
         return do_dt
+
+    def _center_do_intercepts(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Translate original-scale intercepts in `params` to the centered design.
+
+        With bambi's `center_predictors=True`, the PyMC intercept of a component with
+        common predictors belongs to the centered design, and bambi adds the
+        centering back only when it reports a posterior. Fixing that variable to an
+        original-scale value would therefore simulate a different intercept. This
+        adds `mean(X) @ slopes` to each fixed intercept, the inverse of bambi's
+        `Model._re_center_intercept`.
+        """
+        if not self.model.center_predictors or self.model.backend is None:
+            return params
+        params = dict(params)
+        for pymc_component in self.model.backend.distributional_components.values():
+            component = pymc_component.component
+            x = pymc_component.design_matrix_without_intercept
+            if not (component.intercept_term and component.common_terms):
+                continue
+            if x is None:
+                continue
+            intercept = get_aliased_name(component.intercept_term)
+            if intercept not in params:
+                continue
+            slopes = [get_aliased_name(t) for t in component.common_terms.values()]
+            unfixed = [s for s in slopes if s not in params]
+            if unfixed:
+                _logger.warning(
+                    "%s is fixed but %s are not, so %s is applied to the centered "
+                    "predictors and the simulated intercept depends on the drawn "
+                    "slopes. Fix all slopes, or build the model with "
+                    "`center_predictors=False`.",
+                    intercept,
+                    unfixed,
+                    intercept,
+                )
+                continue
+            coefs = np.concatenate(
+                [np.atleast_1d(np.asarray(params[s], dtype=float)) for s in slopes]
+            )
+            centered = np.asarray(params[intercept], dtype=float) + (
+                np.asarray(x).mean(0) @ coefs
+            )
+            params[intercept] = centered.astype(self.pymc_model[intercept].dtype)
+        return params
 
     def sample_prior_predictive(
         self,
