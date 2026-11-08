@@ -10,6 +10,7 @@ import pandas as pd
 import seaborn as sns
 import xarray as xr
 from matplotlib.axes import Axes
+from matplotlib.cbook import normalize_kwargs
 from matplotlib.lines import Line2D
 from matplotlib.patches import Ellipse
 from scipy.stats import chi2
@@ -186,11 +187,15 @@ def _plot_quantile_probability_1D(
     if data_kwargs is None:
         data_kwargs = kwargs.copy()
 
+    # Seaborn outlines markers in white, which cuts the line around each marker and
+    # hides its step between conditions with nearly equal proportions
     data_kwargs_default = {
         "marker": "X",
+        "markeredgewidth": 0,
     }
 
-    data_kwargs = data_kwargs_default | data_kwargs
+    # Normalized, so that an alias such as `mew` overrides the default
+    data_kwargs = data_kwargs_default | normalize_kwargs(data_kwargs, Line2D)
 
     # Plot observed data (always as line plot)
     ax = sns.lineplot(
@@ -345,6 +350,18 @@ def _plot_quantile_probability_1D(
     secax.set_xticklabels(xticklabels)
     secax.set_xlim(*ax.get_xlim())
     secax.set_label(cond)
+
+    # Conditions with close proportions get overlapping labels; lift a label that
+    # would overlap the previous label of the bottom row by one row.
+    # ponytail: two rows; a label overlapping neighbours on both sides still
+    # collides, add a third row if that turns up
+    right_edge = -np.inf
+    for tick in secax.xaxis.get_major_ticks():
+        box = tick.label2.get_window_extent()
+        if box.x0 < right_edge + box.height / 2:
+            tick.set_pad(tick.get_pad() + tick.label2.get_size())
+        else:
+            right_edge = box.x1
 
     if title:
         ax.set_title(title)

@@ -40,6 +40,8 @@ This version includes the following changes:
 
 18. **Documentation: `compile_logp()` returns the log-posterior; `distribution_utils` API page fixed** (closes #1436). `HSSM.compile_logp()` compiles the model's log-prior plus log-likelihood, plus any Bambi `potentials` (the unnormalized log-posterior), as a function of natural-scale parameter values, not the log-likelihood alone; the tutorial, renamed "Compile a log-posterior function", and the method's docstring now say so. It also gives `pip install zeus-mcmc` for `zeus`: `hssm[notebook]` installs no `zeus`, since `notebook` is a dependency group, not an extra. The `distribution_utils` API page now lists `make_hssm_rv` in place of the nonexistent `make_ssm_rv`, and adds `make_distribution_for_supported_model`.
 
+22. **`plot_quantile_probability` stays readable when conditions have similar accuracy** (closes #1488). The observed markers had seaborn's white edge, which cut each quantile line around its markers; where two conditions sit at nearly the same proportion (`LL` and `WW` in `cavanagh_theta`), the short step between them vanished under two touching markers and one line read as three. Markers are now drawn without an edge; `data_kwargs={"markeredgewidth": ...}` (or `mew`) still sets one. The condition labels on the top axis overlapped for the same conditions; a label that would overlap its left neighbour now sits one row higher.
+
 ### 0.5.0
 
 This version includes the following changes:
