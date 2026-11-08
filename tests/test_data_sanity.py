@@ -151,3 +151,52 @@ def test_deadline_missing_data_false(data_ddm, cpn):
             model="ddm",
             loglik_missing_data=cpn,
         )
+
+
+param_name_column_pattern = (
+    r"Data column `theta` \(used in the formula for `a`\) has the name of a "
+    r"parameter of model `angle`"
+)
+
+
+@pytest.mark.parametrize(
+    "include",
+    [
+        [hssm.Param(name="a", formula="a ~ 1 + theta")],
+        [
+            hssm.Param(name="a", formula="a ~ 1 + C(stim) + theta"),
+            hssm.Param(name="v", formula="v ~ 1 + C(stim) + (1|participant_id)"),
+        ],
+    ],
+    ids=["single_regression", "with_other_regression"],
+)
+def test_formula_column_named_like_parameter(cavanagh_test, include):
+    # `cavanagh_theta` has a `theta` column and angle models a `theta` parameter.
+    with pytest.raises(ValueError, match=param_name_column_pattern):
+        hssm.HSSM(
+            data=cavanagh_test,
+            model="angle",
+            noncentered=False,
+            include=include,
+        )
+
+
+def test_formula_column_named_like_parameter_renamed(cavanagh_test):
+    data = cavanagh_test.rename(columns={"theta": "theta_power"})
+    model = hssm.HSSM(
+        data=data,
+        model="angle",
+        noncentered=False,
+        include=[hssm.Param(name="a", formula="a ~ 1 + theta_power")],
+    )
+    assert "a_theta_power" in model.pymc_model.named_vars
+
+
+def test_formula_column_not_a_parameter_of_model(cavanagh_test):
+    # `theta` is only a parameter of some models; for ddm it is a plain covariate.
+    model = hssm.HSSM(
+        data=cavanagh_test,
+        model="ddm",
+        include=[hssm.Param(name="a", formula="a ~ 1 + theta")],
+    )
+    assert "a_theta" in model.pymc_model.named_vars

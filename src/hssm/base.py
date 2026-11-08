@@ -27,6 +27,7 @@ import seaborn as sns
 import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
+from formulae import model_description
 from pymc.model.transform.conditioning import do
 from pymc.pytensorf import resolve_backend_compile_kwargs
 from pymc.variational import Approximation
@@ -428,6 +429,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self._parent_param = self.params.parent_param
 
         self._validate_fixed_vectors()
+        self._validate_formula_columns_not_param_names()
         self.formula, self.priors, self.link = self.params.parse_bambi(model=self)  # type: ignore[arg-type]
 
         # For parameters that have a regression backend, apply bounds at the likelihood
@@ -569,6 +571,56 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                         f"Fixed vector for parameter '{name}' has length "
                         f"{len(param.prior)}, but data has {len(self.data)} rows."
                     )
+
+    def _validate_formula_columns_not_param_names(self) -> None:
+        """Reject data columns used in a formula that share a parameter's name.
+
+        A formula term such as ``a ~ 1 + theta`` in a model that also has a
+        ``theta`` parameter (e.g. the angle family) is ambiguous: bambi either
+        fails with an unrelated "Variable name ... already exists" error or
+        silently builds a model containing both the parameter and a slope on
+        the column. Catch this up front and name the offending column.
+        """
+        param_names = set(self.list_params or [])
+        if not param_names:
+            return
+
+        columns = set(self.data.columns)
+        conflicts: dict[str, list[str]] = {}
+        for name, param in self.params.items():
+            formula = getattr(param, "formula", None)
+            if not getattr(param, "is_regression", False) or not formula:
+                continue
+            try:
+                description = model_description(formula)
+            except Exception:
+                # Malformed formulas are reported by bambi/formulae later on.
+                continue
+            response = (
+                set(description.response.var_names)
+                if description.response is not None
+                else set()
+            )
+            used_columns = (description.var_names - response) & columns
+            for column in sorted(used_columns & param_names):
+                conflicts.setdefault(column, []).append(name)
+
+        if conflicts:
+            details = "; ".join(
+                f"column `{column}` (used in the formula for "
+                + ", ".join(f"`{p}`" for p in params_using)
+                + ")"
+                for column, params_using in sorted(conflicts.items())
+            )
+            example = ", ".join(
+                f'"{column}": "{column}_data"' for column in sorted(conflicts)
+            )
+            raise ValueError(
+                f"Data {details} has the name of a parameter of model "
+                f"`{self.model_name}`, so the formula cannot tell the column "
+                "apart from the parameter. Rename the column, e.g. "
+                f"`data.rename(columns={{{example}}})`."
+            )
 
     @classproperty
     def supported_models(cls) -> tuple[SupportedModels, ...]:
