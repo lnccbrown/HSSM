@@ -58,13 +58,21 @@ def _bounds_from_ssms(ssms_config: dict[str, Any]) -> dict[str, tuple[float, flo
     order or as a ``{name: (lower, upper)}`` dict; configs built with
     ``ModelConfigBuilder`` also carry the dict form as ``param_bounds_dict``.
     """
-    bounds = ssms_config.get("param_bounds_dict", ssms_config.get("param_bounds"))
+    bounds = ssms_config.get("param_bounds_dict")
+    if bounds is None:
+        bounds = ssms_config.get("param_bounds")
     if bounds is None:
         return {}
     if not isinstance(bounds, dict):
         lower, upper = bounds
         bounds = dict(zip(ssms_config["params"], zip(lower, upper)))
-    return {name: (float(lo), float(hi)) for name, (lo, hi) in bounds.items()}
+    # A bound that names another parameter (full_ddm_rv's st < t) has no HSSM
+    # form, so that parameter gets none.
+    return {
+        name: (float(lo), float(hi))
+        for name, (lo, hi) in bounds.items()
+        if not isinstance(lo, str) and not isinstance(hi, str)
+    }
 
 
 def _validate_ndt_edge_shift(

@@ -334,8 +334,13 @@ class TestSsmsRegisteredModel:
                 "param_bounds": [[-3, 0.3], [3, 2.5]],
                 "param_bounds_dict": {"v": (-3, 3), "a": (0.3, 2.5)},
             },
+            {
+                "params": ["v", "a"],
+                "param_bounds": [[-3, 0.3], [3, 2.5]],
+                "param_bounds_dict": None,
+            },
         ],
-        ids=["list", "dict", "param_bounds_dict"],
+        ids=["list", "dict", "param_bounds_dict", "param_bounds_dict_none"],
     )
     def test_bounds_from_ssms(self, ssms_config):
         """Both ssms bounds layouts give the same HSSM bounds dict."""
@@ -348,6 +353,16 @@ class TestSsmsRegisteredModel:
         from hssm.config import _bounds_from_ssms
 
         assert _bounds_from_ssms({"params": ["v", "a"]}) == {}
+
+    def test_bounds_from_ssms_skips_a_bound_naming_a_parameter(self):
+        """ssms' full_ddm_rv bounds st by t, which HSSM bounds cannot express."""
+        from hssm.config import Config
+
+        config = Config.from_defaults("full_ddm_rv", "approx_differentiable")
+
+        assert "st" in config.list_params
+        assert "st" not in config.bounds
+        assert config.bounds["t"] == (0.25, 2.25)
 
 
 class TestApproxDifferentiableBackendDefault:
