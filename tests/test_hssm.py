@@ -4,6 +4,7 @@ from copy import deepcopy
 from unittest.mock import Mock, patch
 
 import numpy as np
+import pandas as pd
 import pymc as pm
 import pytensor
 import pytest
@@ -694,6 +695,76 @@ def test_sample_do(data_ddm):
         "rt,response_dim",
     }
     assert np.unique(sample_do.prior["v_mean"].values) == [1.0]
+
+
+def _do_data():
+    rng = np.random.default_rng(0)
+    return pd.DataFrame(
+        {
+            "rt": 1.0,
+            "response": 1.0,
+            "x": rng.uniform(0, 10, 200),
+            "stim": rng.choice(["A", "B", "C"], 200),
+        }
+    )
+
+
+@pytest.mark.parametrize("center_predictors", [True, False])
+def test_sample_do_intercepts_on_original_scale(center_predictors):
+    """Stated intercepts are simulated as stated, with or without centering."""
+    data = _do_data()
+    model = HSSM(
+        data=data,
+        model="ddm",
+        p_outlier=0,
+        center_predictors=center_predictors,
+        include=[
+            {"name": "v", "formula": "v ~ 1 + x + C(stim)"},
+            {"name": "a", "formula": "a ~ 1 + x"},
+        ],
+    )
+    params = {
+        "v_Intercept": 0.3,
+        "v_x": 0.1,
+        "v_C(stim)": np.array([0.4, -0.1], dtype=pytensor.config.floatX),
+        "a_Intercept": 1.0,
+        "a_x": 0.05,
+        "z": 0.5,
+        "t": 0.3,
+    }
+
+    sim = model.sample_do(params=params, draws=1, random_seed=1)
+
+    stim_effect = data["stim"].map({"A": 0.0, "B": 0.4, "C": -0.1})
+    np.testing.assert_allclose(
+        sim["prior"]["v"].values.ravel(), 0.3 + 0.1 * data["x"] + stim_effect, rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        sim["prior"]["a"].values.ravel(), 1.0 + 0.05 * data["x"], rtol=1e-5
+    )
+    assert params["v_Intercept"] == 0.3  # the caller's dict is not modified
+
+
+def test_sample_do_warns_when_intercept_is_fixed_without_its_slopes(caplog):
+    """A fixed intercept with an unfixed slope cannot be translated."""
+    model = HSSM(
+        data=_do_data(),
+        model="ddm",
+        p_outlier=0,
+        include=[{"name": "v", "formula": "v ~ 1 + x"}],
+    )
+
+    model.sample_do(params={"v_Intercept": 0.0}, draws=1)
+
+    assert "v_Intercept is fixed but ['v_x'] are not" in caplog.text
+
+
+def test_sample_do_strict_lists_unfixed_variables(data_ddm):
+    """strict=True refuses to draw unfixed free variables from their priors."""
+    model = HSSM(data=data_ddm)
+
+    with pytest.raises(ValueError, match=r"would be drawn from their priors: \['a'"):
+        model.sample_do(params={"v": 1.0}, draws=1, strict=True)
 
 
 @pytest.mark.parametrize(

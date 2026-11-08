@@ -40,6 +40,8 @@ This version includes the following changes:
 
 18. **Documentation: `compile_logp()` returns the log-posterior; `distribution_utils` API page fixed** (closes #1436). `HSSM.compile_logp()` compiles the model's log-prior plus log-likelihood, plus any Bambi `potentials` (the unnormalized log-posterior), as a function of natural-scale parameter values, not the log-likelihood alone; the tutorial, renamed "Compile a log-posterior function", and the method's docstring now say so. It also gives `pip install zeus-mcmc` for `zeus`: `hssm[notebook]` installs no `zeus`, since `notebook` is a dependency group, not an extra. The `distribution_utils` API page now lists `make_hssm_rv` in place of the nonexistent `make_ssm_rv`, and adds `make_distribution_for_supported_model`.
 
+19. **`sample_do` simulates the intercepts it is given** (closes #1470). With bambi's default `center_predictors=True`, the PyMC intercept of a regression with common predictors belongs to the centered design, while posteriors report it on the original scale, so `sample_do(params={"v_Intercept": b0, "v_x": b1})` simulated an intercept of `b0 - b1 * mean(x)`. `sample_do` now converts each fixed intercept to the centered design when all of that parameter's slopes are fixed too (and warns when they are not), so `params` means what the posterior reports. Behaviour change: simulations from such models change; refit any recovery study built on them. `sample_do` also gains `strict=True`, which raises when a free variable is not in `params` instead of drawing it from its prior, and a full docstring. The hierarchical-regression tutorial, whose stated intercept of 0.0 was simulated as about -0.4, is re-executed.
+
 ### 0.5.0
 
 This version includes the following changes:
