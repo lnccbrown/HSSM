@@ -26,6 +26,9 @@ from .utils import (
 
 _logger = logging.getLogger("hssm")
 
+# The quantiles conventionally shown in quantile-probability plots.
+DEFAULT_QUANTILES = (0.1, 0.3, 0.5, 0.7, 0.9)
+
 
 def _confidence_to_n_std(confidence: float, n_dim: int = 2) -> float:
     """
@@ -140,7 +143,7 @@ def _plot_quantile_probability_1D(
     ellipse_confidence: float = 0.95,
     ellipse_min_points: int = 5,
     correct: str | None = None,
-    q: int | Iterable[float] = 5,
+    q: int | Iterable[float] = DEFAULT_QUANTILES,
     quantile_by: list[str] | str | None = None,
     title: str | None = "Quantile Probability Plot",
     xlabel: str | None = "Proportion",
@@ -372,7 +375,7 @@ def _plot_quantile_probability_2D(
     ellipse_confidence: float = 0.95,
     ellipse_min_points: int = 5,
     correct: str | None = None,
-    q: int | Iterable[float] = 5,
+    q: int | Iterable[float] = DEFAULT_QUANTILES,
     quantile_by: list[str] | str | None = None,
     title: str | None = "Quantile Probability Plot",
     xlabel: str | None = "Proportion",
@@ -461,7 +464,7 @@ def plot_quantile_probability(
     ellipse_confidence: float = 0.95,
     ellipse_min_points: int = 5,
     correct: str | None = None,
-    q: int | Iterable[float] = 5,
+    q: int | Iterable[float] = DEFAULT_QUANTILES,
     quantile_by: list[str] | str | None = None,
     title: str | None = "Quantile Probability Plot",
     xlabel: str | None = "Proportion",
@@ -550,9 +553,9 @@ def plot_quantile_probability(
         column from `data` indicates whether the response is correct or not. By default
         None.
     q : optional
-        If an `int`, quantiles will be determined using np.linspace(0, 1, q) (0 and 1
-        will be excluded. If an iterable, will generate quantiles according to this
-        iterable.
+        The quantiles to plot, by default (0.1, 0.3, 0.5, 0.7, 0.9). If an `int`,
+        quantiles will be determined using np.linspace(0, 1, q), with 0 and 1
+        excluded, so `q=5` gives the three quantiles 0.25, 0.5 and 0.75.
     title : optional
         The title of the plot, by default "Quantile Probability Plot". Ignored
         when `groups` is provided.
