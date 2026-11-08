@@ -657,7 +657,7 @@ class TestGetRlssmModelConfig:
         annotated_ssm_base_logp: Any,
         learning_process: dict[str, Any],
     ) -> None:
-        """Choices default to the decision process's coding and must match it (#1461)."""
+        """Choices default to the decision process's coding and must match it."""
         registry.register_ssm(
             name="uncoded_ssm",
             ssm_base_logp_func=annotated_ssm_base_logp,
@@ -686,8 +686,13 @@ class TestGetRlssmModelConfig:
         assert registry.get_rlssm_model_config("on_angle").choices == (-1, 1)
         reordered = registry.get_rlssm_model_config("on_angle", choices=[1, -1])
         assert reordered.choices == (1, -1)
-        # Another coding is rejected whether it was registered or passed per call.
-        for name, overrides in [("on_angle_01", {}), ("on_angle", {"choices": [0, 1]})]:
+        # Another coding, or a duplicated one, is rejected whether it was registered
+        # or passed per call.
+        for name, overrides in [
+            ("on_angle_01", {}),
+            ("on_angle", {"choices": [0, 1]}),
+            ("on_angle", {"choices": [-1, 1, 1]}),
+        ]:
             with pytest.raises(ValueError, match=r"reads responses coded as \[-1, 1\]"):
                 registry.get_rlssm_model_config(name, **overrides)
         # A custom SSM declares no coding; switching to angle picks up angle's.

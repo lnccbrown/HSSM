@@ -668,7 +668,7 @@ def get_rlssm_model_config(
     declared = ssm_entry.get("choices")
     if entry.choices is None:
         entry.choices = list(declared if declared is not None else DEFAULT_SSM_CHOICES)
-    elif declared is not None and set(entry.choices) != set(declared):
+    elif declared is not None and sorted(entry.choices) != sorted(declared):
         raise ValueError(
             f"Decision process '{dp}' reads responses coded as {list(declared)}, "
             f"but choices={list(entry.choices)} was given. Recode the response "
