@@ -40,6 +40,8 @@ This version includes the following changes:
 
 18. **Documentation: `compile_logp()` returns the log-posterior; `distribution_utils` API page fixed** (closes #1436). `HSSM.compile_logp()` compiles the model's log-prior plus log-likelihood, plus any Bambi `potentials` (the unnormalized log-posterior), as a function of natural-scale parameter values, not the log-likelihood alone; the tutorial, renamed "Compile a log-posterior function", and the method's docstring now say so. It also gives `pip install zeus-mcmc` for `zeus`: `hssm[notebook]` installs no `zeus`, since `notebook` is a dependency group, not an extra. The `distribution_utils` API page now lists `make_hssm_rv` in place of the nonexistent `make_ssm_rv`, and adds `make_distribution_for_supported_model`.
 
+19. **`plot_quantile_probability` shows five quantiles by default** (closes #1474). The default `q=5` was turned into `np.linspace(0, 1, 5)` without its ends, so the plot showed three quantiles (0.25, 0.5, 0.75). The default is now `(0.1, 0.3, 0.5, 0.7, 0.9)`, the quantiles conventionally shown in quantile-probability plots. An integer `q` keeps its meaning; pass `q=5` for the previous plot.
+
 ### 0.5.0
 
 This version includes the following changes:
