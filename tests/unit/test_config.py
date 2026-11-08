@@ -238,36 +238,166 @@ class TestConfigBuildModelConfigExtraLogic:
         )
         assert cfg.choices == (5, 6, 7)
 
-    def test_build_model_config_uses_ssms_model_config(self, monkeypatch):
-        # High-level view of the test: ensures that when a model name is not in the built-in
-        # SupportedModels and no choices argument is passed, _build_model_config will consult
-        # the external ssms_model_config registry and use its defaults (here, the choices tuple).
-        # The monkeypatch fixture isolates the change and will be undone after the test.
+    def test_build_model_config_uses_ssms_model_config(self, registered_ssms_model):
+        """A name only ssms knows takes its choices when nothing else sets them.
 
-        # Simulate an external ssms_model_config entry for a model not in SupportedModels
-        fake_model = "external_ssm"
-        fake_choices = (2, 3)
-
-        # Monkeypatch the ssms_model_config mapping in the module
-        import hssm.config as cfgmod
-
-        # Emulate an external package registering defaults for external_ssm.
-        # Ensures `_build_model_config` will consult `ssms_model_config`
-        # when the model name isn't in SupportedModels.
-        monkeypatch.setitem(
-            cfgmod.ssms_model_config, fake_model, {"choices": fake_choices}
-        )
-
-        # Build config with model not in SupportedModels and no choices arg.
-        # Provide a minimal ModelConfig and a dummy `loglik` so
-        # `Config.validate()` runs (loglik is required) while still
-        # exercising the ssms-simulators choices fallback.
+        The model is registered after import, so it is in ssms' registry but
+        not in the ``ssms.config.model_config`` snapshot (#1467).
+        """
         mc = ModelConfig(response=("rt", "response"), list_params=["v"], choices=None)
         result = Config._build_model_config(
-            fake_model,
+            registered_ssms_model["name"],
             "analytical",
             mc,
             choices=None,
             loglik=(lambda *a, **k: None),  # required so Config.validate() passes
         )
-        assert result.choices == fake_choices
+        assert result.choices == (-1, 1)
+
+
+class TestSsmsRegisteredModel:
+    """Models HSSM does not ship take their config from ssm-simulators (#1467)."""
+
+    def test_from_defaults_registered_model(self, registered_ssms_model):
+        """list_params, bounds and choices come from the registered ssms config."""
+        config = Config.from_defaults(
+            registered_ssms_model["name"], "approx_differentiable"
+        )
+
+        assert config.list_params == ["v", "a", "z", "t"]
+        assert config.bounds == {
+            "v": (-2.0, 2.0),
+            "a": (0.5, 2.0),
+            "z": (0.2, 0.8),
+            "t": (0.1, 1.5),
+        }
+        assert config.choices == (-1, 1)
+
+    def test_from_defaults_ssms_builtin(self):
+        """An ssms built-in HSSM does not ship resolves the same way."""
+        from ssms.config import get_model_registry
+
+        ssms_config = get_model_registry().get("race_no_bias_2")
+        config = Config.from_defaults("race_no_bias_2", "approx_differentiable")
+
+        assert config.list_params == ssms_config["params"]
+        assert config.bounds == ssms_config["param_bounds_dict"]
+        assert config.choices == tuple(ssms_config["choices"])
+
+    def test_from_defaults_unknown_model(self):
+        """A name neither HSSM nor ssms knows still leaves everything to the user."""
+        config = Config.from_defaults("not_a_model", "approx_differentiable")
+
+        assert config.list_params is None
+        assert config.bounds == {}
+        assert config.choices == (0, 1)
+
+    def test_user_model_config_wins(self, registered_ssms_model):
+        """Keys set in `model_config` override the registered config's."""
+        config = Config._build_model_config(
+            registered_ssms_model["name"],
+            "approx_differentiable",
+            {
+                "list_params": ["v", "a", "t"],
+                "bounds": {"v": (-1.0, 1.0)},
+                "choices": [0, 1],
+                "backend": "jax",
+            },
+            choices=None,
+            loglik=lambda *a: None,
+        )
+
+        assert config.list_params == ["v", "a", "t"]
+        assert config.bounds["v"] == (-1.0, 1.0)
+        assert config.bounds["a"] == (0.5, 2.0)
+        assert config.choices == (0, 1)
+
+    def test_choices_argument_wins(self, registered_ssms_model):
+        """The `choices` argument beats the registered config's choices."""
+        config = Config._build_model_config(
+            registered_ssms_model["name"],
+            "approx_differentiable",
+            {"backend": "jax"},
+            choices=(0, 1),
+            loglik=lambda *a: None,
+        )
+
+        assert config.choices == (0, 1)
+
+    @pytest.mark.parametrize(
+        "ssms_config",
+        [
+            {"params": ["v", "a"], "param_bounds": [[-3, 0.3], [3, 2.5]]},
+            {"params": ["v", "a"], "param_bounds": {"v": [-3, 3], "a": [0.3, 2.5]}},
+            {
+                "params": ["v", "a"],
+                "param_bounds": [[-3, 0.3], [3, 2.5]],
+                "param_bounds_dict": {"v": (-3, 3), "a": (0.3, 2.5)},
+            },
+            {
+                "params": ["v", "a"],
+                "param_bounds": [[-3, 0.3], [3, 2.5]],
+                "param_bounds_dict": None,
+            },
+        ],
+        ids=["list", "dict", "param_bounds_dict", "param_bounds_dict_none"],
+    )
+    def test_bounds_from_ssms(self, ssms_config):
+        """Both ssms bounds layouts give the same HSSM bounds dict."""
+        from hssm.config import _bounds_from_ssms
+
+        assert _bounds_from_ssms(ssms_config) == {"v": (-3.0, 3.0), "a": (0.3, 2.5)}
+
+    def test_bounds_from_ssms_without_bounds(self):
+        """A config without bounds gives no bounds."""
+        from hssm.config import _bounds_from_ssms
+
+        assert _bounds_from_ssms({"params": ["v", "a"]}) == {}
+
+    def test_bounds_from_ssms_skips_a_bound_naming_a_parameter(self):
+        """ssms' full_ddm_rv bounds st by t, which HSSM bounds cannot express."""
+        from hssm.config import Config
+
+        config = Config.from_defaults("full_ddm_rv", "approx_differentiable")
+
+        assert "st" in config.list_params
+        assert "st" not in config.bounds
+        assert config.bounds["t"] == (0.25, 2.25)
+
+
+class TestApproxDifferentiableBackendDefault:
+    """`backend` defaults to "jax" for an ONNX `loglik` (#1467)."""
+
+    @pytest.mark.parametrize("as_path", [True, False], ids=["path", "str"])
+    def test_onnx_loglik_defaults_to_jax(self, fixture_path, as_path):
+        onnx_file = fixture_path / "ddm.onnx"
+        config = Config._build_model_config(
+            "custom",
+            "approx_differentiable",
+            {"list_params": ["v", "a", "z", "t"]},
+            choices=None,
+            loglik=onnx_file if as_path else str(onnx_file),
+        )
+
+        assert config.backend == "jax"
+
+    def test_user_backend_wins(self, fixture_path):
+        config = Config._build_model_config(
+            "custom",
+            "approx_differentiable",
+            {"list_params": ["v", "a", "z", "t"], "backend": "pytensor"},
+            choices=None,
+            loglik=fixture_path / "ddm.onnx",
+        )
+
+        assert config.backend == "pytensor"
+
+    def test_callable_loglik_still_needs_backend(self):
+        with pytest.raises(ValueError, match="Please provide `backend`"):
+            Config._build_model_config(
+                "custom",
+                "approx_differentiable",
+                {"list_params": ["v", "a", "z", "t"]},
+                choices=None,
+                loglik=lambda *a: None,
+            )

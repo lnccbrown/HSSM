@@ -910,3 +910,34 @@ def test_jax_callable_non_trialwise_params_logp(data_ddm, mode):
     # Loose rtol so the test is valid under either floatX; the pre-fix failures
     # it guards against are off by ~300 orders of magnitude or a whole axis.
     np.testing.assert_allclose(actual, expected, rtol=1e-4)
+
+
+def test_ssms_registered_model_with_onnx(
+    registered_ssms_model, fixture_path, no_hf_hub_download
+):
+    """A model registered in ssm-simulators needs only its name and a network.
+
+    Its list_params, bounds and choices come from the registered ssms config,
+    and the ONNX `loglik` picks the "jax" backend (#1467).
+    """
+    name = registered_ssms_model["name"]
+    obs = hssm.simulate_data(
+        model=name,
+        theta=dict(v=0.5, a=1.5, z=0.5, t=0.3),
+        size=100,
+        random_state=1,
+    )
+
+    model = HSSM(
+        data=obs,
+        model=name,
+        loglik=fixture_path / "ddm.onnx",
+        loglik_kind="approx_differentiable",
+        p_outlier=0,
+    )
+
+    assert model.model_config.list_params == ["v", "a", "z", "t"]
+    assert model.model_config.backend == "jax"
+    assert model.choices == (-1, 1)
+    assert model.params["a"].bounds == (0.5, 2.0)
+    assert np.isfinite(model.initial_point(transformed=False)["a"])

@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field
 from numbers import Real
+from os import PathLike
 from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
 
 import numpy as np
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
 
 import logging
 
-from ssms.config import model_config as ssms_model_config
+from ssms.config import get_model_registry
 
 _logger = logging.getLogger("hssm")
 
@@ -37,6 +38,41 @@ DEFAULT_SSM_OBSERVED_DATA = ["rt", "response"]
 DEFAULT_SSM_CHOICES = (0, 1)
 
 ParamSpec = Union[float, dict[str, Any], Prior, None]
+
+
+def _get_ssms_model_config(model: str) -> dict[str, Any] | None:
+    """Return ssm-simulators' config for ``model``, or None if ssms does not know it.
+
+    Looks the name up in ssms' model registry rather than the
+    ``ssms.config.model_config`` snapshot taken at import, so models registered
+    with ``ssms.config.register_model_config`` are found too.
+    """
+    registry = get_model_registry()
+    return registry.get(model) if registry.has_model(model) else None
+
+
+def _bounds_from_ssms(ssms_config: dict[str, Any]) -> dict[str, tuple[float, float]]:
+    """Convert an ssms config's ``param_bounds`` to HSSM's ``bounds`` dict.
+
+    ssms gives bounds either as ``[[lower, ...], [upper, ...]]`` in ``params``
+    order or as a ``{name: (lower, upper)}`` dict; configs built with
+    ``ModelConfigBuilder`` also carry the dict form as ``param_bounds_dict``.
+    """
+    bounds = ssms_config.get("param_bounds_dict")
+    if bounds is None:
+        bounds = ssms_config.get("param_bounds")
+    if bounds is None:
+        return {}
+    if not isinstance(bounds, dict):
+        lower, upper = bounds
+        bounds = dict(zip(ssms_config["params"], zip(lower, upper)))
+    # A bound that names another parameter (full_ddm_rv's st < t) has no HSSM
+    # form, so that parameter gets none.
+    return {
+        name: (float(lo), float(hi))
+        for name, (lo, hi) in bounds.items()
+        if not isinstance(lo, str) and not isinstance(hi, str)
+    }
 
 
 def _validate_ndt_edge_shift(
@@ -253,6 +289,21 @@ class Config(BaseModelConfig):
                     description=default_config["description"],
                 )
 
+            # A model HSSM does not ship but ssm-simulators knows (a built-in or
+            # one registered with `register_model_config`): its ssms config
+            # names the parameters, their bounds (for a LAN trained on it, the
+            # training range) and the choices.
+            ssms_config = _get_ssms_model_config(model_name)
+            if ssms_config is not None:
+                return Config(
+                    model_name=model_name,
+                    loglik_kind=loglik_kind,
+                    response=list(DEFAULT_SSM_OBSERVED_DATA),
+                    list_params=list(ssms_config["params"]),
+                    bounds=_bounds_from_ssms(ssms_config),
+                    choices=tuple(ssms_config.get("choices", DEFAULT_SSM_CHOICES)),
+                )
+
             return Config(
                 model_name=model_name,
                 loglik_kind=loglik_kind,
@@ -385,17 +436,27 @@ class Config(BaseModelConfig):
         ):
             if choices is not None:
                 config.update_choices(choices)
-            elif model in ssms_model_config:
-                config.update_choices(ssms_model_config[model]["choices"])
+            elif (ssms_config := _get_ssms_model_config(model)) is not None and (
+                "choices" in ssms_config
+            ):
+                config.update_choices(tuple(ssms_config["choices"]))
                 _logger.info(
                     "choices argument passed as None, "
                     "but found %s in ssms-simulators. "
                     "Using choices, from ssm-simulators configs: %s",
                     model,
-                    ssms_model_config[model]["choices"],
+                    ssms_config["choices"],
                 )
 
         config.update_loglik(loglik)
+        # A str or PathLike `loglik` is an ONNX network (local or on the
+        # Hugging Face hub); "jax" is the backend every built-in LAN uses.
+        if (
+            config.loglik_kind == "approx_differentiable"
+            and config.backend is None
+            and isinstance(config.loglik, (str, PathLike))
+        ):
+            config.backend = "jax"
         config.validate()
         return config
 

@@ -65,8 +65,12 @@ class HSSM(HSSMBase):
         "full_ddm", "angle", "angle_extended", "levy", "ornstein", "weibull",
         "race_no_bias_angle_4",
         "ddm_seq2_no_bias", "gamma_drift", "gamma_drift_angle". If any other string
-        is passed, the model will be considered custom, in which case all
-        `model_config`, `loglik`, and `loglik_kind` have to be provided by the user.
+        is passed, the model will be considered custom, in which case `loglik` and
+        `loglik_kind` have to be provided by the user. If ssm-simulators knows the
+        name (one of its built-in models, or a model registered with
+        `ssms.config.register_model_config`), `list_params`, `bounds` and `choices`
+        default to its ssm-simulators config; otherwise `model_config` has to
+        provide at least `list_params`.
     choices : optional
         The choices that participants can make. An integer (Python `int` or numpy
         integer) gives the number of choices: `2` means [-1, 1] and any `n > 2`
