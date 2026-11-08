@@ -33,7 +33,7 @@ import jax.numpy as jnp
 from jax import config as jax_config
 from jax.scipy.special import logsumexp
 
-from hssm.config import _validate_ndt_edge_shift
+from hssm.config import DEFAULT_SSM_CHOICES, _validate_ndt_edge_shift
 from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.utils import annotate_function
@@ -137,7 +137,8 @@ class RLSSMRegistryEntry:
 
     decision_process: str | dict[str, Any]
     learning_process_metadata: LearningProcessMetadata
-    choices: list[int] = field(default_factory=lambda: [0, 1])
+    # None: use the choices the decision process declares (see get_rlssm_model_config).
+    choices: list[int] | None = None
     description: str | None = None
     decision_process_loglik_kind: str = "approx_differentiable"
     model_name: str | None = None
@@ -147,7 +148,7 @@ class RLSSMRegistryEntry:
         return RLSSMRegistryEntry(
             decision_process=deepcopy(self.decision_process),
             learning_process_metadata=self.learning_process_metadata.copy(),
-            choices=list(self.choices),
+            choices=list(self.choices) if self.choices is not None else None,
             description=self.description,
             decision_process_loglik_kind=self.decision_process_loglik_kind,
             model_name=self.model_name,
@@ -231,6 +232,7 @@ def _register_inv_temp_softmax_ssm(n_choices: int) -> None:
         "bounds_ssm": {"beta": (0.0, jnp.inf)},
         "params_default_ssm": [1.0, *([0.0] * n_choices)],
         "response": ["response"],
+        "choices": list(range(n_choices)),
     }
 
 
@@ -357,6 +359,7 @@ def _build_ssm_spec_from_modelconfig(
             for p in list_params_ssm
         ],
         "response": response,
+        "choices": mc.get("choices"),
         "name": name,
         # The backbone's support-edge declaration travels with the spec.
         "ndt_edge_shift": deepcopy(likelihood.get("ndt_edge_shift")),
@@ -579,7 +582,8 @@ def get_rlssm_model_config(
         Name of an ``ssms.rl`` preset (e.g. ``"2AB_RW_DDM"``) or a custom
         HSSM-side model registered with `register_rlssm_model`.
     choices:
-        Override the response choice values stored in the registry.
+        Override the response choice values stored in the registry. A built-in
+        decision process only accepts the choices its model config declares.
     learning_process:
         Override the learning process dict stored in the registry.
     decision_process:
@@ -600,8 +604,10 @@ def get_rlssm_model_config(
     Raises
     ------
     ValueError
-        If *model* or the resolved *decision_process* is not registered, or the
-        decision process has no JAX implementation for the requested kind.
+        If *model* or the resolved *decision_process* is not registered, the
+        decision process has no JAX implementation for the requested kind, or
+        *choices* (given here or at registration) differ from the choices the
+        decision process declares.
     """
     if model not in _RLSSM_REGISTRY:
         ssms_model = _resolve_ssms_model(model)
@@ -655,6 +661,22 @@ def get_rlssm_model_config(
         )
 
     dp: str = ssm_entry["name"]
+
+    # The decision process reads the response column in its own coding: a LAN
+    # trained on -1/1 scores a response of 0 as an out-of-range input. Custom
+    # SSMs from register_ssm() declare no coding and keep the generic default.
+    declared = ssm_entry.get("choices")
+    if entry.choices is None:
+        entry.choices = list(declared if declared is not None else DEFAULT_SSM_CHOICES)
+    elif declared is not None and sorted(entry.choices) != sorted(declared):
+        raise ValueError(
+            f"Decision process '{dp}' reads responses coded as {list(declared)}, "
+            f"but choices={list(entry.choices)} was given. Recode the response "
+            f"column to {list(declared)} and leave choices unset. The learning "
+            "process receives the same column, so a custom one must accept that "
+            "coding (the built-in Rescorla-Wagner rule treats response > 0 as arm 1)."
+        )
+
     ssm_base = _get_ssm_logp(dp, kind)
     lp: dict[str, Any] = dict(learning_metadata.learning_process)
 
@@ -795,7 +817,10 @@ def register_rlssm_model(
     extra_fields:
         Data column names required by the learning process (e.g. ``["feedback"]``).
     choices:
-        Response choice values. Defaults to ``[0, 1]``.
+        Response choice values. Defaults to the choices the decision process's
+        model config declares (``[-1, 1]`` for ``"ddm"`` and ``"angle"``), or to
+        ``[0, 1]`` for a custom SSM from `register_ssm`. A built-in decision
+        process rejects other choices when the config is built.
     description:
         Optional human-readable description.
     decision_process_loglik_kind:
@@ -831,7 +856,7 @@ def register_rlssm_model(
     _RLSSM_REGISTRY[name] = RLSSMRegistryEntry(
         decision_process=decision_process,
         learning_process_metadata=learning_process_metadata,
-        choices=list(choices) if choices is not None else [0, 1],
+        choices=list(choices) if choices is not None else None,
         description=description,
         decision_process_loglik_kind=decision_process_loglik_kind,
     )

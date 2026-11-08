@@ -307,7 +307,8 @@ class _RLSSM(HSSMBase):
                 unique_responses[~np.isin(unique_responses, choices)].tolist()
             )
             raise ValueError(
-                f"Invalid responses found in your dataset: {invalid_responses}"
+                f"Invalid responses found in your dataset: {invalid_responses}. "
+                f"The model's choices are {list(model_config.choices)}."
             )
 
         missing_responses = sorted(np.setdiff1d(choices, unique_responses).tolist())
@@ -467,7 +468,7 @@ class RLSSM(_RLSSM):
         to ``"2AB_RW_DDM"``.
     choices : list[int] | None, optional
         Override the choice values in the registry. ``None`` uses the registry
-        default.
+        default, which for a custom model follows its decision process.
     include : list | None, optional
         Parameter specifications forwarded to `hssm.base.HSSMBase`.
     model_config : RLSSMConfig | None, optional
