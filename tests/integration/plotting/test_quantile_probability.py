@@ -199,6 +199,60 @@ def test__plot_quantile_probability_1D_keeps_limits_fixed_by_user():
     plt.close(fig)
 
 
+def _qp_df_observed(accuracy):
+    """Observed rows only, 100 trials per condition with the given accuracy."""
+    rng = np.random.default_rng(0)
+    return pd.DataFrame(
+        {
+            "observed": "observed",
+            "chain": -1,
+            "draw": -1,
+            "stim": np.repeat(list(accuracy), 100),
+            "rt": rng.uniform(0.3, 2.0, 100 * len(accuracy)),
+            "response": np.concatenate(
+                [np.where(np.arange(100) < 100 * p, 1, -1) for p in accuracy.values()]
+            ),
+        }
+    )
+
+
+@pytest.mark.parametrize("data_kwargs, expected", [(None, 0), ({"mew": 1.5}, 1.5)])
+def test__plot_quantile_probability_1D_markers_without_edge(data_kwargs, expected):
+    """Markers have no white edge cutting the line, unless the user sets one."""
+    fig, ax = plt.subplots()
+
+    _plot_quantile_probability_1D(
+        _qp_df_observed({"LL": 0.6, "WW": 0.57}),
+        cond="stim",
+        ax=ax,
+        plot_predictive=False,
+        data_kwargs=data_kwargs,
+    )
+
+    assert {line.get_markeredgewidth() for line in ax.lines} == {expected}
+    plt.close(fig)
+
+
+def test__plot_quantile_probability_1D_lifts_overlapping_labels():
+    """Of two condition labels that would overlap, the second sits one row higher."""
+    fig, ax = plt.subplots()
+
+    # Proportions, sorted: C .2, A .4, B .41, B .59, A .6, C .8
+    _plot_quantile_probability_1D(
+        _qp_df_observed({"A": 0.4, "B": 0.41, "C": 0.8}),
+        cond="stim",
+        ax=ax,
+        plot_predictive=False,
+    )
+
+    (secax,) = [other for other in fig.axes if other is not ax]
+    pads = [tick.get_pad() for tick in secax.xaxis.get_major_ticks()]
+    pad = plt.rcParams["xtick.major.pad"]
+    assert pads[0] == pads[1] == pads[3] == pads[5] == pad
+    assert pads[2] == pads[4] > pad
+    plt.close(fig)
+
+
 @pytest.mark.slow
 class TestQuantileProbabilityPlotting:
     """Tests for functions in hssm.plotting.quantile_probability."""
