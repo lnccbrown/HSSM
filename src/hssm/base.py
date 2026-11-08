@@ -1125,6 +1125,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         kind: Literal["response", "response_params"] = "response",
         draws: int | float | list[int] | np.ndarray | None = None,
         safe_mode: bool = True,
+        random_seed: int | np.random.Generator | None = None,
     ) -> DataTree | None:
         """Perform posterior predictive sampling from the HSSM model.
 
@@ -1165,6 +1166,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         safe_mode: bool
             If True, the function will split the draws into chunks of 10 to avoid memory
             issues. Defaults to True.
+        random_seed: optional
+            Seed for the simulated responses, an `int` or a `numpy.random.Generator`.
+            The same seed and posterior draws give the same posterior predictive draws.
+            Defaults to None, which is not reproducible.
 
         Raises
         ------
@@ -1231,12 +1236,24 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 # memory issues (TODO: Figure out the source of memory issues)
                 split_draws = _split_array(dt_copy["posterior"].draw.values, divisor=10)
 
+                # One independent seed per chunk, so chunks don't repeat each other
+                chunk_seeds = (
+                    [None] * len(split_draws)
+                    if random_seed is None
+                    else np.random.default_rng(random_seed).spawn(len(split_draws))
+                )
+
                 posterior_predictive_list = []
-                for samples_tmp in split_draws:
+                for samples_tmp, chunk_seed in zip(split_draws, chunk_seeds):
                     tmp_posterior = dt["posterior"].sel(draw=samples_tmp)
                     dt_copy["posterior"] = tmp_posterior
                     self.model.predict(
-                        dt_copy, kind, data, True, include_group_specific
+                        dt_copy,
+                        kind,
+                        data,
+                        True,
+                        include_group_specific,
+                        random_seed=chunk_seed,
                     )
                     posterior_predictive_list.append(dt_copy["posterior_predictive"])
 
@@ -1267,7 +1284,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     # .predict() is called on the copy of dt
                     # since we still subsampled (or assigned) the draws
                     self.model.predict(
-                        dt_copy, kind, data, True, include_group_specific
+                        dt_copy,
+                        kind,
+                        data,
+                        True,
+                        include_group_specific,
+                        random_seed=random_seed,
                     )
 
                     # posterior predictive group added to dt
@@ -1280,7 +1302,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     # .predict(). It just operates on the
                     # dt_copy object
                     return self.model.predict(
-                        dt_copy, kind, data, False, include_group_specific
+                        dt_copy,
+                        kind,
+                        data,
+                        False,
+                        include_group_specific,
+                        random_seed=random_seed,
                     )
         elif kind == "response_params":
             # If kind == 'response_params', we don't need to run the RV directly,

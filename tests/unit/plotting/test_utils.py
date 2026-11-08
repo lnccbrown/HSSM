@@ -358,16 +358,23 @@ class TestUseTracesOrSampleSeededDraws:
 
             def __init__(self):
                 self.draw_requests = []
+                self.seeds = []
 
-            def sample_posterior_predictive(self, dt, data, inplace, draws):
+            def sample_posterior_predictive(
+                self, dt, data, inplace, draws, random_seed
+            ):
                 self.draw_requests.append(draws)
+                self.seeds.append(random_seed)
 
         return _use_traces_or_sample, FakeModel(), dt
 
     def test_rng_selects_sorted_random_subset(self):
         fn, model, dt = self._fake_model_and_dt()
-        fn(model, None, dt, n_samples=5, rng=np.random.default_rng(0))
+        rng = np.random.default_rng(0)
+        fn(model, None, dt, n_samples=5, rng=rng)
         (draws,) = model.draw_requests
+        # the same rng also seeds the simulated responses
+        assert model.seeds == [rng]
         assert isinstance(draws, np.ndarray)
         assert len(draws) == 5 == len(np.unique(draws))
         assert np.all(np.diff(draws) > 0) and draws.max() < 20
@@ -380,3 +387,4 @@ class TestUseTracesOrSampleSeededDraws:
         fn, model, dt = self._fake_model_and_dt()
         fn(model, None, dt, n_samples=5)
         assert model.draw_requests == [5]
+        assert model.seeds == [None]

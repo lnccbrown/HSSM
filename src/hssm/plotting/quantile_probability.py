@@ -471,6 +471,7 @@ def plot_quantile_probability(
     data_kwargs: dict[str, Any] | None = None,
     predictive_samples_kwargs: dict[str, Any] | None = None,
     ellipse_kwargs: dict[str, Any] | None = None,
+    random_seed: int | np.random.Generator | None = None,
     **kwargs,
 ) -> Axes | FacetGrid | list[FacetGrid]:
     """Plot the quantile probabilities against the observed data.
@@ -572,6 +573,11 @@ def plot_quantile_probability(
     ellipse_kwargs : optional
         Keyword arguments passed to matplotlib.patches.Ellipse. Useful for customizing
         ellipse appearance (e.g., facecolor, edgecolor, alpha, linewidth).
+    random_seed : optional
+        Seeds the samples the plot draws itself (an `int` or a
+        `numpy.random.Generator`): which posterior draws are used, and, when `dt` has
+        no predictive group yet, the simulated responses. The same seed gives the same
+        plot. Defaults to None, which keeps the previous, unseeded behavior.
     kwargs : optional
         Keyword arguments passed to both seaborn.lineplot and seaborn.scatterplot.
 
@@ -606,8 +612,9 @@ def plot_quantile_probability(
 
     if predictive_group is not None:
         # Use the model's trace if dt is None
+        rng = None if random_seed is None else np.random.default_rng(random_seed)
         dt, sampled = _use_traces_or_sample(
-            model, data, dt, n_samples, predictive_group
+            model, data, dt, n_samples, predictive_group, rng=rng
         )
 
         plotting_df = _get_plotting_df(
@@ -618,6 +625,7 @@ def plot_quantile_probability(
             n_samples=None if sampled else n_samples,
             response_str=model.response_str,
             predictive_group=predictive_group,
+            rng=rng,
         )
     else:
         # Note if dt is passed as None,

@@ -99,6 +99,31 @@ def test_sample_posterior_predictive(
         raise
 
 
+@pytest.mark.parametrize("safe_mode", [True, False])
+def test_sample_posterior_predictive_random_seed(cav_dt, cavanagh_test, safe_mode):
+    """The same random_seed gives the same draws; another seed does not."""
+    model = hssm.HSSM(
+        data=cavanagh_test,
+        include=[{"name": "v", "formula": "v ~ theta + (1|participant_id)"}],
+    )
+    if "posterior_predictive" in cav_dt:
+        del cav_dt["posterior_predictive"]
+
+    def simulate(seed):
+        # 12 draws make two chunks in safe mode
+        result = model.sample_posterior_predictive(
+            dt=cav_dt.copy(),
+            draws=12,
+            safe_mode=safe_mode,
+            inplace=False,
+            random_seed=seed,
+        )
+        return result["posterior_predictive"]["rt,response"].values
+
+    np.testing.assert_array_equal(simulate(1), simulate(1))
+    assert not np.array_equal(simulate(1), simulate(2))
+
+
 def test_sample_posterior_predictive_uses_attached_traces_for_response_params(
     data_ddm, minimal_posterior_datatree, monkeypatch
 ):
