@@ -266,7 +266,7 @@ def get_default_prior(
 
     The following summarizes default priors for each type of term:
 
-    * common_intercept: Bounded Normal prior (N(mean(bounds), 0.25)).
+    * common_intercept: Bounded Normal prior (N(mean(bounds), width(bounds) / 4)).
     * common: Normal prior (N(0, 0.25)).
     * group_intercept: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3)). Under a
       transformed link this correctly lives on an unbounded predictor scale. Safe
@@ -307,8 +307,15 @@ def get_default_prior(
                 # TODO: Make it more specific.
                 prior = generate_prior("Normal", bounds=bounds)
             else:
+                # A quarter of the width puts the bounds 2 SD from the mean, so the
+                # prior is weakly informative across the whole range. For LAN
+                # models the bounds are the training range, and a fixed SD of 0.25
+                # pulled typical values (t near 0.3, v near 1) toward the middle.
                 prior = generate_prior(
-                    "Normal", mu=mean(bounds), sigma=0.25, bounds=bounds
+                    "Normal",
+                    mu=mean(bounds),
+                    sigma=(bounds[1] - bounds[0]) / 4,
+                    bounds=bounds,
                 )
     elif term_type == "group_intercept":
         prior = generate_prior("Normal", mu="Normal", sigma="Weibull")

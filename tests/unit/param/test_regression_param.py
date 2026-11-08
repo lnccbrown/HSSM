@@ -1056,7 +1056,7 @@ def test_make_safe_priors(cavanagh_test, caplog, param_name, bounds, is_ddm):
         assert _mu.item() == (lower + upper) / 2
     else:
         assert _mu == (lower + upper) / 2
-    assert intercept_prior._args["sigma"] == 0.25
+    assert intercept_prior._args["sigma"] == (upper - lower) / 4
 
     assert isinstance(slope_prior, bmb.Prior)
     assert slope_prior.dist is None

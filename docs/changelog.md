@@ -40,6 +40,8 @@ This version includes the following changes:
 
 18. **Documentation: `compile_logp()` returns the log-posterior; `distribution_utils` API page fixed** (closes #1436). `HSSM.compile_logp()` compiles the model's log-prior plus log-likelihood, plus any Bambi `potentials` (the unnormalized log-posterior), as a function of natural-scale parameter values, not the log-likelihood alone; the tutorial, renamed "Compile a log-posterior function", and the method's docstring now say so. It also gives `pip install zeus-mcmc` for `zeus`: `hssm[notebook]` installs no `zeus`, since `notebook` is a dependency group, not an extra. The `distribution_utils` API page now lists `make_hssm_rv` in place of the nonexistent `make_ssm_rv`, and adds `make_distribution_for_supported_model`.
 
+19. **Default intercept priors on bounded parameters are scaled to the bounds** (towards #1472). With `prior_settings="safe"` and an identity link, a regression intercept on a parameter with finite bounds got `Normal(mean(bounds), 0.25)`, truncated to the bounds; the SD is now a quarter of the bounds' width. For LAN models the bounds are the network's training range, so the old prior pulled typical values toward its middle: `angle_extended`'s `v_Intercept` prior was `Normal(0, 0.25)`, and a hierarchical fit recovered a group drift of 0.86 against a true 1.00. Behaviour change: default intercept priors are now `Normal(0, 1.5)` for `v` in `angle` (`Normal(0, 3)` in `angle_extended`), `Normal(1.65, 0.675)` for `a`, `Normal(0.5, 0.2)` for `z`, `Normal(1.0005, 0.5)` for `t` and `Normal(0.6, 0.35)` for `theta`. The analytical `ddm` (HDDM-based priors), slopes and priors you set yourself are unchanged.
+
 ### 0.5.0
 
 This version includes the following changes:
