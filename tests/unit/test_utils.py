@@ -1,5 +1,8 @@
 """Tests for HSSM utility helpers."""
 
+import os
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -101,6 +104,91 @@ def test_set_floatX():
     set_floatX("float64")
     assert pytensor.config.floatX == "float64"
     assert config.read("jax_enable_x64")
+
+
+@pytest.fixture
+def precision_env():
+    """Restore the environment variables set_floatX writes for new processes."""
+    names = ("PYTENSOR_FLAGS", "JAX_DEFAULT_MATMUL_PRECISION")
+    saved = {name: os.environ.get(name) for name in names}
+    yield
+    for name, value in saved.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+
+
+def test_set_floatX_float32_disables_tf32(precision_env):
+    """float32 means full float32 matmuls (no TF32), unless a precision was chosen."""
+    floatX, precision = pytensor.config.floatX, config.jax_default_matmul_precision
+    try:
+        config.update("jax_default_matmul_precision", None)  # JAX's default
+        set_floatX("float32")
+        assert config.jax_default_matmul_precision == "highest"
+
+        config.update("jax_default_matmul_precision", "tensorfloat32")
+        set_floatX("float32")
+        assert config.jax_default_matmul_precision == "tensorfloat32"
+    finally:
+        set_floatX(floatX)
+        config.update("jax_default_matmul_precision", precision)
+
+
+@pytest.mark.parametrize(
+    "model, theta",
+    [
+        ("ddm", dict(v=0.5, a=1.5, z=0.5, t=0.3)),
+        ("angle", dict(v=0.5, a=1.5, z=0.5, t=0.3, theta=0.2)),
+        ("lba2", dict(A=0.5, b=1.5, v0=1.0, v1=1.0)),
+    ],
+)
+def test_set_floatX_float32_graphs_are_float32(model, theta):
+    """A model built after set_floatX("float32") has a float32 log density.
+
+    HSSM is imported at the default float64, so a constant typed at import time
+    would upcast the graph.
+    """
+    floatX = pytensor.config.floatX
+    try:
+        set_floatX("float32")
+        data = hssm.simulate_data(model=model, theta=theta, size=20, random_state=1)
+        for p_outlier in (None, 0.05):  # with and without the default lapse
+            model_ = hssm.HSSM(data=data, model=model, p_outlier=p_outlier)
+            assert model_.pymc_model.logp().dtype == "float32"
+    finally:
+        set_floatX(floatX)
+
+
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+def test_set_floatX_reaches_new_processes(precision_env, dtype):
+    """A fresh interpreter (PyMC's chains under spawn/forkserver) gets the precision."""
+    os.environ["PYTENSOR_FLAGS"] = "floatX=float64,mode=FAST_RUN"
+    os.environ.pop("JAX_DEFAULT_MATMUL_PRECISION", None)
+    floatX = pytensor.config.floatX
+    try:
+        set_floatX(dtype)
+        assert "mode=FAST_RUN" in os.environ["PYTENSOR_FLAGS"]  # other flags kept
+        child = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import jax, pytensor, pytensor.link.jax.dispatch; "
+                "print(pytensor.config.floatX, jax.config.read('jax_enable_x64'), "
+                "jax.config.jax_default_matmul_precision)",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        expected = [
+            dtype,
+            str(dtype == "float64"),
+            str(config.jax_default_matmul_precision),
+        ]
+        assert child.stdout.split() == expected
+    finally:
+        set_floatX(floatX)
 
 
 @pytest.fixture

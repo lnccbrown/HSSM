@@ -37,7 +37,7 @@ _logger = logging.getLogger("hssm")
 # The placeholder `rt` value that marks missing-RT and omission (deadline) rows.
 MISSING_RT = -999.0
 
-LOGP_LB = pm.pytensorf.floatX(-66.1)
+LOGP_LB = -66.1  # a Python float takes the graph's dtype (see likelihoods.analytical)
 
 
 def apply_param_bounds_to_loglik(
@@ -831,8 +831,9 @@ def make_distribution(
                     )
                 # The lapse term is a graph constant: it is evaluated once on
                 # the (constant) observed data, and p_outlier's gradient flows
-                # through the mixture weights only.
-                lapse_logp = lapse_func(_to_numpy(data))
+                # through the mixture weights only. In floatX: a float64
+                # constant would upcast a float32 graph.
+                lapse_logp = lapse_func(_to_numpy(data)).astype(pytensor.config.floatX)
 
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)

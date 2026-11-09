@@ -5,6 +5,8 @@ of the WFPT distribution here:
 https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b.
 """
 
+import math
+
 import jax.numpy as jnp
 import numpy as np
 import pymc as pm
@@ -18,14 +20,17 @@ from pymc.distributions.dist_math import check_parameters
 
 from ..distribution_utils.dist import make_distribution, make_likelihood_callable
 
-LOGP_LB = pm.pytensorf.floatX(-66.1)
+# Python floats, not constants typed at import: a graph built after
+# `hssm.set_floatX("float32")` gives them its own dtype (a float64 constant would
+# upcast it), and under float64 they keep full precision.
+LOGP_LB = -66.1
 
-π = np.pi
+π = math.pi
 τ = 2 * π
-sqrt_τ = pt.sqrt(τ)
-log_π = pt.log(π)
-log_τ = pt.log(τ)
-log_4 = pt.log(4)
+sqrt_τ = math.sqrt(τ)
+log_π = math.log(π)
+log_τ = math.log(τ)
+log_4 = math.log(4)
 
 
 def _max(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -165,11 +170,12 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     y = w + 2 * k.reshape((-1, 1))
     r = -pt.power(y, 2) / (2 * tt)
     c = pt.max(r, axis=0)
-    p = pt.exp(c) * pt.sum(y * pt.exp(r - c), axis=0)
-    # Normalize p
-    p = p / pt.sqrt(2 * π * pt.power(tt, 3))
+    # The 1 / sqrt(2π tt³) normalization goes into the exponent, as in
+    # `_jax_ftt01w`: dividing by it overflows the float32 gradient for densities
+    # near the LOGP_LB floor.
+    log_norm = c - 0.5 * log_τ - 1.5 * pt.log(tt)
 
-    return p
+    return pt.exp(log_norm) * pt.sum(y * pt.exp(r - c), axis=0)
 
 
 def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
@@ -530,8 +536,8 @@ DDM_SDV: type[pm.Distribution] = make_distribution(
 )
 
 
-LOGP_MIN = jnp.exp(LOGP_LB)
-LOGP_MAX = jnp.exp(-LOGP_LB)
+LOGP_MIN = math.exp(LOGP_LB)
+LOGP_MAX = math.exp(-LOGP_LB)
 
 
 # Racing Diffusion Model (RDM)
@@ -681,8 +687,9 @@ def _pt_normpdf(t):
 
 
 def _pt_normcdf(t):
-    # np.sqrt: pt.sqrt(2) of an integer constant is float32 even under float64.
-    return (1 / 2) * (1 + pt.erf(t / np.sqrt(2)))
+    # A Python float: pt.sqrt(2) of an integer constant is float32 even under
+    # float64, and np.sqrt(2) is a float64 that upcasts a float32 graph.
+    return (1 / 2) * (1 + pt.erf(t / math.sqrt(2)))
 
 
 def _pt_tpdf(t, A, b, v, s):
