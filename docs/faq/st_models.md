@@ -70,7 +70,9 @@ HSSM refuses them, and both simulators produce them in the corner of the box whe
 `ddm_normal_st` at `t = 0.25`, `st = 0.35`, `a = 0.3`, `v = 0`.
 
 ```python
-sim = ssms.basic_simulators.simulator.simulator(model="ddm_st", theta=theta, n_samples=n)
+sim = ssms.basic_simulators.simulator.simulator(
+    model="ddm_st", theta=theta, n_samples=n
+)
 data = pd.DataFrame({"rt": sim["rts"].ravel(), "response": sim["choices"].ravel()})
 data = data[data["rt"] > 0]
 ```
@@ -80,9 +82,17 @@ data = data[data["rt"] > 0]
 This is the failure that looks like success. For a hierarchical model such as
 
 ```python
-include = [{"name": p, "formula": f"{p} ~ 0 + (1|subject)"} for p in ["v", "a", "z", "t"]]
-model = hssm.HSSM(data, model="ddm_st", include=include,
-                  link_settings="log_logit", prior_settings="safe", noncentered=False)
+include = [
+    {"name": p, "formula": f"{p} ~ 0 + (1|subject)"} for p in ["v", "a", "z", "t"]
+]
+model = hssm.HSSM(
+    data,
+    model="ddm_st",
+    include=include,
+    link_settings="log_logit",
+    prior_settings="safe",
+    noncentered=False,
+)
 ```
 
 each parameter is modelled on the link scale as
@@ -124,7 +134,11 @@ group_prior = bmb.Prior(
     sigma=bmb.Prior("Weibull", alpha=1.5, beta=0.3),
 )
 include = [
-    {"name": p, "formula": f"{p} ~ 0 + (1|subject)", "prior": {"1|subject": group_prior}}
+    {
+        "name": p,
+        "formula": f"{p} ~ 0 + (1|subject)",
+        "prior": {"1|subject": group_prior},
+    }
     for p in ["v", "a", "z", "t"]
 ]
 ```
