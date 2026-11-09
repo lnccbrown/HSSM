@@ -44,6 +44,8 @@ This version includes the following changes:
 
 20. **Posterior predictive sampling works when `p_outlier` is the only trial-wise parameter** (#1416). With a `p_outlier` regression and every other parameter intercept-only, `sample_posterior_predictive` failed for every model (`cannot reshape array of size ... into shape (1, 5, 1)`); the other parameters are now broadcast to `p_outlier`'s shape before simulating. A regression on any other parameter avoided the error.
 
+21. **Documentation: the choice-only tutorial simulates with `simulate_data` and checks predictions** (#1491, closes #1490). The tutorial now simulates its data with `hssm.simulate_data` instead of a hand-written simulator, explains the placeholder `rt` column (`-1.0`) that choice-only simulations return, and adds a prior and posterior predictive check of choice frequencies. It has been migrated to marimo (`docs/tutorials/choice_only_models.py`), and its outputs no longer show the old dummy-simulator warning.
+
 #### Breaking changes that require migration:
 
 1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.
