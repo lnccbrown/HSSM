@@ -52,13 +52,14 @@ def get_ddm_sdv_config() -> DefaultConfig:
                 # written before any ddm_sdv.onnx existed, so it described no
                 # actual network. The published network's density gate samples
                 # `sv` up to 2.25 and passes there (total mass within 0.15% of 1,
-                # Hellinger at or below the KDE sampling floor).
+                # Hellinger at or below the KDE sampling floor). `t` and `sv`
+                # start at 0.001 because training did (#1440).
                 "bounds": {
                     "v": (-3.0, 3.0),
                     "a": (0.3, 2.5),
                     "z": (0.1, 0.9),
-                    "t": (0.0, 2.0),
-                    "sv": (0.0, 2.5),
+                    "t": (0.001, 2.0),
+                    "sv": (0.001, 2.5),
                 },
                 "extra_fields": None,
             },
