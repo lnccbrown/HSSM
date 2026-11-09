@@ -291,7 +291,7 @@ def test_get_ddm_st_config():
         "a": (0.3, 2.5),
         "z": (0.3, 0.7),
         "t": (0.25, 2.25),
-        "st": (1e-3, 0.25),
+        "st": (1e-3, 0.35),
     }
 
     assert lk_approx_differentiable["default_priors"] == {}
