@@ -37,7 +37,7 @@ def _float64():
 
 
 def _data(deadline: bool) -> pd.DataFrame:
-    """Eight trials whose missing rows (2 and 5) are not on top, as the user passes them."""
+    """Eight trials, as the user passes them: missing rows 2 and 5 are not on top."""
     df = pd.DataFrame(
         {
             "rt": [0.9, 1.2, -999.0, 0.6, 0.8, -999.0, 1.4, 0.7],
