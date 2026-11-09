@@ -14,6 +14,7 @@ validation:
 not_in_nav: |
   tutorials/attentional_ddm.py
   tutorials/centered_vs_noncentered_basic_logic.py
+  tutorials/choice_only_models.py
   tutorials/main_tutorial.py
   tutorials/main_tutorial_scenic_route.py
   tutorials/link_functions.py
@@ -148,6 +149,7 @@ plugins:
       ignore:
         - tutorials/attentional_ddm.py
         - tutorials/centered_vs_noncentered_basic_logic.py
+        - tutorials/choice_only_models.py
         - tutorials/main_tutorial.py
         - tutorials/main_tutorial_scenic_route.py
         - tutorials/link_functions.py
