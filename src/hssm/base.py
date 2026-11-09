@@ -179,7 +179,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         be included in estimation.
     lapse : optional
         The lapse distribution. This argument is required only if `p_outlier` is not
-        `None`. Defaults to Uniform(0.0, 10.0).
+        `None`. Defaults to Uniform(0.0, 20.0). The lapse process is mixed into the
+        likelihood with weight `p_outlier`, marginalised per row type: observed
+        rows use the lapse density at the observed `rt`; missing-RT rows (choice
+        observed, no deadline) use `1 / n_choices`; omission rows (deadline) use
+        the lapse survival probability at the deadline.
     global_formula : optional
         A string that specifies a regressions formula which will be used for all model
         parameters. If you specify parameter-wise regressions in addition, these will
@@ -459,6 +463,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self.list_params,
             self.link,
             self._parent,
+            is_choice_only=self.is_choice_only,
         )
 
         # Targeted statistical-identifiability warnings for common/group or
@@ -1530,7 +1535,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return graph
 
     def compile_logp(self, keep_transformed: bool = False, **kwargs):
-        """Compile the log probability function for the model.
+        """Compile the model's log probability: log-prior plus log-likelihood.
+
+        Any potentials passed to Bambi (``potentials=``) are included as well.
 
         Parameters
         ----------
@@ -2056,11 +2063,22 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     + "parameter is not None"
                 )
         if self.has_lapse:
-            if lapse is None:
-                if self.is_choice_only:
-                    self.lapse = 1 / self.n_choices
-                else:
-                    self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
+            if self.is_choice_only:
+                # Choice-only lapses are simulated as uniform random choices, so
+                # the likelihood must use the same uniform probability.
+                uniform = 1 / self.n_choices
+                if lapse is not None and not (
+                    isinstance(lapse, int | float | np.floating)
+                    and np.isclose(lapse, uniform)
+                ):
+                    raise ValueError(
+                        "Choice-only models only support a uniform lapse over "
+                        f"choices (1 / n_choices = {uniform:g}), but got {lapse!r}. "
+                        "Omit `lapse` to use it."
+                    )
+                self.lapse = uniform
+            elif lapse is None:
+                self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
             else:
                 self.lapse = lapse
             self.list_params.append("p_outlier")

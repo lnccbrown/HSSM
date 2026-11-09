@@ -327,3 +327,12 @@ def test_full_ddm_lan_declares_support_edge_at_t_minus_st():
 
     config = Config.from_defaults("full_ddm_lan", "approx_differentiable")
     assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}
+
+
+def test_softmax_inv_temperature_4_is_registered():
+    """The 4-choice softmax model is available by name."""
+    config = get_default_model_config("softmax_inv_temperature_4")
+
+    assert config == softmax_inv_temperature_config(n_choices=4)
+    assert config["list_params"] == ["beta", "logit1", "logit2", "logit3"]
+    assert config["choices"] == [0, 1, 2, 3]
