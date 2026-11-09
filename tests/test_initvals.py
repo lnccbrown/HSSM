@@ -4,6 +4,9 @@ import pymc as pm
 import pytest
 import hssm
 import logging
+import os
+import subprocess
+import sys
 from copy import deepcopy
 
 from hssm.param.utils import _clamp_default_initval_to_bounds
@@ -638,3 +641,56 @@ def test_lba_default_start_has_finite_logp(n_choices, include):
     )(None)
 
     assert np.isfinite(model.pymc_model.compile_logp()(start))
+
+
+_SEEDED_HIER_FIT = """
+import hashlib
+import numpy as np
+import pandas as pd
+import hssm
+
+frames = []
+for s in range(3):
+    d = hssm.simulate_data(
+        model="ddm", theta=dict(v=0.5 + 0.1 * s, a=1.5, z=0.5, t=0.3),
+        size=20, random_state=s + 1,
+    )
+    d["subject"] = str(s)
+    frames.append(d)
+data = pd.concat(frames, ignore_index=True)
+data["x"] = np.random.default_rng(1).normal(size=len(data))
+model = hssm.HSSM(
+    data=data, model="ddm",
+    include=[{"name": "v", "formula": "v ~ 1 + x + (1|subject)"}],
+)
+post = model.sample(
+    draws=5, tune=5, chains=1, cores=1, random_seed=1, progressbar=False
+)["posterior"].to_dataset()
+for name in sorted(post.data_vars):
+    arr = np.ascontiguousarray(post[name].values)
+    print(name, hashlib.sha1(arr.tobytes()).hexdigest())
+"""
+
+
+def test_seeded_hierarchical_sample_reproducible_across_processes():
+    """Same random_seed in two fresh processes gives the same posterior.
+
+    The initval jitter used the unseeded global numpy RNG, so group-term
+    offsets started (and the posterior ended) differently in every process.
+    """
+    env = {**os.environ, "PYTHONHASHSEED": "0"}
+    procs = [
+        subprocess.Popen(
+            [sys.executable, "-c", _SEEDED_HIER_FIT],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for _ in range(2)
+    ]
+    outs = [p.communicate(timeout=600) for p in procs]
+    for p, (_, err) in zip(procs, outs):
+        assert p.returncode == 0, err
+    assert "v_1|subject_offset" in outs[0][0]
+    assert outs[0][0] == outs[1][0]
