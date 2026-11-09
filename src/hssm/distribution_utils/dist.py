@@ -34,6 +34,9 @@ from .onnx_utils.model import load_onnx_model
 
 _logger = logging.getLogger("hssm")
 
+# The placeholder `rt` value that marks missing-RT and omission (deadline) rows.
+MISSING_RT = -999.0
+
 LOGP_LB = pm.pytensorf.floatX(-66.1)
 
 
@@ -113,7 +116,7 @@ def ensure_positive_ndt(
     rt = data[:, 0]
 
     # Skip the check for missing data (encoded as -999.0)
-    missing_mask = pt.eq(rt, -999.0)
+    missing_mask = pt.eq(rt, MISSING_RT)
 
     return pt.where(
         # consistent with the epsilon in the analytical likelihood
@@ -340,9 +343,17 @@ def make_hssm_rv(
             # First figure out what the size specified here is
             # Since the number of unnamed arguments is undetermined,
             # we are going to use this hack.
+            requested_size = kwargs.get("size", args[-1])
             size, args, kwargs = _extract_size(args, kwargs)
             arg_arrays = _create_arg_arrays(cls, args)
+            param_shapes = [arr.shape for arr in arg_arrays]
             p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
+
+            # A trial-wise p_outlier (a p_outlier regression) needs one simulated
+            # trial per p_outlier value, even when the model parameters are scalar.
+            if p_outlier is not None and p_outlier.size > 1:
+                batch_shape = np.broadcast_shapes(*param_shapes)
+                arg_arrays = [np.broadcast_to(arr, batch_shape) for arr in arg_arrays]
 
             # Forward observed per-trial covariates to the simulator when the RV
             # has been given them (covariate-conditioned PPC); a no-op otherwise.
@@ -359,12 +370,28 @@ def make_hssm_rv(
                 **kwargs,
             )
 
+            # ssm-simulators returns (rt, response) pairs; keep only the response.
+            if is_choice_only and obs_dim_int > 1:
+                sims_out = sims_out[..., -1]
+
+            # With all-scalar parameters ssm-simulators squeezes a single draw's
+            # batch axis away; restore the batch shape PyMC expects.
+            if all(arr.size == 1 for arr in arg_arrays):
+                batch_shape = (
+                    np.broadcast_shapes(*param_shapes)
+                    if requested_size is None
+                    else tuple(np.atleast_1d(requested_size))
+                )
+                support_shape = () if is_choice_only else (obs_dim_int,)
+                sims_out = sims_out.reshape(batch_shape + support_shape)
+
             sims_out = _apply_lapse_model(
                 sims_out=sims_out,
                 p_outlier=p_outlier,
                 rng=rng,
                 lapse_dist=cls._lapse,
                 choices=choices,
+                is_choice_only=is_choice_only,
             )
 
             return sims_out
@@ -378,6 +405,7 @@ def _apply_lapse_model(
     rng: np.random.Generator,
     lapse_dist: bmb.Prior | float | None,
     choices: list,
+    is_choice_only: bool = False,
 ) -> np.ndarray:
     """Apply lapse model to the simulation output.
 
@@ -393,6 +421,10 @@ def _apply_lapse_model(
         The lapse distribution to draw from
     choices : list
         List of possible choices
+    is_choice_only : bool
+        Whether `sims_out` holds responses only, without a reaction-time column.
+        Lapses then draw a uniformly random choice, matching the choice-only
+        lapse likelihood of 1 / n_choices.
 
     Returns
     -------
@@ -408,17 +440,16 @@ def _apply_lapse_model(
             "distribution but did not specify the distribution."
         )
 
-    if not isinstance(lapse_dist, bmb.Prior):
-        # A numeric `lapse` (e.g. `1 / n_choices` for choice-only models) has no
-        # reaction-time distribution to draw lapse RTs from, so it cannot drive
-        # simulation via this RT/response path.
+    if not is_choice_only and not isinstance(lapse_dist, bmb.Prior):
+        # A numeric `lapse` has no reaction-time distribution to draw lapse RTs
+        # from, so it cannot drive simulation via this RT/response path.
         raise TypeError(
-            "Lapse simulation is not supported for choice-only models with a "
-            f"numeric lapse ({lapse_dist!r}). Provide a `bmb.Prior` lapse "
+            "Lapse simulation is not supported for models with reaction times "
+            f"and a numeric lapse ({lapse_dist!r}). Provide a `bmb.Prior` lapse "
             "distribution to simulate lapses, or disable `p_outlier`."
         )
 
-    out_shape = sims_out.shape[:-1]
+    out_shape = sims_out.shape if is_choice_only else sims_out.shape[:-1]
 
     # Handle p_outlier shape/type to ensure consistent shape:
     # - 0-dim numpy array (scalar array) -> convert to float
@@ -440,13 +471,19 @@ def _apply_lapse_model(
     if replace_n == 0:
         return sims_out
 
+    if is_choice_only:
+        sims_out[replace] = rng.choice(choices, size=replace_n)
+        return sims_out
+
+    lapse_prior = cast("bmb.Prior", lapse_dist)  # numeric lapse rejected above
+
     replace_shape = (*out_shape[:-1], replace_n)
     replace_mask = np.stack([replace, replace], axis=-1)
     n_draws = np.prod(replace_shape)
     lapse_rt = cast(
         "np.ndarray",
         pm.draw(
-            get_distribution_from_prior(lapse_dist).dist(**lapse_dist.args),
+            get_distribution_from_prior(lapse_prior).dist(**lapse_prior.args),
             n_draws,
             random_seed=rng,
         ),
@@ -465,6 +502,126 @@ def _apply_lapse_model(
     return sims_out
 
 
+def _to_numpy(data: Any) -> np.ndarray:
+    """Evaluate a (constant) data tensor to a numpy array."""
+    if isinstance(data, pt.TensorVariable):
+        return np.asarray(data.eval())
+    return np.asarray(data)
+
+
+def _make_lapse_func(
+    lapse: float | bmb.Prior,
+    is_choice_only: bool,
+    has_deadline: bool,
+    n_choices: int | None,
+) -> Callable[[np.ndarray], np.ndarray]:
+    """Build the function that evaluates the per-row lapse term of the mixture.
+
+    The observation model is the mixture
+    ``f(rt, c) = (1 - p) * s(rt, c) + p * l(rt) * q(c)``, with ``s`` the SSM
+    likelihood, ``l`` the lapse RT distribution and ``q(c) = 1 / n_choices``.
+    Rows with ``rt == -999.0`` are not observed at their RT, so the lapse term
+    has to be marginalised in the same way as the SSM term
+    (see :func:`assemble_callables`):
+
+    - observed rows: ``log l(rt)`` (unchanged; see issue #1323 for ``q(c)``),
+    - missing-RT rows without a deadline (choice observed): ``-log(n_choices)``,
+    - omission rows with a deadline ``d`` in the last column:
+      ``log(1 - CDF_l(d))``.
+
+    Parameters
+    ----------
+    lapse
+        A ``bmb.Prior`` describing the lapse RT distribution, or a float for
+        choice-only models. The float enters the mixture as ``exp(lapse)``
+        without transformation; ``HSSMBase`` passes ``1 / n_choices`` (a
+        probability, not a log-probability), which is tracked in issue #1323.
+    is_choice_only
+        Whether the model is a choice-only model. Choice-only models keep the
+        historical behaviour: the lapse term is evaluated on the whole data.
+    has_deadline
+        Whether the last column of the data is the trial deadline.
+    n_choices
+        The number of response options, needed for missing-RT rows without a
+        deadline.
+
+    Returns
+    -------
+    Callable[[np.ndarray], np.ndarray]
+        A function mapping the full ``(n_obs, k)`` data matrix to an
+        ``(n_obs,)`` vector of per-row lapse log-terms.
+    """
+    if isinstance(lapse, float):
+        lapse_logp_func: Callable[[np.ndarray], np.ndarray] | None = None
+        lapse_logsf_func: Callable[[np.ndarray], np.ndarray] | None = None
+    else:
+        lapse_dist = get_distribution_from_prior(lapse).dist(**lapse.args)
+        data_vector = pt.dvector("lapse_rt")
+        lapse_logp_func = pytensor.function(
+            [data_vector], pm.logp(lapse_dist, data_vector)
+        )
+        lapse_logsf_func = None
+        if has_deadline and not is_choice_only:
+            deadline_vector = pt.dvector("lapse_deadline")
+            try:
+                lapse_logcdf = pm.logcdf(lapse_dist, deadline_vector)
+            except NotImplementedError as e:
+                raise ValueError(
+                    f"The lapse distribution `{lapse.name}` does not implement a "
+                    "log-CDF, which is required to marginalise the lapse "
+                    "process on omission (deadline) rows. Please choose a lapse "
+                    "distribution with a `logcdf` implementation in PyMC."
+                ) from e
+            # log(1 - CDF(d)), numerically safe for CDF close to 1.
+            lapse_logsf_func = pytensor.function(
+                [deadline_vector], pt.log1mexp(lapse_logcdf)
+            )
+
+    if is_choice_only:
+        if lapse_logp_func is None:
+            return lambda data: np.full_like(data, lapse)
+        return lapse_logp_func
+
+    def lapse_func(data: np.ndarray) -> np.ndarray:
+        data = np.asarray(data)
+        rt = np.asarray(data[:, 0], dtype=np.float64)
+        is_missing = rt == MISSING_RT
+        out = np.empty(rt.shape[0], dtype=np.float64)
+
+        if lapse_logp_func is None:
+            # Float lapse: a fixed log-probability per observed row.
+            if is_missing.any():
+                raise ValueError(
+                    "A float `lapse` cannot be combined with missing-RT or "
+                    "deadline rows (rt == -999.0): there is no lapse RT "
+                    "distribution to marginalise. Please provide the lapse as a "
+                    "`bmb.Prior`."
+                )
+            out[:] = lapse
+            return out
+
+        out[~is_missing] = lapse_logp_func(rt[~is_missing])
+
+        if is_missing.any():
+            if has_deadline:
+                assert lapse_logsf_func is not None
+                deadline = np.asarray(data[is_missing, -1], dtype=np.float64)
+                out[is_missing] = lapse_logsf_func(deadline)
+            else:
+                if n_choices is None:
+                    raise ValueError(
+                        "The data contains missing-RT rows (rt == -999.0) "
+                        "without a deadline, so the lapse process contributes "
+                        "1 / n_choices to those rows, but `n_choices` was not "
+                        "provided to `make_distribution`."
+                    )
+                out[is_missing] = -np.log(n_choices)
+
+        return out
+
+    return lapse_func
+
+
 def make_distribution(
     rv: str | type[RandomVariable] | RandomVariable | Callable[..., Any],
     loglik: LogLikeFunc | pytensor.graph.Op,
@@ -476,6 +633,8 @@ def make_distribution(
     params_is_trialwise: list[bool] | None = None,
     is_choice_only: bool = False,
     ndt_edge_shift: NDTEdgeShift | None = None,
+    n_choices: int | None = None,
+    has_deadline: bool = False,
 ) -> type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
@@ -528,6 +687,16 @@ def make_distribution(
         for response times at or below ``t - scale * <param>``. ``None`` (the
         default) keeps the edge at ``t``. Ignored when ``is_choice_only`` or
         when ``"t"`` is not in ``list_params``.
+    n_choices : optional
+        The number of response options. Required when ``lapse`` is a
+        ``bmb.Prior`` and the data contains missing-RT rows (``rt == -999.0``)
+        without a deadline: the lapse process then contributes ``1 / n_choices``
+        (a uniform choice) to such rows. Defaults to ``None``.
+    has_deadline : optional
+        Whether the last column of the data holds a per-trial deadline. When
+        ``True``, rows with ``rt == -999.0`` are omissions and the lapse process
+        contributes its survival probability at the deadline,
+        ``1 - CDF_lapse(deadline)``. Defaults to ``False``.
 
     Returns
     -------
@@ -557,8 +726,6 @@ def make_distribution(
     else:
         raise ValueError(f"rv is {rv}, which is not a valid type.")
 
-    # random_variable = make_ssm_rv(rv, list_params, lapse)
-    # if isinstance(rv, str) else rv
     extra_fields = [] if extra_fields is None else extra_fields
 
     # Pre-build PyTensor tensors for fixed-vector params. These replace the
@@ -576,18 +743,12 @@ def make_distribution(
         if list_params[-1] != "p_outlier":
             list_params.append("p_outlier")
 
-        if isinstance(lapse, float):
-            lapse_func = lambda data: np.full_like(data, lapse)
-        else:
-            data_vector = pt.dvector()
-            lapse_logp = pm.logp(
-                get_distribution_from_prior(lapse).dist(**lapse.args),
-                data_vector,
-            )
-            lapse_func = pytensor.function(
-                [data_vector],
-                lapse_logp,
-            )
+        lapse_func = _make_lapse_func(
+            lapse,
+            is_choice_only=is_choice_only,
+            has_deadline=has_deadline,
+            n_choices=n_choices,
+        )
     else:
         lapse_func = None
 
@@ -668,8 +829,10 @@ def make_distribution(
                         "lapse_func is not defined. "
                         "Make sure lapse is properly initialized."
                     )
-                data_for_lapse = data if is_choice_only else data[:, 0]
-                lapse_logp = lapse_func(data_for_lapse.eval())
+                # The lapse term is a graph constant: it is evaluated once on
+                # the (constant) observed data, and p_outlier's gradient flows
+                # through the mixture weights only.
+                lapse_logp = lapse_func(_to_numpy(data))
 
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
@@ -766,6 +929,7 @@ def make_family(
     parent: str = "v",
     likelihood_name: str = "SSM Likelihood",
     family_name="SSM Family",
+    is_choice_only: bool = False,
 ) -> bmb.Family:
     """Build a family in bambi.
 
@@ -783,6 +947,9 @@ def make_family(
         the name of the likelihood function. Defaults to "SSM Likelihood".
     family_name
         the name of the family. Defaults to "SSM Family".
+    is_choice_only : optional
+        Whether the model is choice-only. Choice-only draws have no (rt, response)
+        axis, so the family must not add one to the posterior predictive coords.
 
     Returns
     -------
@@ -793,7 +960,8 @@ def make_family(
         likelihood_name, parent=parent, params=list_params, dist=dist
     )
 
-    family = SSMFamily(family_name, likelihood=likelihood, link=link)
+    family_cls = bmb.Family if is_choice_only else SSMFamily
+    family = family_cls(family_name, likelihood=likelihood, link=link)
 
     return family
 
@@ -1010,7 +1178,7 @@ def assemble_callables(
 
         # AF-TODO: This part actually overrides what
         #          is treated as missing to always be -999.0
-        n_missing = pt.sum(pt.eq(data[:, 0], -999.0)).astype(int)
+        n_missing = pt.sum(pt.eq(data[:, 0], MISSING_RT)).astype(int)
         if n_missing == 0:
             raise ValueError("No missing data in the data.")
 

@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import pymc as pm
 
+from hssm import tracking
 from hssm._types import LoglikKind, SupportedModels
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
@@ -27,7 +28,6 @@ from hssm.defaults import (
 from hssm.distribution_utils import (
     assemble_callables,
     make_distribution,
-    make_hssm_rv,
     make_likelihood_callable,
     make_missing_data_callable,
 )
@@ -67,12 +67,14 @@ class HSSM(HSSMBase):
         is passed, the model will be considered custom, in which case all
         `model_config`, `loglik`, and `loglik_kind` have to be provided by the user.
     choices : optional
-        When an `int`, the number of choices that the participants can make. If `2`, the
-        choices are [-1, 1] by default. If anything greater than `2`, the choices are
-        [0, 1, ..., n_choices - 1] by default. If a `list` is provided, it should be the
-        list of choices that the participants can make. Defaults to `2`. If any value
-        other than the choices provided is found in the "response" column of the data,
-        an error will be raised.
+        The choices that participants can make. An integer (Python `int` or numpy
+        integer) gives the number of choices: `2` means [-1, 1] and any `n > 2`
+        means [0, 1, ..., n - 1]. A `list` or `tuple` gives the choice values
+        directly. Ignored for supported models unless `model_config` is also passed,
+        and choices set in `model_config` take precedence. Defaults to `None`, which
+        uses the model's default choices (from ssm-simulators for custom models it
+        knows). If any value other than the choices provided is found in the
+        "response" column of the data, an error will be raised.
     include : optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
@@ -157,7 +159,13 @@ class HSSM(HSSMBase):
         be included in estimation.
     lapse : optional
         The lapse distribution. This argument is required only if `p_outlier` is not
-        `None`. Defaults to Uniform(0.0, 10.0).
+        `None`. Defaults to Uniform(0.0, 20.0). The lapse process is mixed into the
+        likelihood with weight `p_outlier`, marginalised per row type: observed
+        rows use the lapse density at the observed `rt`; missing-RT rows (choice
+        observed, no deadline) use `1 / n_choices`; omission rows (deadline) use
+        the lapse survival probability at the deadline. Choice-only models accept
+        only the uniform lapse over choices, `1 / n_choices`, which is their
+        default; any other value raises a `ValueError`.
     global_formula : optional
         A string that specifies a regressions formula which will be used for all model
         parameters. If you specify parameter-wise regressions in addition, these will
@@ -270,7 +278,7 @@ class HSSM(HSSMBase):
         self,
         data: pd.DataFrame,
         model: SupportedModels | str = "ddm",
-        choices: list[int] | None = None,
+        choices: int | np.integer | list[int] | tuple[int, ...] | None = None,
         include: list[dict[str, Any] | Any] | None = None,
         model_config: ModelConfig | dict | None = None,
         loglik: (
@@ -403,9 +411,13 @@ class HSSM(HSSMBase):
                 if self.model_config.backend != "pytensor"
                 else self.model_config.backend
             )
-            missing_data_callable = make_missing_data_callable(
-                self.loglik_missing_data, backend_tmp, params_is_trialwise, params_only
-            )
+            with tracking.network_role(tracking.MISSING_DATA_ROLE):
+                missing_data_callable = make_missing_data_callable(
+                    self.loglik_missing_data,
+                    backend_tmp,
+                    params_is_trialwise,
+                    params_only,
+                )
 
             self.loglik_missing_data = missing_data_callable
 
@@ -425,33 +437,6 @@ class HSSM(HSSMBase):
                 self.missing_data_value,
             )
 
-        # TODO: This is a temporary solution to allow choice-only models without a
-        # specified simulator in ssm-simulators
-        if self.is_choice_only and self.model_config.rv is None:
-            _logger.warning(
-                "You are building a choice-only model without specifying "
-                "a RandomVariable class. Using a dummy simulator function. "
-                "Simulating data from this model will result in an error."
-            )
-
-            def dummy_simulator_func(*args, **kwargs):
-                raise NotImplementedError(
-                    "You are trying to simulate data from a choice-only model "
-                    "without specifying a RandomVariable class. Please specify "
-                    "a RandomVariable class via the `model_config.rv` argument."
-                )
-
-            setattr(dummy_simulator_func, "model_name", self.model_name)
-            setattr(dummy_simulator_func, "choices", self.choices)
-            setattr(dummy_simulator_func, "obs_dim", 1)
-
-            self.model_config.rv = make_hssm_rv(
-                dummy_simulator_func,
-                list_params=self.list_params or [],
-                lapse=self.lapse,
-                is_choice_only=True,
-            )
-
         self.data = typing_cast("pd.DataFrame", _rearrange_data(self.data))
 
         # Collect fixed-vector params to substitute in the distribution logp
@@ -468,12 +453,20 @@ class HSSM(HSSMBase):
         # HSSM.__init__ always builds a Config, which is where ndt_edge_shift lives.
         ndt_edge_shift = typing_cast("Config", self.model_config).ndt_edge_shift
 
+        # make_distribution() reads a float lapse as a log probability, while
+        # _check_lapse() sets the choice-only lapse as the probability 1 / n_choices.
+        lapse = (
+            float(np.log(self.lapse))
+            if self.is_choice_only and isinstance(self.lapse, int | float)
+            else self.lapse
+        )
+
         return make_distribution(
             rv=rv_name,
             loglik=self.loglik,
             list_params=_list_params,
             bounds=self.bounds,
-            lapse=self.lapse,
+            lapse=lapse,
             extra_fields=(
                 None
                 if not self.extra_fields
@@ -487,4 +480,6 @@ class HSSM(HSSMBase):
             # TODO: add to HSSMBase
             is_choice_only=self.is_choice_only,
             ndt_edge_shift=ndt_edge_shift,
+            n_choices=self.n_choices,
+            has_deadline=bool(self.deadline),
         )

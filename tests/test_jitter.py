@@ -1,80 +1,79 @@
-"""Tests for restoring the JAX-NUTS "no jitter" behavior (issue #999).
+"""Tests for the JAX-NUTS "no jitter" default (issue #999).
 
-HSSM disables the built-in initial-value jitter of PyMC's JAX samplers
-("numpyro"/"blackjax") in favor of its own controlled `initval_jitter`. Because
-PyMC 6 exposes no supported switch, HSSM does this by temporarily patching
-`pymc.sampling.jax.sample_jax_nuts` via `_force_jax_nuts_no_jitter`.
+HSSM applies its own controlled `initval_jitter`, so for PyMC's JAX samplers
+("numpyro"/"blackjax") it disables the sampler's built-in uniform(-1, 1)
+initial-value jitter by default. Since PyMC 6.3.0 (pymc#8380), `pm.sample` lifts
+`nuts={"jitter": ...}` (and other sampler-driver options such as `chain_method`)
+out of the NUTS-kernel kwargs and passes them as top-level arguments to
+`pymc.sampling.jax.sample_jax_nuts`. HSSM therefore merges `jitter=False` *under*
+the user's `nuts` dict -- a user-supplied value wins -- and no patching of pymc is
+involved.
+
+Each test replaces `sample_jax_nuts` with a fake that records its kwargs and raises
+a sentinel, so the whole HSSM -> bambi -> pm.sample dispatch is exercised but no
+MCMC and no JAX sampler compilation actually run.
 """
 
 import pymc.sampling.jax as pymc_jax
 import pytest
 
-from hssm.utils import _force_jax_nuts_no_jitter
-
-
-def test_cm_injects_jitter_false_and_restores(monkeypatch):
-    """Inside the CM, `sample_jax_nuts` receives `jitter=False`; restored on exit."""
-    captured = {}
-
-    def fake_sample_jax_nuts(*args, **kwargs):
-        captured["jitter"] = kwargs.get("jitter", "MISSING")
-        return "idata-sentinel"
-
-    monkeypatch.setattr(pymc_jax, "sample_jax_nuts", fake_sample_jax_nuts)
-    original = pymc_jax.sample_jax_nuts
-
-    with _force_jax_nuts_no_jitter(active=True):
-        # The attribute is swapped for the wrapper while active.
-        assert pymc_jax.sample_jax_nuts is not original
-        # A caller-supplied jitter=True is overridden to False and delegated.
-        assert pymc_jax.sample_jax_nuts(jitter=True) == "idata-sentinel"
-        assert captured["jitter"] is False
-
-    # Original (here, the monkeypatched fake) is restored on exit.
-    assert pymc_jax.sample_jax_nuts is original
-
-
-def test_cm_inactive_is_noop(monkeypatch):
-    """`active=False` leaves `sample_jax_nuts` untouched."""
-    sentinel = object()
-    monkeypatch.setattr(pymc_jax, "sample_jax_nuts", sentinel)
-
-    with _force_jax_nuts_no_jitter(active=False):
-        assert pymc_jax.sample_jax_nuts is sentinel
-
-    assert pymc_jax.sample_jax_nuts is sentinel
-
-
-def test_cm_missing_attr_is_noop(monkeypatch):
-    """A future pymc without `sample_jax_nuts` degrades to a no-op, no raise."""
-    monkeypatch.delattr(pymc_jax, "sample_jax_nuts", raising=False)
-
-    with _force_jax_nuts_no_jitter(active=True):
-        assert not hasattr(pymc_jax, "sample_jax_nuts")
-
-    assert not hasattr(pymc_jax, "sample_jax_nuts")
-
 
 class _StopSampling(Exception):
-    """Sentinel raised to abort once the jitter kwarg has been captured."""
+    """Sentinel raised to abort once the kwargs have been captured."""
 
 
-def test_hssm_numpyro_forces_jitter_false(monkeypatch, basic_hssm_model):
-    """`sampler="numpyro"` must reach `sample_jax_nuts` with `jitter=False`.
-
-    Exercises the whole HSSM -> bambi -> pm.sample dispatch (including HSSM's own
-    context manager) but aborts at the `pymc.sampling.jax` boundary, so no MCMC
-    and no JAX sampler compilation actually run.
-    """
-    captured = {}
+def _capture_sample_jax_nuts(monkeypatch) -> dict:
+    """Swap `sample_jax_nuts` for a fake that records its kwargs, then aborts."""
+    captured: dict = {}
 
     def fake_sample_jax_nuts(*args, **kwargs):
-        captured["jitter"] = kwargs.get("jitter", "MISSING")
+        captured.update(kwargs)
         raise _StopSampling
 
     monkeypatch.setattr(pymc_jax, "sample_jax_nuts", fake_sample_jax_nuts)
+    return captured
+
+
+def test_hssm_numpyro_forces_jitter_false(monkeypatch, basic_hssm_model):
+    """`sampler="numpyro"` must reach `sample_jax_nuts` with `jitter=False`."""
+    captured = _capture_sample_jax_nuts(monkeypatch)
 
     with pytest.raises(_StopSampling):
         basic_hssm_model.sample(sampler="numpyro", draws=10, tune=10, chains=1, cores=1)
 
-    assert captured.get("jitter") is False
+    assert captured.get("jitter", "MISSING") is False
+
+
+def test_hssm_numpyro_user_jitter_wins(monkeypatch, basic_hssm_model):
+    """A user-supplied `nuts={"jitter": True}` overrides HSSM's default."""
+    captured = _capture_sample_jax_nuts(monkeypatch)
+
+    with pytest.raises(_StopSampling):
+        basic_hssm_model.sample(
+            sampler="numpyro",
+            draws=10,
+            tune=10,
+            chains=1,
+            cores=1,
+            nuts={"jitter": True},
+        )
+
+    assert captured.get("jitter", "MISSING") is True
+
+
+def test_hssm_numpyro_forwards_other_nuts_keys(monkeypatch, basic_hssm_model):
+    """Other `nuts` keys reach `sample_jax_nuts` alongside HSSM's `jitter=False`."""
+    captured = _capture_sample_jax_nuts(monkeypatch)
+
+    with pytest.raises(_StopSampling):
+        basic_hssm_model.sample(
+            sampler="numpyro",
+            draws=10,
+            tune=10,
+            chains=1,
+            cores=1,
+            nuts={"chain_method": "vectorized"},
+        )
+
+    assert captured.get("chain_method") == "vectorized"
+    assert captured.get("jitter", "MISSING") is False

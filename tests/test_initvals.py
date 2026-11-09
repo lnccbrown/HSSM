@@ -1,7 +1,10 @@
 import numpy as np
+import pandas as pd
+import pymc as pm
 import pytest
 import hssm
 import logging
+from copy import deepcopy
 
 from hssm.param.utils import _clamp_default_initval_to_bounds
 
@@ -162,6 +165,131 @@ def test_valid_link_settings_preserve_regression_initvals(
 
     assert model.params["a"].link == expected_link
     np.testing.assert_allclose(model._initvals["a_Intercept"], expected_initval)
+
+
+_USER_V_PRIOR = {"name": "Normal", "mu": 1.0, "sigma": 0.5, "initval": 1.0}
+
+
+@pytest.mark.parametrize(
+    ("spec", "name", "truncated", "expected"),
+    [
+        pytest.param(
+            {
+                "t": {
+                    "name": "TruncatedNormal",
+                    "mu": 0.1,
+                    "sigma": 0.1,
+                    "lower": 0.0,
+                    "upper": 0.5,
+                    "initval": 0.1,
+                }
+            },
+            "t",
+            True,
+            0.1,
+            id="bounded-t",
+        ),
+        # `v` is the parent, whose prior is not wrapped in a regression dict.
+        pytest.param({"v": _USER_V_PRIOR}, "v", False, 1.0, id="parent-v"),
+        pytest.param(
+            {"include": [{"name": "v", "prior": _USER_V_PRIOR, "bounds": (-3, 3)}]},
+            "v",
+            True,
+            1.0,
+            id="bounded-parent-v",
+        ),
+    ],
+)
+def test_postprocessing_preserves_user_initvals(
+    cavanagh_test, spec, name, truncated, expected
+):
+    """A user initval survives postprocessing, with or without bounds."""
+    model = hssm.HSSM(
+        data=cavanagh_test.iloc[:12],
+        model="ddm",
+        p_outlier=0.0,
+        prior_settings=None,
+        process_initvals=True,
+        initval_jitter=0.0,
+        **spec,
+    )
+
+    assert model.params[name].prior.is_truncated is truncated
+    np.testing.assert_allclose(model.initvals[name], expected, rtol=1e-6)
+
+
+_BOUNDED_T_INTERCEPT = {
+    "Intercept": hssm.Prior("Normal", mu=0.3, sigma=0.1, bounds=(0, 2), initval=0.2),
+    "theta": {"name": "Normal", "mu": 0.0, "sigma": 0.05},
+}
+# Bambi applies a `common` wildcard to every common term, the intercept included.
+_COMMON_T_PRIOR = {
+    "common": {"name": "Normal", "mu": 0.3, "sigma": 0.05, "initval": 0.3}
+}
+
+
+@pytest.mark.parametrize("t_is_parent", [True, False], ids=["t-parent", "v-parent"])
+@pytest.mark.parametrize(
+    ("t_prior", "expected"),
+    [
+        pytest.param(_BOUNDED_T_INTERCEPT, 0.2, id="bounded-intercept"),
+        pytest.param(_COMMON_T_PRIOR, 0.3, id="common-wildcard"),
+    ],
+)
+def test_postprocessing_preserves_regression_user_initvals(
+    cavanagh_test, t_is_parent, t_prior, expected
+):
+    """A user initval on a regression intercept survives postprocessing."""
+    include = [{"name": "t", "formula": "t ~ 1 + theta", "prior": deepcopy(t_prior)}]
+    if not t_is_parent:
+        include.append({"name": "v", "formula": "v ~ 1 + theta"})
+    model = hssm.HSSM(
+        data=cavanagh_test.iloc[:12],
+        model="ddm",
+        include=include,
+        p_outlier=0.0,
+        process_initvals=True,
+        initval_jitter=0.0,
+    )
+
+    assert (model._parent == "t") is t_is_parent
+    np.testing.assert_allclose(model.initvals["t_Intercept"], expected, rtol=1e-6)
+
+
+@pytest.mark.parametrize(
+    ("prior_settings", "t_prior"),
+    [
+        pytest.param(
+            None,
+            {"theta": {"name": "Normal", "mu": 0.0, "sigma": 0.05}},
+            id="no-intercept-entry",
+        ),
+        pytest.param(
+            "safe",
+            {"common": {"name": "Normal", "mu": 0.3, "sigma": 0.05}},
+            id="common-wildcard",
+        ),
+    ],
+)
+def test_regression_intercept_without_user_initval_gets_default(
+    cavanagh_test, prior_settings, t_prior
+):
+    """An intercept whose prior gives no initval gets the default one."""
+    model = hssm.HSSM(
+        data=cavanagh_test.iloc[:12],
+        model="ddm",
+        include=[{"name": "t", "formula": "t ~ 1 + theta", "prior": deepcopy(t_prior)}],
+        p_outlier=0.0,
+        prior_settings=prior_settings,
+        process_initvals=True,
+        initval_jitter=0.0,
+    )
+
+    np.testing.assert_allclose(
+        model.initvals["t_Intercept"],
+        hssm.defaults.INITVAL_SETTINGS[None]["t_Intercept"],
+        rtol=1e-6,
+    )
 
 
 @pytest.mark.slow
@@ -483,3 +611,30 @@ def test_explicit_log_link_keeps_default_start(
     assert model.params[name].link == "log"
     initval = model._initvals[f"{name}_Intercept"]
     assert initval == np.array(expected_initval).astype(initval.dtype)
+
+
+@pytest.mark.parametrize("n_choices", [2, 3, 4])
+@pytest.mark.parametrize(
+    "include",
+    [None, [{"name": "b", "formula": "b ~ 1 + x"}]],
+    ids=["simple", "b-regression"],
+)
+def test_lba_default_start_has_finite_logp(n_choices, include):
+    """The default start satisfies the LBA's b > A, so log p is finite (#1426).
+
+    ``p_outlier=None``: the default lapse mixture keeps log p finite even when
+    the LBA term is -inf.
+    """
+    data = pd.DataFrame(
+        {
+            "rt": np.tile([0.35, 0.5], n_choices),
+            "response": np.repeat(np.arange(n_choices), 2),
+            "x": np.linspace(-1.0, 1.0, 2 * n_choices),
+        }
+    )
+    model = hssm.HSSM(data, model=f"lba{n_choices}", include=include, p_outlier=None)
+    start = pm.initial_point.make_initial_point_fn(
+        model=model.pymc_model, overrides=model.initvals, jitter_rvs=set()
+    )(None)
+
+    assert np.isfinite(model.pymc_model.compile_logp()(start))

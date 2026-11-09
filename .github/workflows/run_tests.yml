@@ -35,13 +35,27 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # Reuse the ONNX networks that tests fetch from the Hugging Face Hub rather
+      # than downloading them on every run (#1061). The key follows the model
+      # configs, which name those files; when it changes, restore-keys starts
+      # from the previous cache.
+      - name: Cache Hugging Face Hub downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: ${{ runner.os }}-huggingface-hub-${{ hashFiles('src/hssm/modelconfig/**') }}
+          restore-keys: |
+            ${{ runner.os }}-huggingface-hub-
+
       - name: Run fast tests
         if: ${{ !inputs.run_slow_tests }}
         run: uv run pytest -m "not slow" $HSSM_TEST_ARGS
 
       - name: Run slow tests
         if: ${{ inputs.run_slow_tests }}
-        run: uv run pytest -m slow $HSSM_TEST_ARGS
+        # --log-cli-level=INFO (the ini default is WARNING) so the RSS lines
+        # below actually show up in the log.
+        run: uv run pytest -m slow --log-cli-level=INFO $HSSM_TEST_ARGS
         env:
           # Log per-test RSS to diagnose slow-test memory leaks. This step only
           # runs on the slow-test path (run_slow_tests.yml), so it stays scoped.

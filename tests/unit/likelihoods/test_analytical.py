@@ -8,10 +8,12 @@ import jax
 import numpy as np
 import pymc as pm
 import pytensor
+import pytensor.tensor as pt
 
 import hssm
 from hssm.likelihoods.analytical import (
     LOGP_LB,
+    logp_ddm,
     logp_ddm_sdv,
     logp_lba2,
     logp_lba3,
@@ -208,6 +210,16 @@ class TestDdmSdvStability:
             assert np.all(np.isfinite(logp)), (
                 f"log_pdf_sv() returned non-finite values for {param_name} = {value}."
             )
+
+    def test_tensor_sv_zero_matches_logp_ddm(self, data_ddm):
+        """sv=0 as a tensor (as inside a model) reduces to logp_ddm, not an error."""
+        params = {
+            name: pt.as_tensor_variable(value)
+            for name, value in {"v": 1.0, "a": 1.5, "z": 0.5, "t": 0.2}.items()
+        }
+        logp = logp_ddm_sdv(data_ddm, sv=pt.as_tensor_variable(0.0), **params).eval()
+        expected = logp_ddm(data_ddm, **params).eval()
+        np.testing.assert_allclose(logp, expected, rtol=1e-5, atol=1e-5)
 
 
 class TestPoissonRaceLikelihood:

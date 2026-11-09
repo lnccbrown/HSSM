@@ -121,7 +121,9 @@ def test_get_lba4_config():
     likelihood = lba4_model_config["likelihoods"]["analytical"]
     assert likelihood["loglik"] is logp_lba4
     assert likelihood["backend"] == "jax"
-    assert likelihood["default_priors"] == {}
+    assert likelihood["default_priors"] == {
+        "A": {"name": "HalfNormal", "sigma": 2.0, "initval": 0.5}
+    }
     assert likelihood["bounds"] == lba4_bounds
     assert likelihood["extra_fields"] is None
 
@@ -333,3 +335,12 @@ def test_ddm_normal_st_logp_floors_at_t_minus_3st(monkeypatch):
     # v, a, z, t, st
     result = np.asarray(Dist.logp(data, 0.5, 0.5, 0.5, 0.5, 0.125).eval())
     np.testing.assert_array_equal(result, [LOGP_LB, LOGP_LB, 0.0, 0.0])
+
+
+def test_softmax_inv_temperature_4_is_registered():
+    """The 4-choice softmax model is available by name."""
+    config = get_default_model_config("softmax_inv_temperature_4")
+
+    assert config == softmax_inv_temperature_config(n_choices=4)
+    assert config["list_params"] == ["beta", "logit1", "logit2", "logit3"]
+    assert config["choices"] == [0, 1, 2, 3]

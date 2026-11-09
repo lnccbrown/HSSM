@@ -61,6 +61,7 @@ rather than a duplicate summary here.
 | How do I simulate data or change simulator output? | [ssm-simulators](https://lnccbrown.github.io/ssm-simulators/) |
 | How do I train or export a likelihood network? | [LANfactory](https://lnccbrown.github.io/LANfactory/) |
 | How do I validate and promote a trained artifact? | [LAN pipeline](https://lnccbrown.github.io/LAN_pipeline_minimal/) |
+| How do I keep a record of my own fits? | [HSSM — Track fits with MLflow](../how_to/track_with_mlflow.md) |
 | How do I track generation and training runs? | [LAN pipeline — MLflow](https://lnccbrown.github.io/LAN_pipeline_minimal/how-to/track-with-mlflow/) |
 | How do I query or extend the capability layer? | [HSSMCortex](https://lnccbrown.github.io/HSSMCortex/) |
 | How do I coordinate a cross-repository change? | [HSSMSpine](https://lnccbrown.github.io/HSSMSpine/) |

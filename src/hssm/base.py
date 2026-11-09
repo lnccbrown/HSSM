@@ -50,13 +50,12 @@ from hssm.distribution_utils import (
 from hssm.missing_data_mixin import MissingDataMixin
 from hssm.utils import (
     _compute_log_likelihood,
-    _force_jax_nuts_no_jitter,
     _get_alias_dict,
     _print_prior,
     _split_array,
 )
 
-from . import plotting
+from . import plotting, tracking
 from .config import BaseModelConfig
 from .modelconfig import list_models
 from .param import Params
@@ -87,6 +86,29 @@ def _validate_setting_preset(name: str, value: object, preset: str) -> None:
         raise ValueError(
             f"`{name}` must be either {preset!r} or None, but got {value!r}."
         )
+
+
+def _get_prior_args(prior: Any) -> dict[str, Any]:
+    """Return the original arguments of a Bambi or truncated HSSM prior.
+
+    Anything else, such as a missing regression-term prior, has no arguments and
+    hence no user-supplied initial value.
+    """
+    if not isinstance(prior, bmb.Prior):
+        return {}
+    if getattr(prior, "is_truncated", False):
+        return cast("dict[str, Any]", getattr(prior, "_args"))
+    return prior.args
+
+
+def _get_regression_term_prior(prior: dict[str, Any], term: str) -> Any:
+    """Return the prior Bambi uses for a common term of a regression.
+
+    As in Bambi, a prior named after the term takes precedence over the
+    ``"common"`` wildcard, which covers every common term, the intercept included.
+    Returns ``None`` when neither is given.
+    """
+    return prior.get(term, prior.get("common"))
 
 
 class classproperty:
@@ -133,12 +155,14 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         is passed, the model will be considered custom, in which case all
         `model_config`, `loglik`, and `loglik_kind` have to be provided by the user.
     choices : optional
-        When an `int`, the number of choices that the participants can make. If `2`, the
-        choices are [-1, 1] by default. If anything greater than `2`, the choices are
-        [0, 1, ..., n_choices - 1] by default. If a `list` is provided, it should be the
-        list of choices that the participants can make. Defaults to `2`. If any value
-        other than the choices provided is found in the "response" column of the data,
-        an error will be raised.
+        The choices that participants can make. An integer (Python `int` or numpy
+        integer) gives the number of choices: `2` means [-1, 1] and any `n > 2`
+        means [0, 1, ..., n - 1]. A `list` or `tuple` gives the choice values
+        directly. Ignored for supported models unless `model_config` is also passed,
+        and choices set in `model_config` take precedence. Defaults to `None`, which
+        uses the model's default choices (from ssm-simulators for custom models it
+        knows). If any value other than the choices provided is found in the
+        "response" column of the data, an error will be raised.
     include : optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
@@ -155,7 +179,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         be included in estimation.
     lapse : optional
         The lapse distribution. This argument is required only if `p_outlier` is not
-        `None`. Defaults to Uniform(0.0, 10.0).
+        `None`. Defaults to Uniform(0.0, 20.0). The lapse process is mixed into the
+        likelihood with weight `p_outlier`, marginalised per row type: observed
+        rows use the lapse density at the observed `rt`; missing-RT rows (choice
+        observed, no deadline) use `1 / n_choices`; omission rows (deadline) use
+        the lapse survival probability at the deadline.
     global_formula : optional
         A string that specifies a regressions formula which will be used for all model
         parameters. If you specify parameter-wise regressions in addition, these will
@@ -416,13 +444,26 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         self._post_check_data_sanity()
 
+        # Which network this model runs on. The loader records downloads to a
+        # module-global, so clear it first and read it straight after: what is
+        # left belongs to this model's likelihood and nothing else. Reading it
+        # lazily at log time would attribute a later model's network to this
+        # one, and reading it without clearing would hand an analytical model
+        # whichever network the previous model loaded.
+        tracking.reset_network_record()
         self.model_distribution = self._make_model_distribution()
+        networks = tracking.recorded_networks()
+        self._tracking_network = networks.get(tracking.LIKELIHOOD_ROLE, {})
+        self._tracking_missing_data_network = networks.get(
+            tracking.MISSING_DATA_ROLE, {}
+        )
 
         self.family = make_family(
             self.model_distribution,
             self.list_params,
             self.link,
             self._parent,
+            is_choice_only=self.is_choice_only,
         )
 
         # Targeted statistical-identifiability warnings for common/group or
@@ -622,8 +663,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             Note that the old sampler names such as "mcmc", "nuts_numpyro",
             "nuts_blackjax" will be deprecated and removed in future releases. A warning
             will be raised if any of these old names are used.
-            For the JAX samplers ("numpyro"/"blackjax"), HSSM disables the
-            sampler's built-in initial-value jitter and uses its own controlled
+            By default, for the JAX samplers ("numpyro"/"blackjax"), HSSM disables
+            the sampler's built-in initial-value jitter and uses its own controlled
             `initval_jitter` instead.
         init: optional
             Initialization method to use for the sampler. If any of the NUTS samplers
@@ -640,7 +681,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         kwargs
             Other arguments passed to bmb.Model.fit(). Please see [here]
             (https://bambinos.github.io/bambi/api_reference.html#bambi.models.Model.fit)
-            for full documentation.
+            for full documentation. For the JAX samplers ("numpyro"/"blackjax"),
+            `nuts={"jitter": ...}` / `nuts={"chain_method": ...}` are forwarded to
+            pymc's `sample_jax_nuts`; HSSM sets `jitter=False` unless the user
+            passes it.
 
         Returns
         -------
@@ -773,18 +817,27 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # which silently downgraded user choice — surfaced via the sbi NLE
         # tutorial where sampler="numpyro" still went through PyMC's multiprocess
         # path and tripped cloudpickle on the ONNX ModelProto.
-        # PyMC 6's JAX-NUTS samplers ("numpyro"/"blackjax") always jitter initial
-        # values and expose no supported switch; HSSM already applies its own
-        # controlled `initval_jitter`, so disable the sampler's jitter for them
-        # (issue #999; see also the upstream pymc gap this works around).
-        with _force_jax_nuts_no_jitter(active=sampler in ("numpyro", "blackjax")):
-            self._inference_obj = self.model.fit(
-                inference_method=sampler,
-                init=init,
-                include_response_params=include_response_params,
-                omit_offsets=omit_offsets,
-                **kwargs,
-            )
+        # HSSM applies its own controlled `initval_jitter`, so the JAX samplers'
+        # ("numpyro"/"blackjax") uniform(-1, 1) initial-value jitter is disabled
+        # by default (issue #999). Since PyMC 6.3.0, nuts={"jitter": ...} is
+        # lifted out of the kernel kwargs and passed to sample_jax_nuts
+        # (pymc#8380), so no monkeypatch is needed. Merge our default *under*
+        # the user's nuts dict so a user-supplied value wins.
+        if sampler in ("numpyro", "blackjax"):
+            nuts = {"jitter": False, **(kwargs.get("nuts") or {})}
+            kwargs["nuts"] = nuts
+
+        tracker = tracking.active()
+        if tracker is not None:
+            tracker.sample_started()
+
+        self._inference_obj = self.model.fit(
+            inference_method=sampler,
+            init=init,
+            include_response_params=include_response_params,
+            omit_offsets=omit_offsets,
+            **kwargs,
+        )
 
         # Separate out log likelihood computation
         if compute_likelihood:
@@ -792,6 +845,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Subset data vars in posterior
         self._clean_posterior_group(dt=self._inference_obj)
+
+        # Opt-in MLflow tracking (hssm.track): params, metrics, artifacts.
+        if tracker is not None:
+            tracker.log_sample(self, sampler, kwargs)
         return self.traces
 
     def vi(
@@ -857,6 +914,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 backend = "numba"
 
+        tracker = tracking.active()
+        if tracker is not None:
+            tracker.vi_started()
+
         # Run variational inference directly from pymc model
         # pyrefly: ignore[bad-context-manager]
         with self.pymc_model:
@@ -883,6 +944,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Post-processing
         self._clean_posterior_group(dt=cast("DataTree | None", self._inference_obj_vi))
+
+        if tracker is not None:
+            tracker.log_vi(
+                self,
+                {
+                    "method": method,
+                    "niter": niter,
+                    "draws": draws,
+                    "backend": backend,
+                },
+            )
 
         # Return the DataTree object if return_idata is True
         if return_idata:
@@ -1463,7 +1535,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return graph
 
     def compile_logp(self, keep_transformed: bool = False, **kwargs):
-        """Compile the log probability function for the model.
+        """Compile the model's log probability: log-prior plus log-likelihood.
+
+        Any potentials passed to Bambi (``potentials=``) are included as well.
 
         Parameters
         ----------
@@ -1542,7 +1616,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         )
 
     def initial_point(self, transformed: bool = False) -> dict[str, np.ndarray]:
-        """Compute the initial point of the model.
+        """Compute a fresh PyMC initial point for the model.
 
         This is a slightly altered version of pm.initial_point.initial_point().
 
@@ -1555,6 +1629,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         -------
         dict
             A dictionary containing the initial point of the model parameters.
+
+        Notes
+        -----
+        HSSM clears PyMC's initial-value registry after model construction, so this
+        freshly computed point can differ from the default initial values HSSM passes
+        to sampling. Use ``model.initvals`` to inspect those values.
         """
         fn = pm.initial_point.make_initial_point_fn(
             model=self.pymc_model, return_transformed=transformed
@@ -1656,6 +1736,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # Save vi_traces to netcdf file
         if isinstance(self._inference_obj_vi, DataTree):
             self._inference_obj_vi.to_netcdf(model_path.joinpath("vi_traces.nc"))
+
+        # Opt-in MLflow tracking: attach model.pkl when log_artifacts="all".
+        # A traces-only save writes no pickle, so any in the directory is older.
+        if not save_traces_only and (tracker := tracking.active()) is not None:
+            tracker.log_saved_model(model_path)
 
     @classmethod
     def load_model(cls, path: Union[str, Path]) -> Union["HSSMBase", DataTree]:
@@ -1978,11 +2063,22 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     + "parameter is not None"
                 )
         if self.has_lapse:
-            if lapse is None:
-                if self.is_choice_only:
-                    self.lapse = 1 / self.n_choices
-                else:
-                    self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
+            if self.is_choice_only:
+                # Choice-only lapses are simulated as uniform random choices, so
+                # the likelihood must use the same uniform probability.
+                uniform = 1 / self.n_choices
+                if lapse is not None and not (
+                    isinstance(lapse, int | float | np.floating)
+                    and np.isclose(lapse, uniform)
+                ):
+                    raise ValueError(
+                        "Choice-only models only support a uniform lapse over "
+                        f"choices (1 / n_choices = {uniform:g}), but got {lapse!r}. "
+                        "Omit `lapse` to use it."
+                    )
+                self.lapse = uniform
+            elif lapse is None:
+                self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
             else:
                 self.lapse = lapse
             self.list_params.append("p_outlier")
@@ -2161,21 +2257,22 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             # If the parameter was parent it is automatically treated as a
             # regression.
             if not name_str_suffix:
-                # No suffix --> Intercept
-                if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
-                    args_tmp = getattr(prior_tmp["Intercept"], "args")
-                    if return_value:
-                        return args_tmp.get("initval", None)
-                    else:
-                        return "initval" in args_tmp
+                # No suffix --> Intercept, unless the parent is not a regression
+                # and so keeps its plain prior.
+                prior_tmp = self.params[tmp_param].prior
+                if isinstance(prior_tmp, dict):
+                    prior_tmp = _get_regression_term_prior(prior_tmp, "Intercept")
+                args_tmp = _get_prior_args(prior_tmp)
+                if return_value:
+                    return args_tmp.get("initval", None)
                 else:
-                    if return_value:
-                        return None
-                    return False
+                    return "initval" in args_tmp
             else:
                 # If the parameter has a suffix --> use it
                 if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
-                    args_tmp = getattr(prior_tmp[name_str_suffix], "args")
+                    args_tmp = _get_prior_args(
+                        _get_regression_term_prior(prior_tmp, name_str_suffix)
+                    )
                     if return_value:
                         return args_tmp.get("initval", None)
                     else:
@@ -2197,8 +2294,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                         return self.params[tmp_param].prior
                     else:
                         return True
-                elif isinstance(self.params[tmp_param].prior, bmb.Prior):
-                    args_tmp = getattr(self.params[tmp_param].prior, "args")
+                elif isinstance(prior_tmp := self.params[tmp_param].prior, bmb.Prior):
+                    args_tmp = _get_prior_args(prior_tmp)
                     if "initval" in args_tmp:
                         if return_value:
                             return args_tmp["initval"]
@@ -2217,7 +2314,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 # If suffix --> treat as regression and use suffix
                 if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
-                    args_tmp = getattr(prior_tmp[name_str_suffix], "args")
+                    args_tmp = _get_prior_args(
+                        _get_regression_term_prior(prior_tmp, name_str_suffix)
+                    )
                     if return_value:
                         return args_tmp.get("initval", None)
                     else:
