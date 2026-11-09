@@ -1,5 +1,8 @@
 """Tests for HSSM distribution utility helpers."""
 
+import os
+import subprocess
+import sys
 from unittest.mock import patch
 
 import bambi as bmb
@@ -781,3 +784,35 @@ def test_rt_single_draw_keeps_the_requested_shape(size, expected):
     rv = distribution_utils.make_hssm_rv("ddm", ["v", "a", "z", "t"])()
 
     assert pm.draw(rv(0.5, 1.5, 0.5, 0.3, size=size), random_seed=5).shape == expected
+
+
+_FREE_RV_NAMES = """
+import hssm
+
+theta = dict(v=0.5, a=1.5, z=0.5, t=0.3)
+data = hssm.simulate_data(model="ddm", theta=theta, size=20, random_state=1)
+model = hssm.HSSM(data=data, model="ddm")
+print(*[rv.name for rv in model.pymc_model.free_RVs])
+"""
+
+
+def _free_rv_names(hash_seed: str) -> list[str]:
+    result = subprocess.run(
+        [sys.executable, "-c", _FREE_RV_NAMES],
+        env={**os.environ, "PYTHONHASHSEED": hash_seed},
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,  # the assertion below reports the failure with its stderr
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout.splitlines()[-1].split()
+
+
+def test_free_rv_order_does_not_depend_on_the_hash_seed():
+    """bambi orders the auxiliary parameters as a set; the family keeps list_params.
+
+    With bambi's set, hash seed 1 gives ['z', 'a', 't', 'v'] and seed 2 gives
+    ['t', 'z', 'a', 'v'], so a seeded sample() differs between processes.
+    """
+    assert _free_rv_names("1") == _free_rv_names("2") == ["a", "z", "t", "v"]

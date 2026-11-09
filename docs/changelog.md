@@ -46,6 +46,8 @@ This version includes the following changes:
 
 21. **Documentation: the choice-only tutorial simulates with `simulate_data` and checks predictions** (#1491, closes #1490). The tutorial now simulates its data with `hssm.simulate_data` instead of a hand-written simulator, explains the placeholder `rt` column (`-1.0`) that choice-only simulations return, and adds a prior and posterior predictive check of choice frequencies. It has been migrated to marimo (`docs/tutorials/choice_only_models.py`), and its outputs no longer show the old dummy-simulator warning.
 
+22. **A seeded fit gives the same draws in every process** (#1493, closes #1492). bambi orders a family's auxiliary parameters as a set, so the order of the model's free random variables, and with it the draws of `sample(random_seed=...)`, depended on Python's per-process string-hash seed (`PYTHONHASHSEED`) in every model with two or more parameters without a regression (`z`, `a` and `t` in the DDM). HSSM's families now keep the order of `list_params`. A fit from an earlier version cannot be reproduced draw for draw.
+
 #### Breaking changes that require migration:
 
 1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.
