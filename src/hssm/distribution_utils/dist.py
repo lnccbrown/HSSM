@@ -973,7 +973,8 @@ class OrderedFamily(bmb.Family):
     and the free random variables of the PyMC model, follow Python's string-hash
     seed. NUTS then explores a different ordering in each process, and a seeded
     ``sample()`` gives different draws (#1492). Drop this override once the bambi
-    floor reaches a release that keeps the order.
+    floor reaches a release that keeps the order
+    (bambinos/bambi#1091).
     """
 
     @property
