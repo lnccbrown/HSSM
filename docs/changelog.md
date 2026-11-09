@@ -40,11 +40,17 @@ This version includes the following changes:
 
 18. **Documentation: `compile_logp()` returns the log-posterior; `distribution_utils` API page fixed** (closes #1436). `HSSM.compile_logp()` compiles the model's log-prior plus log-likelihood, plus any Bambi `potentials` (the unnormalized log-posterior), as a function of natural-scale parameter values, not the log-likelihood alone; the tutorial, renamed "Compile a log-posterior function", and the method's docstring now say so. It also gives `pip install zeus-mcmc` for `zeus`: `hssm[notebook]` installs no `zeus`, since `notebook` is a dependency group, not an extra. The `distribution_utils` API page now lists `make_hssm_rv` in place of the nonexistent `make_ssm_rv`, and adds `make_distribution_for_supported_model`.
 
-19. **Choice-probability networks (CPNs) receive the observed choice as their last input** (closes #1324). Missing-RT rows (`rt == -999.0`, no deadline) are now scored by the CPN on `[θ…, extra_fields…, choice] -> log P(choice | θ)`, the same layout the omission network already uses with the deadline (`[θ…, deadline]`), so both networks have input width `n_params + 1`. HSSM passes each missing row's `response` exactly as coded in `choices`, and missing rows whose response is not a valid choice now raise a clear `ValueError`. The lapse term on these rows is the `1 / n_choices` of item 17. The test fixture `tests/fixtures/ddm_cpn.onnx` was regenerated from the DDM LAN fixture with the choice as its last input column; its provenance (source LAN, derivation settings, training summary) is recorded in `tests/fixtures/ddm_cpn.provenance.json`.
+19. **Choice-only softmax models simulate, and their lapse likelihood is fixed** (#1416, closes #925, refs #1323; by @digicosmos86). `softmax_inv_temperature_2`, `_3` and the new `softmax_inv_temperature_4` now support `simulate_data`, `sample_prior_predictive` and `sample_posterior_predictive` through the `ssm-simulators` models of the same name (`ssm-simulators>=0.16.0`). Predictive draws contain the response only. On 0.3.0–0.5.0, choice-only `HSSM` models with `p_outlier` (on by default, 0.05) used `exp(1 / n_choices)` instead of `1 / n_choices` as the lapse likelihood, which overstated `beta * logit` (by about 17% for a 0.8/0.2 choice split); refit such models. `RLSSM` was not affected.
+
+20. **Posterior predictive sampling works when `p_outlier` is the only trial-wise parameter** (#1416). With a `p_outlier` regression and every other parameter intercept-only, `sample_posterior_predictive` failed for every model (`cannot reshape array of size ... into shape (1, 5, 1)`); the other parameters are now broadcast to `p_outlier`'s shape before simulating. A regression on any other parameter avoided the error.
+
+21. **Choice-probability networks (CPNs) receive the observed choice as their last input** (closes #1324). Missing-RT rows (`rt == -999.0`, no deadline) are now scored by the CPN on `[θ…, extra_fields…, choice] -> log P(choice | θ)`, the same layout the omission network already uses with the deadline (`[θ…, deadline]`), so both networks have input width `n_params + 1`. HSSM passes each missing row's `response` exactly as coded in `choices`, and missing rows whose response is not a valid choice now raise a clear `ValueError`. The lapse term on these rows is the `1 / n_choices` of item 17. The test fixture `tests/fixtures/ddm_cpn.onnx` was regenerated from the DDM LAN fixture with the choice as its last input column; its provenance (source LAN, derivation settings, training summary) is recorded in `tests/fixtures/ddm_cpn.provenance.json`.
 
 #### Breaking changes that require migration:
 
-1. **CPN input contract is `[θ…, choice]`** (#1324). Previously a CPN was called with the
+1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.
+
+2. **CPN input contract is `[θ…, choice]`** (#1324). Previously a CPN was called with the
    parameters only (input width `n_params`) and had to encode, by a convention invisible to
    HSSM, *which* choice's probability it returned. A network trained to that convention is now
    rejected when the model is built, with a message pointing to
@@ -65,6 +71,10 @@ This version includes the following changes:
    `hssm.distribution_utils.assemble_callables(..., params_only=True)`, a params-only callable is
    still accepted and is then invoked as `f(None, *params)`. No CPN artifact was ever published on
    the `franklab/HSSM` Hub repository, so only user-trained networks are affected.
+
+#### Dependency changes:
+
+1. **`ssm-simulators` floor raised to `>=0.16.0`**, the first release with the `softmax_inv_temperature_{2,3,4}` simulators (lnccbrown/ssm-simulators#421), which replace HSSM's own adapter (#1416).
 
 ### 0.5.0
 
