@@ -377,11 +377,6 @@ class _RLSSM(HSSMBase):
         if self.model_config.is_choice_only and isinstance(
             lapse, int | float | np.floating
         ):
-            if not 0 < float(lapse) <= 1:
-                raise ValueError(
-                    "Choice-only RLSSM scalar lapse probabilities must satisfy "
-                    "0 < lapse <= 1."
-                )
             # Base._check_lapse() supplies choice-only scalar lapse as
             # 1 / n_choices, while make_distribution() expects float lapse
             # values to already be log probabilities.
