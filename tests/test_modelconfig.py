@@ -208,7 +208,11 @@ def test_softmax_inv_temperature_default():
     assert config["response"] == ["response"]
     assert config["choices"] == [-1, 1]
     assert config["list_params"] == ["beta", "logit1"]
-    assert config["description"] == "The Softmax Inv. Temperature Model with 2 choices"
+    assert config["description"] == (
+        "The Softmax Inv. Temperature Model with 2 choices. "
+        "The likelihood identifies only the products of beta and the logits, "
+        "so beta should generally be fixed in choice-only fits."
+    )
 
     likelihoods = config["likelihoods"]
     lk_analytical = likelihoods["analytical"]
@@ -240,8 +244,11 @@ def test_softmax_inv_temperature_3_choices():
     assert config["response"] == ["response"]
     assert config["choices"] == [0, 1, 2]
     assert config["list_params"] == ["beta", "logit1", "logit2"]
-    assert config["description"] == "The Softmax Inv. Temperature Model with 3 choices"
-
+    assert config["description"] == (
+        "The Softmax Inv. Temperature Model with 3 choices. "
+        "The likelihood identifies only the products of beta and the logits, "
+        "so beta should generally be fixed in choice-only fits."
+    )
     likelihoods = config["likelihoods"]
     lk_analytical = likelihoods["analytical"]
 
