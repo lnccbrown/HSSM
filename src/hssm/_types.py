@@ -32,6 +32,7 @@ SupportedModels = Literal[
     "poisson_race",
     "softmax_inv_temperature_2",
     "softmax_inv_temperature_3",
+    "softmax_inv_temperature_4",
 ]
 
 

@@ -40,6 +40,24 @@ This version includes the following changes:
 
 18. **Documentation: `compile_logp()` returns the log-posterior; `distribution_utils` API page fixed** (closes #1436). `HSSM.compile_logp()` compiles the model's log-prior plus log-likelihood, plus any Bambi `potentials` (the unnormalized log-posterior), as a function of natural-scale parameter values, not the log-likelihood alone; the tutorial, renamed "Compile a log-posterior function", and the method's docstring now say so. It also gives `pip install zeus-mcmc` for `zeus`: `hssm[notebook]` installs no `zeus`, since `notebook` is a dependency group, not an extra. The `distribution_utils` API page now lists `make_hssm_rv` in place of the nonexistent `make_ssm_rv`, and adds `make_distribution_for_supported_model`.
 
+19. **Choice-only softmax models simulate, and their lapse likelihood is fixed** (#1416, closes #925, refs #1323; by @digicosmos86). `softmax_inv_temperature_2`, `_3` and the new `softmax_inv_temperature_4` now support `simulate_data`, `sample_prior_predictive` and `sample_posterior_predictive` through the `ssm-simulators` models of the same name (`ssm-simulators>=0.16.0`). Predictive draws contain the response only. On 0.3.0–0.5.0, choice-only `HSSM` models with `p_outlier` (on by default, 0.05) used `exp(1 / n_choices)` instead of `1 / n_choices` as the lapse likelihood, which overstated `beta * logit` (by about 17% for a 0.8/0.2 choice split); refit such models. `RLSSM` was not affected.
+
+20. **Posterior predictive sampling works when `p_outlier` is the only trial-wise parameter** (#1416). With a `p_outlier` regression and every other parameter intercept-only, `sample_posterior_predictive` failed for every model (`cannot reshape array of size ... into shape (1, 5, 1)`); the other parameters are now broadcast to `p_outlier`'s shape before simulating. A regression on any other parameter avoided the error.
+
+21. **Documentation: the choice-only tutorial simulates with `simulate_data` and checks predictions** (#1491, closes #1490). The tutorial now simulates its data with `hssm.simulate_data` instead of a hand-written simulator, explains the placeholder `rt` column (`-1.0`) that choice-only simulations return, and adds a prior and posterior predictive check of choice frequencies. It has been migrated to marimo (`docs/tutorials/choice_only_models.py`), and its outputs no longer show the old dummy-simulator warning.
+
+22. **The `ddm` and `ddm_sdv` LAN bounds no longer reach outside the networks' training ranges** (closes #1440). A LAN is valid only inside the parameter range it was trained on; outside it, it returns a finite but wrong density. The `approx_differentiable` `ddm` config allowed `z` in `(0.0, 1.0)`, while `ddm.onnx` was trained on `[0.1, 0.9]`, and `ddm_sdv` let `t` and `sv` start at 0.0, while its network was trained from 0.001. The bounds are now `z` `(0.1, 0.9)` for `ddm`, and `t` `(0.001, 2.0)` and `sv` `(0.001, 2.5)` for `ddm_sdv`. With these likelihoods, the default `z` prior becomes `Uniform(0.1, 0.9)` and the default `sv` prior `Uniform(0.001, 2.5)`; parameter values outside the bounds hit the likelihood floor; `link_settings="log_logit"` maps `z` into `(0.1, 0.9)`; and RLSSM decision processes that HSSM builds from these model configs inherit the new bounds. `RLSSMConfig.from_ssms_model()` takes its bounds from the ssms preset instead, so this change does not affect it; ssms' `2AB_RW_DDM` already declares `z` `(0.1, 0.9)`. Fixing `sv=0.0` (or `t=0.0`) with the `ddm_sdv` LAN now raises a `ValueError`; for zero drift variability use `model="ddm"`. The analytical and blackbox likelihoods are unchanged. An audit of every other built-in LAN config found its bounds equal to the training range; `test_lan_bounds_match_training` now enforces this with no exceptions and no rounding of the lower edge. Refit any `ddm` LAN model whose `z` posterior had mass below 0.1 or above 0.9.
+
+#### Breaking changes that require migration:
+
+1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.
+
+2. **The `ddm_sdv` LAN no longer accepts `sv=0.0` or `t=0.0`** (#1440). Its bounds now start at 0.001, where its network's training range starts, so fixing either parameter at 0.0 raises `ValueError`. For zero drift variability, use `model="ddm"`. Likewise, a fixed `z` outside `[0.1, 0.9]` now raises with the `ddm` LAN.
+
+#### Dependency changes:
+
+1. **`ssm-simulators` floor raised to `>=0.16.0`**, the first release with the `softmax_inv_temperature_{2,3,4}` simulators (lnccbrown/ssm-simulators#421), which replace HSSM's own adapter (#1416).
+
 ### 0.5.0
 
 This version includes the following changes:

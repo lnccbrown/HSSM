@@ -40,7 +40,7 @@ def _registry_mismatches():
             simulator = rv if isinstance(rv, str) else model
             if simulator not in ssms.config.model_config:
                 # No ssm-simulators model to compare against, for example
-                # softmax_inv_temperature_2 and softmax_inv_temperature_3.
+                # the softmax_inv_temperature_<n> models.
                 continue
             registry = ssms.config.model_config[simulator]
             for field, declared, expected in (
