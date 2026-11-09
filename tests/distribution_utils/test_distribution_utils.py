@@ -787,16 +787,24 @@ def test_rt_single_draw_keeps_the_requested_shape(size, expected):
 
 
 _FREE_RV_NAMES = """
+import numpy as np
+import pandas as pd
+
 import hssm
 
 theta = dict(v=0.5, a=1.5, z=0.5, t=0.3)
-data = hssm.simulate_data(model="ddm", theta=theta, size=20, random_state=1)
-model = hssm.HSSM(data=data, model="ddm")
-print(*[rv.name for rv in model.pymc_model.free_RVs])
+ddm_data = hssm.simulate_data(model="ddm", theta=theta, size=20, random_state=1)
+choices = np.random.default_rng(1).choice(3, size=20)
+for model, data in [
+    ("ddm", ddm_data),
+    ("softmax_inv_temperature_3", pd.DataFrame({"response": choices})),
+]:
+    rvs = hssm.HSSM(data=data, model=model).pymc_model.free_RVs
+    print("free_RVs:", model, *[rv.name for rv in rvs])
 """
 
 
-def _free_rv_names(hash_seed: str) -> list[str]:
+def _free_rv_names(hash_seed: str) -> dict[str, list[str]]:
     result = subprocess.run(
         [sys.executable, "-c", _FREE_RV_NAMES],
         env={**os.environ, "PYTHONHASHSEED": hash_seed},
@@ -806,13 +814,20 @@ def _free_rv_names(hash_seed: str) -> list[str]:
         check=False,  # the assertion below reports the failure with its stderr
     )
     assert result.returncode == 0, result.stderr
-    return result.stdout.splitlines()[-1].split()
+    lines = [line.split() for line in result.stdout.splitlines()]
+    return {line[1]: line[2:] for line in lines if line[:1] == ["free_RVs:"]}
 
 
 def test_free_rv_order_does_not_depend_on_the_hash_seed():
     """bambi orders the auxiliary parameters as a set; the family keeps list_params.
 
-    With bambi's set, hash seed 1 gives ['z', 'a', 't', 'v'] and seed 2 gives
-    ['t', 'z', 'a', 'v'], so a seeded sample() differs between processes.
+    With bambi's set, the DDM (SSMFamily) gives ['z', 'a', 't', 'v'] under hash
+    seed 1 and ['t', 'z', 'a', 'v'] under seed 2, and the choice-only model
+    (OrderedFamily) puts logit2 before logit1, so a seeded sample() differs
+    between processes.
     """
-    assert _free_rv_names("1") == _free_rv_names("2") == ["a", "z", "t", "v"]
+    expected = {
+        "ddm": ["a", "z", "t", "v"],
+        "softmax_inv_temperature_3": ["logit1", "logit2", "beta"],
+    }
+    assert _free_rv_names("1") == _free_rv_names("2") == expected
