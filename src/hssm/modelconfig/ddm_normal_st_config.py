@@ -19,10 +19,10 @@ def get_ddm_normal_st_config() -> DefaultConfig:
     The parameter bounds are the network's training box.
 
     Because the kernel is unbounded, simulated RTs can be non-positive near
-    the lower ``t`` bound. The ssm-simulators config measures 8.9% at
-    ``t = st = 0.25, a = 0.3`` and 0.013% on the 3-sigma edge
-    (``3 * st = t``), so filter non-positive RTs out of posterior-predictive
-    samples before comparing them with data.
+    the lower ``t`` bound. The ssm-simulators config measures 16.4% at the box
+    corner ``t = 0.25, st = 0.35, a = 0.3`` (9.0% at ``st = 0.25``) and 0.013%
+    on the 3-sigma edge (``3 * st = t``), so filter non-positive RTs out of
+    posterior-predictive samples before comparing them with data.
 
     Returns
     -------
@@ -53,7 +53,7 @@ def get_ddm_normal_st_config() -> DefaultConfig:
                     "a": (0.3, 2.5),
                     "z": (0.3, 0.7),
                     "t": (0.25, 2.25),
-                    "st": (1e-3, 0.25),
+                    "st": (1e-3, 0.35),
                 },
                 "extra_fields": None,
                 # The Normal(t, st) kernel has no hard edge, so this is a
