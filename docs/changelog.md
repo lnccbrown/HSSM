@@ -50,6 +50,8 @@ This version includes the following changes:
 
 1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.
 
+2. **The `ddm_sdv` LAN no longer accepts `sv=0.0` or `t=0.0`** (#1440). Its bounds now start at 0.001, where its network's training range starts, so fixing either parameter at 0.0 raises `ValueError`. For zero drift variability, use `model="ddm"`. Likewise, a fixed `z` outside `[0.1, 0.9]` now raises with the `ddm` LAN.
+
 #### Dependency changes:
 
 1. **`ssm-simulators` floor raised to `>=0.16.0`**, the first release with the `softmax_inv_temperature_{2,3,4}` simulators (lnccbrown/ssm-simulators#421), which replace HSSM's own adapter (#1416).
