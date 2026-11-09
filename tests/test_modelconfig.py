@@ -266,3 +266,12 @@ def test_softmax_inv_temperature_3_choices():
         "mu": 0.0,
         "sigma": 1.0,
     }
+
+
+def test_softmax_inv_temperature_4_is_registered():
+    """The 4-choice softmax model is available by name."""
+    config = get_default_model_config("softmax_inv_temperature_4")
+
+    assert config == softmax_inv_temperature_config(n_choices=4)
+    assert config["list_params"] == ["beta", "logit1", "logit2", "logit3"]
+    assert config["choices"] == [0, 1, 2, 3]
