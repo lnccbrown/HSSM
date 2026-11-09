@@ -133,6 +133,9 @@ nav:
           - Winterbrain 2025 — Talk 1: archive/hssm_tutorial_workshop_1.ipynb
           - Winterbrain 2025 — Talk 2: archive/hssm_tutorial_workshop_2.ipynb
           - PyMC to HSSM — MathPsych 2025: archive/pymc_to_hssm.ipynb
+  - FAQ:
+      - Overview: faq/index.md
+      - ddm_st or ddm_normal_st won't converge: faq/st_models.md
 plugins:
   - search
   - autorefs
