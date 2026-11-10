@@ -17,6 +17,7 @@ focuses on a concrete modeling, inference, analysis, or extension task.
 - [Set initial values](../tutorials/initial_values.ipynb).
 - [Use an alternative sampler with Bayeux](../tutorials/tutorial_bayeux.ipynb).
 - [Run variational inference](../tutorials/variational_inference.ipynb).
+- [Fix `ddm_st` and `ddm_normal_st` fits that won't converge](fit_st_models.ipynb).
 
 ## Work with fitted models
 
