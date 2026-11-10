@@ -24,13 +24,16 @@ def get_full_ddm_lan_config() -> DefaultConfig:
     - ``sv`` is the standard deviation of the Normal drift kernel, as in
       ``full_ddm`` and ``ddm_sdv``.
 
-    ``sz`` is not recoverable on its own at any design the network was
-    validated on (12 subjects by 150 to 1,800 trials): its posterior is the
-    prior. It is free here so that the other six parameters are integrated
-    over it rather than fitted at a pinned value; treat it as a nuisance
-    parameter and leave its posterior out of inferences. ``sv`` is bounded
-    below at 0.3, the floor of the training box: below it ``sv`` is not
-    identifiable at ordinary trial counts.
+    ``sz`` is not well recovered from a design with one task condition: there
+    its posterior stays close to the prior, so fix it or treat it as a
+    nuisance parameter. It is reasonably recovered when several difficulty
+    conditions share ``z`` and ``sz`` and only ``v`` varies with difficulty,
+    as in Ratcliff and Rouder's (1998) design (squared correlation of estimate
+    with truth 0.90 over 20 simulated datasets; see the network's model card).
+    Boehm et al. (2018) describe the general difficulty of estimating the
+    across-trial variability parameters. ``sv`` is bounded below at 0.3, the
+    floor of the training box: below it ``sv`` is not identifiable at ordinary
+    trial counts.
 
     Returns
     -------
