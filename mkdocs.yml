@@ -66,6 +66,7 @@ nav:
           - Set initial values: tutorials/initial_values.ipynb
           - Use alternative samplers (Bayeux): tutorials/tutorial_bayeux.ipynb
           - Run variational inference: tutorials/variational_inference.ipynb
+          - Fix ddm_st and ddm_normal_st fits that won't converge: how_to/fit_st_models.ipynb
       - Working with results:
           - Plot posteriors and predictions: tutorials/plotting.ipynb
           - Posterior predictive plot gallery: tutorials/ppc_gallery.ipynb
@@ -133,9 +134,6 @@ nav:
           - Winterbrain 2025 — Talk 1: archive/hssm_tutorial_workshop_1.ipynb
           - Winterbrain 2025 — Talk 2: archive/hssm_tutorial_workshop_2.ipynb
           - PyMC to HSSM — MathPsych 2025: archive/pymc_to_hssm.ipynb
-  - FAQ:
-      - Overview: faq/index.md
-      - ddm_st or ddm_normal_st won't converge: faq/st_models.md
 plugins:
   - search
   - autorefs
@@ -163,6 +161,7 @@ plugins:
         - how_to/rlssm_analytical_ddm.py
       execute: true
       execute_ignore:
+        - how_to/fit_st_models.ipynb
         - getting_started/getting_started.ipynb
         - how_to/specify_priors.ipynb
         - how_to/compare_models.ipynb
