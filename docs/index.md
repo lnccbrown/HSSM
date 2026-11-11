@@ -1,8 +1,9 @@
 <div>
     <a href="https://ccbs.carney.brown.edu/brainstorm" style="display: block; float: right; padding: 10px">
-        <img src="images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;">
+        <img class="hssm-figure" src="images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;">
     </a>
-    <img src="images/mainlogo.png" style="width: 175px;">
+    <img src="images/mainlogo.png#only-light" style="width: 175px;" alt="HSSM">
+    <img src="images/mainlogo-on-dark.png#only-dark" style="width: 175px;" alt="HSSM">
 </div>
 
 ![PyPI](https://img.shields.io/pypi/v/hssm)
