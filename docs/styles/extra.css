@@ -132,6 +132,12 @@ body :focus-visible {
   outline-color: var(--hssm-paper);
 }
 
+/* The expanded search form and results sit inside the header but on the page
+   ground (white in ocean), so they take the normal focus ring. */
+.md-header .md-search__inner :focus-visible {
+  outline-color: var(--hssm-focus-ring);
+}
+
 /* ── Announcement bar ─────────────────────────────────────────────────── */
 .md-banner {
   background-color: var(--hssm-wash);

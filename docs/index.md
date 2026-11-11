@@ -1,6 +1,6 @@
 <div>
     <a href="https://ccbs.carney.brown.edu/brainstorm" style="display: block; float: right; padding: 10px">
-        <img class="hssm-figure" src="images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;">
+        <img class="hssm-figure" src="images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;" alt="BRAINSTORM">
     </a>
     <img src="images/mainlogo.png#only-light" style="width: 175px;" alt="HSSM">
     <img src="images/mainlogo-on-dark.png#only-dark" style="width: 175px;" alt="HSSM">
