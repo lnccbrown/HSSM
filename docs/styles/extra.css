@@ -14,8 +14,12 @@
   --md-code-font: "IBM Plex Mono";
 }
 
+/* Also on the subtree classes: Material's variables resolve where they are
+   declared, so a subtree that switches --hssm-* must re-map them too. */
 [data-md-color-scheme="ocean"],
-[data-md-color-scheme="slate"] {
+[data-md-color-scheme="slate"],
+.hssm-on-light,
+.hssm-on-dark {
   /* Header and tabs: docs-primary (indigo) in both schemes. */
   --md-primary-fg-color: var(--hssm-docs-primary);
   --md-primary-fg-color--light: var(--hssm-wave-04);
@@ -265,6 +269,15 @@ body :focus-visible {
 }
 
 /* ── Typography ───────────────────────────────────────────────────────── */
+/* Links in running text are underlined (text-link usage note): link colour
+   alone is below 3:1 against body text. Buttons, permalinks and image links
+   keep their own styling. */
+.md-typeset :is(p, li, dd, td, th, figcaption, blockquote) a:not(.md-button, .headerlink):not(:has(img)) {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
 .md-typeset h1 {
   color: var(--hssm-text-heading);
   font-weight: var(--hssm-docs-h1-weight);
