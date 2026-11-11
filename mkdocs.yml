@@ -1,6 +1,6 @@
 # Theme, palette, fonts, logo and stylesheets come from the shared brand base
 # (vendored from HSSMSpine docs-brand/; do not redefine them here).
-INHERIT: docs/overrides/.mkdocs-brand.yml
+INHERIT: docs/overrides/.mkdocs-brand-notebooks.yml
 
 site_name: HSSM
 site_url: https://lnccbrown.github.io/HSSM/

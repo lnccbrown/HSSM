@@ -8,6 +8,9 @@
 #
 # Each site's mkdocs.yml starts with:
 #   INHERIT: docs/overrides/.mkdocs-brand.yml     (HSSMSpine: _docs/overrides/...)
+# or with the generated variant that also loads its opt-in stylesheets, named
+# by the site's brand_styles in docs-sites.toml, e.g.
+#   INHERIT: docs/overrides/.mkdocs-brand-notebooks.yml
 # MkDocs deep-merges mappings and replaces lists, so a site keeps its own
 # theme.custom_dir, theme.features, plugins and markdown_extensions, and must
 # not redefine theme.name, theme.palette, theme.font, theme.logo, theme.favicon
@@ -17,8 +20,10 @@ theme:
   name: material
   # IBM Plex is self-hosted from styles/tokens.css; never load Google Fonts.
   font: false
+  # White mark for the indigo header; the favicon is the wave alone, which
+  # stays visible on light and dark browser tabs.
   logo: images/navlogo.png
-  favicon: images/navlogo.png
+  favicon: images/favicon.png
   palette:
     - media: "(prefers-color-scheme)"
       scheme: ocean

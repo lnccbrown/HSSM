@@ -7,7 +7,11 @@
    styles/tokens.css (--hssm-*), generated from the design-system tokens.json;
    load it first. Material's root font size is 125%, so 1rem = 20px here: the
    generator scales the web-* type sizes to keep their pixel size. Remaining
-   literals are component geometry (padding, gaps) the tokens do not define. */
+   literals are component geometry (padding, gaps) the tokens do not define.
+
+   This is the core stylesheet every site loads. Notebook styles
+   (notebooks.css) and landing components (landing.css) are opt-in: a site
+   inherits the base variant that adds them (docs-sites.toml brand_styles). */
 
 /* ── Material mapping (both schemes) ──────────────────────────────────── */
 /* Theme-invariant: fonts and the 2px brand gradient (wave tokens only). */
@@ -104,9 +108,10 @@
 }
 
 /* The one decorative gradient: a 2px brand rule under the header, or under
-   the tab bar where tabs are shown (Material hides tabs below 1220px). */
-.md-header::after,
-.md-tabs::after {
+   the tab bar where tabs are shown (Material hides tabs below 1220px). The
+   tab bar scrolls horizontally, so its rule is a background layer, which
+   stays fixed to the bar instead of moving with the tabs. */
+.md-header::after {
   content: "";
   position: absolute;
   inset: auto 0 0;
@@ -116,7 +121,10 @@
 }
 
 .md-tabs {
-  position: relative;
+  background-image: var(--hssm-brand-gradient);
+  background-position: bottom;
+  background-repeat: no-repeat;
+  background-size: 100% 2px;
 }
 
 @media screen and (min-width: 76.25em) {
@@ -150,6 +158,17 @@ body :is(:focus-visible, .focus-visible) {
 .md-header :is(:focus-visible, .focus-visible),
 .md-tabs :is(:focus-visible, .focus-visible) {
   outline-color: var(--hssm-paper) !important;
+}
+
+/* The colour-scheme toggle is a hidden radio; Material rings its label. */
+.md-header .md-option:is(:focus-visible, .focus-visible) + label {
+  outline: 3px solid var(--hssm-paper) !important;
+  outline-offset: 4px !important;
+}
+
+/* .md-tabs scrolls (overflow: auto) and would clip an outside ring. */
+.md-tabs :is(:focus-visible, .focus-visible) {
+  outline-offset: -3px !important;
 }
 
 /* The expanded search form and results sit inside the header but on the page
@@ -225,8 +244,9 @@ body :is(:focus-visible, .focus-visible) {
   border-top: 1px solid var(--hssm-rule);
 }
 
-.hssm-footer a:hover,
-.hssm-footer a:focus {
+/* Includes Material's footer-meta links, whose hover rule is (0,3,2). */
+.hssm-footer a:is(:hover, :focus),
+.hssm-footer .md-footer-meta.md-typeset a:is(:hover, :focus) {
   color: var(--hssm-accent);
 }
 
@@ -300,16 +320,18 @@ body :is(:focus-visible, .focus-visible) {
   text-decoration: none;
 }
 
+/* Heading and code sizes are em scales of the docs body, like Material's own
+   relative sizes, so they still follow their container (admonitions, print). */
 .md-typeset h1 {
   color: var(--hssm-text-heading);
-  font-size: var(--hssm-docs-h1-size);
+  font-size: calc(var(--hssm-docs-h1-scale) * 1em);
   font-weight: var(--hssm-docs-h1-weight);
   line-height: var(--hssm-docs-h1-line-height);
 }
 
 .md-typeset h2 {
   color: var(--hssm-text-heading);
-  font-size: var(--hssm-docs-h2-size);
+  font-size: calc(var(--hssm-docs-h2-scale) * 1em);
   font-weight: var(--hssm-docs-h2-weight);
   line-height: var(--hssm-docs-h2-line-height);
 }
@@ -319,80 +341,16 @@ body :is(:focus-visible, .focus-visible) {
   font-weight: var(--hssm-web-h3-weight);
 }
 
-.md-typeset {
-  font-size: var(--hssm-docs-body-size);
+/* Page body only: a blanket .md-typeset rule would also override Material's
+   smaller announcement bar, clipboard toast and print sizes. */
+.md-content__inner.md-typeset {
   line-height: var(--hssm-docs-body-line-height);
 }
 
-/* docs-code: code, ordinary tables and notebook text output. */
+/* docs-code: inline and block code and ordinary tables. */
 .md-typeset code,
-.md-typeset table:not([class]),
-pre {
-  font-size: var(--hssm-docs-code-size);
-}
-
-.jp-OutputArea-executeResult pre,
-.jp-xr-text-repr-fallback pre,
-.jupyter-wrapper .jp-RenderedText pre,
-div .jp-RenderedText {
-  font-size: var(--hssm-docs-code-size) !important;
-}
-
-.xr-sections {
-  font-size: var(--hssm-docs-code-size);
-}
-
-/* ── Notebooks (mkdocs-jupyter) ───────────────────────────────────────── */
-/* mkdocs-jupyter inlines a Jupyter stylesheet that defines --jp-* on
-   .jupyter-wrapper, separately per scheme. body[data-md-color-scheme]
-   outranks both, and the --hssm-* tokens already follow the scheme. */
-body[data-md-color-scheme] .jupyter-wrapper {
-  --jp-code-font-family: var(--hssm-font-mono);
-  --jp-content-font-family: var(--hssm-font-sans);
-  --jp-ui-font-family: var(--hssm-font-sans);
-  --jp-content-font-color1: var(--hssm-ink);
-  --jp-content-font-color2: var(--hssm-muted);
-  --jp-layout-color0: var(--hssm-surface);
-  --jp-cell-editor-background: var(--hssm-code-surface);
-  --jp-cell-editor-active-background: var(--hssm-code-surface);
-  --jp-cell-editor-border-color: var(--hssm-rule);
-  --jp-mirror-editor-keyword-color: var(--hssm-code-keyword);
-  --jp-mirror-editor-meta-color: var(--hssm-code-keyword);
-  --jp-mirror-editor-string-color: var(--hssm-code-string);
-  --jp-mirror-editor-string-2-color: var(--hssm-code-string);
-  --jp-mirror-editor-comment-color: var(--hssm-code-comment);
-  --jp-mirror-editor-def-color: var(--hssm-code-name);
-  --jp-mirror-editor-builtin-color: var(--hssm-code-name);
-  --jp-mirror-editor-atom-color: var(--hssm-code-name);
-  --jp-mirror-editor-number-color: var(--hssm-code-name);
-  --jp-mirror-editor-variable-color: var(--hssm-code-plain);
-  --jp-mirror-editor-variable-2-color: var(--hssm-code-plain);
-  --jp-mirror-editor-variable-3-color: var(--hssm-code-plain);
-  --jp-mirror-editor-property-color: var(--hssm-code-plain);
-  --jp-mirror-editor-operator-color: var(--hssm-code-plain);
-  --jp-mirror-editor-punctuation-color: var(--hssm-code-plain);
-  --jp-mirror-editor-bracket-color: var(--hssm-code-plain);
-}
-
-body[data-md-color-scheme] .jupyter-wrapper .jp-InputArea-editor {
-  border-radius: var(--hssm-radius-card);
-}
-
-/* pandas DataFrame output: wash stripes and rule hairlines in both schemes. */
-body[data-md-color-scheme] .jupyter-wrapper table.dataframe {
-  color: var(--hssm-ink);
-}
-
-body[data-md-color-scheme] .jupyter-wrapper table.dataframe thead {
-  border-bottom: 1px solid var(--hssm-rule);
-}
-
-body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:nth-child(odd) {
-  background: var(--hssm-wash);
-}
-
-body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:hover {
-  background: var(--md-accent-fg-color--transparent);
+.md-typeset table:not([class]) {
+  font-size: calc(var(--hssm-docs-code-scale) * 1em);
 }
 
 /* ── Shapes: radii, borders, tables ───────────────────────────────────── */
@@ -439,8 +397,6 @@ body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:hover {
 }
 
 /* Figures render on paper in both themes; on navy they sit in a figure card. */
-[data-md-color-scheme="slate"] .jp-RenderedImage img,
-[data-md-color-scheme="slate"] .jp-RenderedSVG svg,
 [data-md-color-scheme="slate"] .md-typeset figure img,
 [data-md-color-scheme="slate"] .md-typeset img.hssm-figure {
   background: var(--hssm-paper);
@@ -494,126 +450,6 @@ body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:hover {
   background-color: var(--hssm-primary-hover);
   border-color: var(--hssm-primary-hover);
   color: var(--hssm-on-primary);
-}
-
-/* ── Landing components (opt-in; need attr_list + md_in_html) ─────────── */
-/* Legacy landing grid: logo column (landing-logo-col) beside the content. */
-#wrapper {
-  display: grid;
-  grid-template-columns: var(--hssm-landing-logo-col) 1fr;
-}
-
-#main-logo {
-  text-align: center;
-}
-
-#main-title {
-  padding-top: 1.3em;
-  padding-left: 1em;
-}
-
-@media screen and (max-width: 47.9375em) {
-  #wrapper {
-    grid-template-columns: 1fr;
-  }
-
-  #main-title {
-    padding-left: 0;
-  }
-}
-
-.md-typeset .hssm-hero {
-  margin: 0 0 1.6rem;
-}
-
-/* web-eyebrow: mono caps. */
-.md-typeset .hssm-eyebrow {
-  margin: 0 0 0.4rem;
-  font-family: var(--hssm-font-mono);
-  font-size: var(--hssm-web-eyebrow-size);
-  font-weight: var(--hssm-web-eyebrow-weight);
-  line-height: var(--hssm-web-eyebrow-line-height);
-  letter-spacing: var(--hssm-web-eyebrow-letter-spacing);
-  text-transform: uppercase;
-  color: var(--hssm-text-emphasis);
-}
-
-.md-typeset .hssm-hero h1 {
-  position: relative;
-  display: inline-block;
-  margin: 0 0 1.2rem;
-}
-
-.md-typeset .hssm-hero h1::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: -6px;
-  width: 100%;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--hssm-brand-gradient);
-}
-
-/* web-body-lg: lead paragraph, prose width. */
-.md-typeset .hssm-lead {
-  max-width: var(--hssm-prose-max);
-  font-size: var(--hssm-web-body-lg-size);
-  line-height: var(--hssm-web-body-lg-line-height);
-  color: var(--hssm-muted);
-}
-
-/* web-code install box. */
-.md-typeset .hssm-install {
-  display: inline-flex;
-  max-width: 100%;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0.8rem;
-  background: var(--hssm-wash);
-  border: 1px solid var(--hssm-rule);
-  border-radius: var(--hssm-radius-sm);
-  font-family: var(--hssm-font-mono);
-  font-size: var(--hssm-docs-code-size);
-  line-height: var(--hssm-web-code-line-height);
-  color: var(--hssm-code-plain);
-  overflow-x: auto;
-}
-
-.md-typeset .hssm-install code {
-  padding: 0;
-  background: transparent;
-}
-
-.md-typeset .hssm-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
-  gap: 0.8rem;
-  margin: 1.2rem 0;
-}
-
-.md-typeset .hssm-card {
-  padding: 1.2rem;
-  background: var(--hssm-wash);
-  border: 1px solid var(--hssm-rule);
-  border-radius: var(--hssm-radius-card);
-}
-
-.md-typeset .hssm-card > :first-child {
-  margin-top: 0;
-}
-
-.md-typeset .hssm-card > :last-child {
-  margin-bottom: 0;
-}
-
-/* web-h3 card title, tinted by the package identity when one is set. */
-.md-typeset .hssm-card h3 {
-  margin: 0 0 0.4rem;
-  font-size: var(--hssm-web-h3-size);
-  font-weight: var(--hssm-web-h3-weight);
-  line-height: var(--hssm-web-h3-line-height);
-  color: var(--pkg, var(--hssm-text-heading));
 }
 
 /* ── Motion ───────────────────────────────────────────────────────────── */
