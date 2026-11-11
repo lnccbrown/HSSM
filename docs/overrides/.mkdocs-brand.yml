@@ -10,7 +10,8 @@
 #   INHERIT: docs/overrides/.mkdocs-brand.yml     (HSSMSpine: _docs/overrides/...)
 # MkDocs deep-merges mappings and replaces lists, so a site keeps its own
 # theme.custom_dir, theme.features, plugins and markdown_extensions, and must
-# not redefine theme.palette, theme.font, theme.logo, theme.favicon or extra_css.
+# not redefine theme.name, theme.palette, theme.font, theme.logo, theme.favicon
+# or extra_css.
 
 theme:
   name: material

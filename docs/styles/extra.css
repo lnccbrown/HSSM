@@ -3,10 +3,11 @@
    (docs-brand/extra.css). Edit there and re-sync; local edits will be
    flagged as drift.
 
-   Every colour, font, radius and length comes from styles/tokens.css
-   (--hssm-*), generated from the design-system tokens.json. Load tokens.css
-   first. Material's root font size is 125%, so 1rem = 20px here and the
-   16px body is 0.8rem; web-* token sizes are converted accordingly. */
+   Colours, fonts, type styles, radii and layout lengths come from
+   styles/tokens.css (--hssm-*), generated from the design-system tokens.json;
+   load it first. Material's root font size is 125%, so 1rem = 20px here: the
+   generator scales the web-* type sizes to keep their pixel size. Remaining
+   literals are component geometry (padding, gaps) the tokens do not define. */
 
 /* ── Material mapping (both schemes) ──────────────────────────────────── */
 /* Theme-invariant: fonts and the 2px brand gradient (wave tokens only). */
@@ -55,11 +56,15 @@
   --md-typeset-color: var(--hssm-ink);
   --md-typeset-a-color: var(--hssm-text-link);
   --md-typeset-table-color: var(--hssm-rule);
-  --md-typeset-table-color--light: var(--hssm-wash);
+  /* Row hover; distinct from the wash stripes on even rows. */
+  --md-typeset-table-color--light: var(--md-accent-fg-color--transparent);
 
   /* Code: the design system's code panel and syntax roles. */
   --md-code-fg-color: var(--hssm-code-plain);
   --md-code-bg-color: var(--hssm-code-surface);
+  /* The copy-button chip and code nav sit on the code panel. */
+  --md-code-bg-color--light: color-mix(in srgb, var(--hssm-code-surface) 90%, transparent);
+  --md-code-bg-color--lighter: color-mix(in srgb, var(--hssm-code-surface) 54%, transparent);
   --md-code-hl-color: var(--hssm-accent);
   --md-code-hl-color--light: color-mix(in srgb, var(--hssm-accent) 12%, transparent);
   --md-code-hl-keyword-color: var(--hssm-code-keyword);
@@ -74,6 +79,14 @@
   --md-code-hl-constant-color: var(--hssm-code-name);
   --md-code-hl-number-color: var(--hssm-code-name);
   --md-code-hl-special-color: var(--hssm-code-keyword);
+
+  /* Inline marks: highlight, keys, deletions and insertions. */
+  --md-typeset-mark-color: color-mix(in srgb, var(--hssm-status-warning) 30%, transparent);
+  --md-typeset-kbd-color: var(--hssm-wash);
+  --md-typeset-kbd-accent-color: var(--hssm-surface);
+  --md-typeset-kbd-border-color: var(--hssm-rule);
+  --md-typeset-del-color: color-mix(in srgb, var(--hssm-status-error) 20%, transparent);
+  --md-typeset-ins-color: color-mix(in srgb, var(--hssm-status-done) 25%, transparent);
 
   --md-admonition-fg-color: var(--hssm-ink);
   --md-admonition-bg-color: var(--hssm-surface);
@@ -125,21 +138,24 @@ div .md-sidebar__inner nav .md-nav__list {
   margin-left: 0.2rem;
 }
 
-/* Focus: 3px accent ring at 4px offset; white on the indigo header and tabs. */
-body :focus-visible {
-  outline: 3px solid var(--hssm-focus-ring);
-  outline-offset: 4px;
+/* Focus: 3px accent ring at 4px offset on every focusable element; white on
+   the indigo header and tabs. !important because Material's own focus rules
+   (.focus-visible polyfill, :not(.focus-visible) { outline: none }) outrank a
+   plain :focus-visible selector and would shrink or remove the ring. */
+body :is(:focus-visible, .focus-visible) {
+  outline: 3px solid var(--hssm-focus-ring) !important;
+  outline-offset: 4px !important;
 }
 
-.md-header :focus-visible,
-.md-tabs :focus-visible {
-  outline-color: var(--hssm-paper);
+.md-header :is(:focus-visible, .focus-visible),
+.md-tabs :is(:focus-visible, .focus-visible) {
+  outline-color: var(--hssm-paper) !important;
 }
 
 /* The expanded search form and results sit inside the header but on the page
    ground (white in ocean), so they take the normal focus ring. */
-.md-header .md-search__inner :focus-visible {
-  outline-color: var(--hssm-focus-ring);
+.md-header .md-search__inner :is(:focus-visible, .focus-visible) {
+  outline-color: var(--hssm-focus-ring) !important;
 }
 
 /* ── Announcement bar ─────────────────────────────────────────────────── */
@@ -227,13 +243,13 @@ body :focus-visible {
   max-width: 61rem;
   margin: 0 auto;
   padding: 0.6rem 0.8rem;
-  font-size: 0.64rem;
+  font-size: var(--hssm-web-small-size); /* web-small: footer lines */
 }
 
 .hssm-ecosystem-links__inner strong {
   font-family: var(--hssm-font-mono);
-  font-weight: 500;
-  letter-spacing: 0.1em;
+  font-weight: var(--hssm-web-eyebrow-weight);
+  letter-spacing: var(--hssm-web-eyebrow-letter-spacing);
   text-transform: uppercase;
   color: var(--hssm-text-emphasis);
 }
@@ -270,36 +286,45 @@ body :focus-visible {
 
 /* ── Typography ───────────────────────────────────────────────────────── */
 /* Links in running text are underlined (text-link usage note): link colour
-   alone is below 3:1 against body text. Buttons, permalinks and image links
-   keep their own styling. */
-.md-typeset :is(p, li, dd, td, th, figcaption, blockquote) a:not(.md-button, .headerlink):not(:has(img)) {
+   alone is below 3:1 against body text. Buttons and permalinks keep their
+   own styling. Image links (badges, logos) drop the underline in a separate
+   rule, so a browser without :has() still underlines text links. */
+.md-typeset :is(p, li, dd, td, th, figcaption, blockquote) a:not(.md-button, .headerlink) {
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.15em;
 }
 
+/* Same selector plus :has(img), so it outranks the rule above. */
+.md-typeset :is(p, li, dd, td, th, figcaption, blockquote) a:not(.md-button, .headerlink):has(img) {
+  text-decoration: none;
+}
+
 .md-typeset h1 {
   color: var(--hssm-text-heading);
+  font-size: var(--hssm-docs-h1-size);
   font-weight: var(--hssm-docs-h1-weight);
   line-height: var(--hssm-docs-h1-line-height);
 }
 
 .md-typeset h2 {
   color: var(--hssm-text-heading);
+  font-size: var(--hssm-docs-h2-size);
   font-weight: var(--hssm-docs-h2-weight);
   line-height: var(--hssm-docs-h2-line-height);
 }
 
 .md-typeset h3 {
   color: var(--hssm-text-heading);
-  font-weight: 600;
+  font-weight: var(--hssm-web-h3-weight);
 }
 
 .md-typeset {
+  font-size: var(--hssm-docs-body-size);
   line-height: var(--hssm-docs-body-line-height);
 }
 
-/* docs-code: code, ordinary tables and notebook text output at 0.7rem. */
+/* docs-code: code, ordinary tables and notebook text output. */
 .md-typeset code,
 .md-typeset table:not([class]),
 pre {
@@ -331,8 +356,6 @@ body[data-md-color-scheme] .jupyter-wrapper {
   --jp-cell-editor-background: var(--hssm-code-surface);
   --jp-cell-editor-active-background: var(--hssm-code-surface);
   --jp-cell-editor-border-color: var(--hssm-rule);
-  --jp-rendermime-table-row-background: var(--hssm-wash);
-  --jp-rendermime-table-row-hover-background: color-mix(in srgb, var(--hssm-accent) 10%, transparent);
   --jp-mirror-editor-keyword-color: var(--hssm-code-keyword);
   --jp-mirror-editor-meta-color: var(--hssm-code-keyword);
   --jp-mirror-editor-string-color: var(--hssm-code-string);
@@ -369,7 +392,7 @@ body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:nth-child(o
 }
 
 body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:hover {
-  background: color-mix(in srgb, var(--hssm-accent) 10%, transparent);
+  background: var(--md-accent-fg-color--transparent);
 }
 
 /* ── Shapes: radii, borders, tables ───────────────────────────────────── */
@@ -397,6 +420,11 @@ body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:hover {
   background-color: var(--hssm-wash);
 }
 
+/* Hover after the stripes so even rows show it too. */
+.md-typeset table:not([class]) tbody tr:hover {
+  background-color: var(--md-typeset-table-color--light);
+}
+
 /* code-surface is wash: lift inline code off the striped rows. */
 .md-typeset table:not([class]) tbody tr:nth-child(even) code {
   background-color: var(--hssm-surface);
@@ -420,6 +448,13 @@ body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:hover {
   padding: 0.4rem;
 }
 
+/* Material sizes images border-box, so the card padding would eat into an
+   explicit width (the landing BRAINSTORM mark): add it outside instead.
+   Fluid notebook images keep border-box so they never overflow. */
+[data-md-color-scheme="slate"] .md-typeset img.hssm-figure {
+  box-sizing: content-box;
+}
+
 /* ── Buttons: pills ───────────────────────────────────────────────────── */
 .md-typeset .md-button {
   display: inline-flex;
@@ -432,8 +467,8 @@ body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:hover {
   border: 1px solid var(--hssm-rule);
   border-radius: var(--hssm-radius-pill);
   color: var(--hssm-ink);
-  font-size: 0.7rem;
-  font-weight: 500;
+  font-size: var(--hssm-web-small-size);
+  font-weight: 500; /* landing-site .btn */
   line-height: 1.25;
   transition:
     background-color 150ms ease-out,
@@ -491,14 +526,14 @@ body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:hover {
   margin: 0 0 1.6rem;
 }
 
-/* web-eyebrow: 12px mono caps. */
+/* web-eyebrow: mono caps. */
 .md-typeset .hssm-eyebrow {
   margin: 0 0 0.4rem;
   font-family: var(--hssm-font-mono);
-  font-size: 0.6rem;
-  font-weight: 500;
-  line-height: 1.4;
-  letter-spacing: 0.1em;
+  font-size: var(--hssm-web-eyebrow-size);
+  font-weight: var(--hssm-web-eyebrow-weight);
+  line-height: var(--hssm-web-eyebrow-line-height);
+  letter-spacing: var(--hssm-web-eyebrow-letter-spacing);
   text-transform: uppercase;
   color: var(--hssm-text-emphasis);
 }
@@ -520,11 +555,11 @@ body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:hover {
   background: var(--hssm-brand-gradient);
 }
 
-/* web-body-lg: 18px lead paragraph, prose width. */
+/* web-body-lg: lead paragraph, prose width. */
 .md-typeset .hssm-lead {
   max-width: var(--hssm-prose-max);
-  font-size: 0.9rem;
-  line-height: 1.6;
+  font-size: var(--hssm-web-body-lg-size);
+  line-height: var(--hssm-web-body-lg-line-height);
   color: var(--hssm-muted);
 }
 
@@ -540,7 +575,7 @@ body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:hover {
   border-radius: var(--hssm-radius-sm);
   font-family: var(--hssm-font-mono);
   font-size: var(--hssm-docs-code-size);
-  line-height: 1.625;
+  line-height: var(--hssm-web-code-line-height);
   color: var(--hssm-code-plain);
   overflow-x: auto;
 }
@@ -575,9 +610,9 @@ body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:hover {
 /* web-h3 card title, tinted by the package identity when one is set. */
 .md-typeset .hssm-card h3 {
   margin: 0 0 0.4rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  line-height: 1.25;
+  font-size: var(--hssm-web-h3-size);
+  font-weight: var(--hssm-web-h3-weight);
+  line-height: var(--hssm-web-h3-line-height);
   color: var(--pkg, var(--hssm-text-heading));
 }
 
