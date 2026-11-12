@@ -184,8 +184,13 @@ body :is(:focus-visible, .focus-visible) {
   border-bottom: 1px solid var(--hssm-rule);
 }
 
+/* Announcement links sit in spans, outside the running-text underline rule;
+   their colour alone is below 3:1 against the banner text. */
 .md-banner a {
   color: var(--hssm-text-link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
 }
 
 .md-banner a:hover,
@@ -383,6 +388,12 @@ body :is(:focus-visible, .focus-visible) {
   background-color: var(--md-typeset-table-color--light);
 }
 
+/* Tables are already at the docs-code size: code inside them keeps it
+   instead of scaling down a second time. */
+.md-typeset table:not([class]) code {
+  font-size: 1em;
+}
+
 /* code-surface is wash: lift inline code off the striped rows. */
 .md-typeset table:not([class]) tbody tr:nth-child(even) code {
   background-color: var(--hssm-surface);
@@ -409,6 +420,7 @@ body :is(:focus-visible, .focus-visible) {
    Fluid notebook images keep border-box so they never overflow. */
 [data-md-color-scheme="slate"] .md-typeset img.hssm-figure {
   box-sizing: content-box;
+  max-width: calc(100% - 0.8rem); /* minus the two 0.4rem paddings */
 }
 
 /* ── Buttons: pills ───────────────────────────────────────────────────── */
@@ -420,7 +432,9 @@ body :is(:focus-visible, .focus-visible) {
   min-height: var(--hssm-target-min);
   margin: 0 0.4rem 0.4rem 0;
   padding: 0.5rem 1.2rem;
-  border: 1px solid var(--hssm-rule);
+  /* muted, not the decorative rule: the outline is the secondary button's
+     only boundary, so it needs at least 3:1 against the page. */
+  border: 1px solid var(--hssm-muted);
   border-radius: var(--hssm-radius-pill);
   color: var(--hssm-ink);
   font-size: var(--hssm-web-small-size);
