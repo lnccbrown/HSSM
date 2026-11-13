@@ -1,61 +1,141 @@
-/* HSSM ecosystem brand tokens + shared helpers.
+/* HSSM ecosystem docs theme: Material for MkDocs mapped onto the HSSM design system.
    VENDORED COPY — source of truth: https://github.com/lnccbrown/HSSMSpine
    (docs-brand/extra.css). Edit there and re-sync; local edits will be
-   flagged as drift. */
+   flagged as drift.
 
-/* -- palette (ocean = light/auto, slate = dark) -- */
-[data-md-color-scheme="ocean"] {
-  --md-primary-fg-color: #245c81;
-  --md-accent-fg-color: #ec205b;
-  --md-typeset-a-color: #338fb8;
+   Colours, fonts, type styles, radii and layout lengths come from
+   styles/tokens.css (--hssm-*), generated from the design-system tokens.json;
+   load it first. Material's root font size is 125%, so 1rem = 20px here: the
+   generator scales the web-* type sizes to keep their pixel size. Remaining
+   literals are component geometry (padding, gaps) the tokens do not define.
+
+   This is the core stylesheet every site loads. Notebook styles
+   (notebooks.css) and landing components (landing.css) are opt-in: a site
+   inherits the base variant that adds them (docs-sites.toml brand_styles). */
+
+/* ── Material mapping (both schemes) ──────────────────────────────────── */
+/* Theme-invariant: fonts and the 2px brand gradient (wave tokens only). */
+:root {
+  --md-text-font: var(--hssm-font-sans);
+  --md-code-font: var(--hssm-font-mono);
+  --hssm-brand-gradient: linear-gradient(
+    to right,
+    var(--hssm-wave-01),
+    var(--hssm-wave-03),
+    var(--hssm-wave-06),
+    var(--hssm-wave-10),
+    var(--hssm-wave-13),
+    var(--hssm-wave-15)
+  );
 }
 
-[data-md-color-scheme="slate"] {
-  --md-primary-fg-color: #245c81;
-  --md-accent-fg-color: #ec205b;
-  --md-typeset-a-color: #00b4b5;
+/* Also on the subtree classes: Material's variables resolve where they are
+   declared, so a subtree that switches --hssm-* must re-map them too. */
+[data-md-color-scheme="ocean"],
+[data-md-color-scheme="slate"],
+.hssm-on-light,
+.hssm-on-dark {
+  /* Header and tabs: docs-primary (indigo) in both schemes. */
+  --md-primary-fg-color: var(--hssm-docs-primary);
+  --md-primary-fg-color--light: var(--hssm-wave-04);
+  --md-primary-fg-color--dark: var(--hssm-wave-02);
+  --md-primary-bg-color: var(--hssm-paper);
+  --md-primary-bg-color--light: color-mix(in srgb, var(--hssm-paper) 70%, transparent);
+
+  /* Accent: interaction states only (hover, focus, active nav item). */
+  --md-accent-fg-color: var(--hssm-accent);
+  --md-accent-fg-color--transparent: color-mix(in srgb, var(--hssm-accent) 10%, transparent);
+  --md-accent-bg-color: var(--hssm-on-accent);
+  --md-accent-bg-color--light: color-mix(in srgb, var(--hssm-on-accent) 70%, transparent);
+
+  --md-default-fg-color: var(--hssm-ink);
+  --md-default-fg-color--light: var(--hssm-muted);
+  --md-default-fg-color--lighter: color-mix(in srgb, var(--hssm-muted) 55%, transparent);
+  --md-default-fg-color--lightest: var(--hssm-rule);
+  --md-default-bg-color: var(--hssm-surface);
+  --md-default-bg-color--light: color-mix(in srgb, var(--hssm-surface) 70%, transparent);
+  --md-default-bg-color--lighter: color-mix(in srgb, var(--hssm-surface) 30%, transparent);
+  --md-default-bg-color--lightest: color-mix(in srgb, var(--hssm-surface) 12%, transparent);
+
+  --md-typeset-color: var(--hssm-ink);
+  --md-typeset-a-color: var(--hssm-text-link);
+  --md-typeset-table-color: var(--hssm-rule);
+  /* Row hover; distinct from the wash stripes on even rows. */
+  --md-typeset-table-color--light: var(--md-accent-fg-color--transparent);
+
+  /* Code: the design system's code panel and syntax roles. */
+  --md-code-fg-color: var(--hssm-code-plain);
+  --md-code-bg-color: var(--hssm-code-surface);
+  /* The copy-button chip and code nav sit on the code panel. */
+  --md-code-bg-color--light: color-mix(in srgb, var(--hssm-code-surface) 90%, transparent);
+  --md-code-bg-color--lighter: color-mix(in srgb, var(--hssm-code-surface) 54%, transparent);
+  --md-code-hl-color: var(--hssm-accent);
+  --md-code-hl-color--light: color-mix(in srgb, var(--hssm-accent) 12%, transparent);
+  --md-code-hl-keyword-color: var(--hssm-code-keyword);
+  --md-code-hl-string-color: var(--hssm-code-string);
+  --md-code-hl-comment-color: var(--hssm-code-comment);
+  --md-code-hl-generic-color: var(--hssm-code-comment);
+  --md-code-hl-name-color: var(--hssm-code-plain);
+  --md-code-hl-variable-color: var(--hssm-code-plain);
+  --md-code-hl-operator-color: var(--hssm-code-plain);
+  --md-code-hl-punctuation-color: var(--hssm-code-plain);
+  --md-code-hl-function-color: var(--hssm-code-name);
+  --md-code-hl-constant-color: var(--hssm-code-name);
+  --md-code-hl-number-color: var(--hssm-code-name);
+  --md-code-hl-special-color: var(--hssm-code-keyword);
+
+  /* Inline marks: highlight, keys, deletions and insertions. */
+  --md-typeset-mark-color: color-mix(in srgb, var(--hssm-status-warning) 30%, transparent);
+  --md-typeset-kbd-color: var(--hssm-wash);
+  --md-typeset-kbd-accent-color: var(--hssm-surface);
+  --md-typeset-kbd-border-color: var(--hssm-rule);
+  --md-typeset-del-color: color-mix(in srgb, var(--hssm-status-error) 20%, transparent);
+  --md-typeset-ins-color: color-mix(in srgb, var(--hssm-status-done) 25%, transparent);
+
+  --md-admonition-fg-color: var(--hssm-ink);
+  --md-admonition-bg-color: var(--hssm-surface);
+
+  /* No shadows: elevated surfaces get a rule hairline instead. */
+  --md-shadow-z1: 0 0 0 0.05rem var(--hssm-rule);
+  --md-shadow-z2: 0 0 0 0.05rem var(--hssm-rule);
+  --md-shadow-z3: 0 0 0 0.05rem var(--hssm-rule);
 }
 
-/* -- shared typography -- */
-.md-typeset h1 {
-  font-weight: 300;
+/* ── Header, tabs, navigation ─────────────────────────────────────────── */
+.md-header,
+.md-header--shadow {
+  box-shadow: none;
 }
 
-h2 {
-  font-weight: 700;
+/* The one decorative gradient: a 2px brand rule under the header, or under
+   the tab bar where tabs are shown (Material hides tabs below 1220px). The
+   tab bar scrolls horizontally, so its rule is a background layer, which
+   stays fixed to the bar instead of moving with the tabs. */
+.md-header::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: var(--hssm-brand-gradient);
+  pointer-events: none;
 }
 
-.md-typeset code {
-  font-size: 0.7rem;
+.md-tabs {
+  background-image: var(--hssm-brand-gradient);
+  background-position: bottom;
+  background-repeat: no-repeat;
+  background-size: 100% 2px;
 }
 
-.md-typeset table:not([class]) {
-  font-size: 0.7rem;
+@media screen and (min-width: 76.25em) {
+  body:has(.md-tabs) .md-header::after {
+    display: none;
+  }
 }
 
-/* -- notebook output sizing (was inline in HSSM's main.html) -- */
-pre {
-  font-size: 0.7rem;
-}
-
-.jp-OutputArea-executeResult pre,
-.jp-xr-text-repr-fallback pre,
-.jupyter-wrapper .jp-RenderedText pre {
-  font-size: 0.7rem !important;
-}
-
-.xr-sections {
-  font-size: 0.7rem;
-}
-
-div .jp-RenderedText {
-  font-size: 0.7rem !important;
-}
-
-/* -- header/sidebar tweaks -- */
-.md-header-nav__title img {
-  height: 200px;
-  width: 200px;
+.md-nav__link--active,
+.md-nav__item .md-nav__link--active {
+  color: var(--hssm-accent);
 }
 
 div .md-sidebar__inner {
@@ -66,26 +146,67 @@ div .md-sidebar__inner nav .md-nav__list {
   margin-left: 0.2rem;
 }
 
-/* -- landing-page grid -- */
-#wrapper {
-  display: grid;
-  grid-template-columns: 33.334% 66.667%;
+/* Focus: 3px accent ring at 4px offset on every focusable element; white on
+   the indigo header and tabs. !important because Material's own focus rules
+   (.focus-visible polyfill, :not(.focus-visible) { outline: none }) outrank a
+   plain :focus-visible selector and would shrink or remove the ring. */
+body :is(:focus-visible, .focus-visible) {
+  outline: 3px solid var(--hssm-focus-ring) !important;
+  outline-offset: 4px !important;
 }
 
-#main-logo {
-  text-align: center;
+.md-header :is(:focus-visible, .focus-visible),
+.md-tabs :is(:focus-visible, .focus-visible) {
+  outline-color: var(--hssm-paper) !important;
 }
 
-#main-title {
-  padding-top: 1.3em;
-  padding-left: 1em;
+/* The colour-scheme toggle is a hidden radio; Material rings its label. */
+.md-header .md-option:is(:focus-visible, .focus-visible) + label {
+  outline: 3px solid var(--hssm-paper) !important;
+  outline-offset: 4px !important;
 }
 
-/* -- announcement-banner helpers (used by the shared main.html) -- */
+/* .md-tabs scrolls (overflow: auto) and would clip an outside ring. */
+.md-tabs :is(:focus-visible, .focus-visible) {
+  outline-offset: -3px !important;
+}
+
+/* The expanded search form and results sit inside the header but on the page
+   ground (white in ocean), so they take the normal focus ring. */
+.md-header .md-search__inner :is(:focus-visible, .focus-visible) {
+  outline-color: var(--hssm-focus-ring) !important;
+}
+
+/* ── Announcement bar ─────────────────────────────────────────────────── */
+.md-banner {
+  background-color: var(--hssm-wash);
+  color: var(--hssm-ink);
+  border-bottom: 1px solid var(--hssm-rule);
+}
+
+/* Announcement links sit in spans, outside the running-text underline rule;
+   their colour alone is below 3:1 against the banner text. */
+.md-banner a {
+  color: var(--hssm-text-link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+.md-banner a:hover,
+.md-banner a:focus {
+  color: var(--hssm-accent);
+}
+
+.md-banner .md-banner__button {
+  color: var(--hssm-muted);
+}
+
 .right-margin {
   margin-right: 10px;
 }
 
+/* Navigation hint below docs-nav-hint-breakpoint (1220px). */
 @media screen and (min-width: 1220px) {
   .show-on-small {
     display: none;
@@ -104,15 +225,39 @@ div .md-sidebar__inner nav .md-nav__list {
 }
 
 .question {
-  color: pink;
+  color: var(--hssm-accent);
   width: 35px;
   height: 35px;
 }
 
-/* -- ecosystem navigation (legal text remains in MkDocs copyright) -- */
+/* ── Footer (wrapped in .hssm-on-dark by main.html: navy in both schemes) ── */
+.hssm-footer {
+  --md-footer-bg-color: var(--hssm-surface);
+  --md-footer-bg-color--dark: var(--hssm-surface);
+  --md-footer-fg-color: var(--hssm-ink);
+  --md-footer-fg-color--light: var(--hssm-muted);
+  --md-footer-fg-color--lighter: color-mix(in srgb, var(--hssm-muted) 70%, transparent);
+  border-top: 1px solid var(--hssm-rule);
+}
+
+.hssm-footer .md-footer,
+.hssm-footer .md-footer-meta {
+  background-color: var(--hssm-surface);
+}
+
+.hssm-footer .md-footer-meta {
+  border-top: 1px solid var(--hssm-rule);
+}
+
+/* Includes Material's footer-meta links, whose hover rule is (0,3,2). */
+.hssm-footer a:is(:hover, :focus),
+.hssm-footer .md-footer-meta.md-typeset a:is(:hover, :focus) {
+  color: var(--hssm-accent);
+}
+
 .hssm-ecosystem-links {
-  background: var(--md-footer-bg-color);
-  color: var(--md-footer-fg-color);
+  background: var(--hssm-surface);
+  color: var(--hssm-ink);
 }
 
 .hssm-ecosystem-links__inner {
@@ -123,14 +268,212 @@ div .md-sidebar__inner nav .md-nav__list {
   max-width: 61rem;
   margin: 0 auto;
   padding: 0.6rem 0.8rem;
-  font-size: 0.64rem;
+  font-size: var(--hssm-web-small-size); /* web-small: footer lines */
+}
+
+.hssm-ecosystem-links__inner strong {
+  font-family: var(--hssm-font-mono);
+  font-weight: var(--hssm-web-eyebrow-weight);
+  letter-spacing: var(--hssm-web-eyebrow-letter-spacing);
+  text-transform: uppercase;
+  color: var(--hssm-text-emphasis);
 }
 
 .hssm-ecosystem-links__inner a {
-  color: var(--md-footer-fg-color--light);
+  color: var(--pkg, var(--hssm-muted));
 }
 
 .hssm-ecosystem-links__inner a:hover,
 .hssm-ecosystem-links__inner a:focus {
-  color: var(--md-accent-fg-color);
+  color: var(--hssm-accent);
+}
+
+/* Package identity tints (eco-* tokens), shared by the footer strip and cards. */
+.hssm-eco--hssm {
+  --pkg: var(--hssm-eco-hssm);
+}
+
+.hssm-eco--simulators {
+  --pkg: var(--hssm-eco-simulators);
+}
+
+.hssm-eco--lanfactory {
+  --pkg: var(--hssm-eco-lanfactory);
+}
+
+.hssm-eco--pipeline {
+  --pkg: var(--hssm-eco-pipeline);
+}
+
+.hssm-eco--infra {
+  --pkg: var(--hssm-eco-infra);
+}
+
+/* ── Typography ───────────────────────────────────────────────────────── */
+/* Links in running text are underlined (text-link usage note): link colour
+   alone is below 3:1 against body text. Buttons and permalinks keep their
+   own styling. Image links (badges, logos) drop the underline in a separate
+   rule, so a browser without :has() still underlines text links. */
+.md-typeset :is(p, li, dd, td, th, figcaption, blockquote) a:not(.md-button, .headerlink) {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+/* Same selector plus :has(img), so it outranks the rule above. */
+.md-typeset :is(p, li, dd, td, th, figcaption, blockquote) a:not(.md-button, .headerlink):has(img) {
+  text-decoration: none;
+}
+
+/* Heading and code sizes are em scales of the docs body, like Material's own
+   relative sizes, so they still follow their container (admonitions, print). */
+.md-typeset h1 {
+  color: var(--hssm-text-heading);
+  font-size: calc(var(--hssm-docs-h1-scale) * 1em);
+  font-weight: var(--hssm-docs-h1-weight);
+  line-height: var(--hssm-docs-h1-line-height);
+}
+
+.md-typeset h2 {
+  color: var(--hssm-text-heading);
+  font-size: calc(var(--hssm-docs-h2-scale) * 1em);
+  font-weight: var(--hssm-docs-h2-weight);
+  line-height: var(--hssm-docs-h2-line-height);
+}
+
+.md-typeset h3 {
+  color: var(--hssm-text-heading);
+  font-weight: var(--hssm-web-h3-weight);
+}
+
+/* Page body only: a blanket .md-typeset rule would also override Material's
+   smaller announcement bar, clipboard toast and print sizes. */
+.md-content__inner.md-typeset {
+  line-height: var(--hssm-docs-body-line-height);
+}
+
+/* docs-code: inline and block code and ordinary tables. */
+.md-typeset code,
+.md-typeset table:not([class]) {
+  font-size: calc(var(--hssm-docs-code-scale) * 1em);
+}
+
+/* ── Shapes: radii, borders, tables ───────────────────────────────────── */
+.md-typeset code {
+  border-radius: var(--hssm-radius-sm);
+}
+
+.md-typeset pre > code,
+.md-typeset .highlight,
+.md-typeset .highlighttable {
+  border-radius: var(--hssm-radius-card);
+}
+
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: var(--hssm-radius-card);
+  box-shadow: none;
+}
+
+.md-typeset table:not([class]) {
+  border-radius: var(--hssm-radius-card);
+}
+
+.md-typeset table:not([class]) tbody tr:nth-child(even) {
+  background-color: var(--hssm-wash);
+}
+
+/* Hover after the stripes so even rows show it too. */
+.md-typeset table:not([class]) tbody tr:hover {
+  background-color: var(--md-typeset-table-color--light);
+}
+
+/* Tables are already at the docs-code size: code inside them keeps it
+   instead of scaling down a second time. */
+.md-typeset table:not([class]) code {
+  font-size: 1em;
+}
+
+/* code-surface is wash: lift inline code off the striped rows. */
+.md-typeset table:not([class]) tbody tr:nth-child(even) code {
+  background-color: var(--hssm-surface);
+}
+
+/* Material hides #only-dark images only under its built-in "default" scheme;
+   our light scheme is "ocean", so repeat the rule. (#only-light is hidden
+   under "slate" by Material itself.) */
+[data-md-color-scheme="ocean"] img[src$="#only-dark"],
+[data-md-color-scheme="ocean"] img[src$="#gh-dark-mode-only"] {
+  display: none;
+}
+
+/* Figures render on paper in both themes; on navy they sit in a figure card. */
+[data-md-color-scheme="slate"] .md-typeset figure img,
+[data-md-color-scheme="slate"] .md-typeset img.hssm-figure {
+  background: var(--hssm-paper);
+  border-radius: var(--hssm-radius-card);
+  padding: 0.4rem;
+}
+
+/* Material sizes images border-box, so the card padding would eat into an
+   explicit width (the landing BRAINSTORM mark): add it outside instead.
+   Fluid notebook images keep border-box so they never overflow. */
+[data-md-color-scheme="slate"] .md-typeset img.hssm-figure {
+  box-sizing: content-box;
+  max-width: calc(100% - 0.8rem); /* minus the two 0.4rem paddings */
+}
+
+/* ── Buttons: pills ───────────────────────────────────────────────────── */
+.md-typeset .md-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: var(--hssm-target-min);
+  margin: 0 0.4rem 0.4rem 0;
+  padding: 0.5rem 1.2rem;
+  /* muted, not the decorative rule: the outline is the secondary button's
+     only boundary, so it needs at least 3:1 against the page. */
+  border: 1px solid var(--hssm-muted);
+  border-radius: var(--hssm-radius-pill);
+  color: var(--hssm-ink);
+  font-size: var(--hssm-web-small-size);
+  font-weight: 500; /* landing-site .btn */
+  line-height: 1.25;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.md-typeset .md-button:hover,
+.md-typeset .md-button:focus {
+  background-color: transparent;
+  border-color: var(--hssm-text-link);
+  color: var(--hssm-text-link);
+}
+
+.md-typeset .md-button--primary {
+  background-color: var(--hssm-primary);
+  border-color: var(--hssm-primary);
+  color: var(--hssm-on-primary);
+}
+
+.md-typeset .md-button--primary:hover,
+.md-typeset .md-button--primary:focus {
+  background-color: var(--hssm-primary-hover);
+  border-color: var(--hssm-primary-hover);
+  color: var(--hssm-on-primary);
+}
+
+/* ── Motion ───────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .move-down {
+    animation: none;
+    transform: none;
+  }
+
+  .md-typeset .md-button {
+    transition: none;
+  }
 }
