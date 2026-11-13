@@ -1139,7 +1139,12 @@ def plot_func_model(
     n_trajectories : int, optional
         Number of trajectories to plot. Defaults to 0.
     delta_t_model : float, optional
-        Time step for model simulation. Defaults to 0.01.
+        Time step of the drawn model geometry (boundaries, drift, non-decision
+        time, starting point) and of the example trajectories. Defaults to
+        0.01. It does not apply to the noisy RT simulations behind the
+        predicted histograms: those use the simulator's default time step, as
+        ``sample_posterior_predictive`` does, because a coarser step lengthens
+        the simulated RTs (crossings between grid points go undetected).
     random_state : int | np.random.Generator, optional
         Seed (or an existing Generator, passed through unchanged) for every
         random choice in this renderer. Stream order: one simulator seed for
@@ -1258,7 +1263,13 @@ def plot_func_model(
     # not out to the simulator's 20 s default, which put ~75% of every
     # boundary polyline outside the axes. Noisy RT simulations keep the long
     # default horizon: shortening it would censor slow RTs into -999 and
-    # silently re-normalize the defective densities.
+    # silently re-normalize the defective densities. They also keep the
+    # simulator's default time step rather than delta_t_model: the walker is
+    # only checked against the bounds on the time grid, so a crossing between
+    # two grid points is missed, which acts like bounds widened by about
+    # 0.58 * sqrt(delta_t) and lengthens the RTs. At delta_t_model=0.01 the
+    # predicted histograms were visibly slower than the model's own
+    # posterior predictive (sampled at the simulator's default step).
     max_t_geom = xlim_high + 0.5
     t_s = np.arange(0, max_t_geom, delta_t_model)
 
@@ -1286,7 +1297,8 @@ def plot_func_model(
             theta=theta_mean.values if obs is None else theta_ref.values,
             n_samples=n_reps,
             no_noise=False,
-            delta_t=delta_t_model,
+            # No delta_t: the simulator's default step, as in
+            # sample_posterior_predictive (see the max_t_geom note).
             random_state=int(rng.integers(0, 2**31 - 1)),
         )
 
@@ -1334,7 +1346,8 @@ def plot_func_model(
                 ),
                 n_samples=n_reps,
                 no_noise=False,
-                delta_t=delta_t_model,
+                # No delta_t: the simulator's default step, as in
+                # sample_posterior_predictive (see the max_t_geom note).
                 random_state=int(rng.integers(0, 2**31 - 1)),
             )
 
@@ -2670,7 +2683,10 @@ def plot_func_model_n(
     legend_location : str, default="upper right"
         Location of legend.
     delta_t_model : float, default=0.01
-        Time step size for model cartoon plotting.
+        Time step of the drawn model geometry and of the example
+        trajectories. The noisy RT simulations behind the predicted
+        histograms use the simulator's default time step instead; see
+        ``plot_func_model``.
     add_legend : bool, default=True
         Whether to add legend to plot.
     alpha_mean : float, default=1.0
@@ -2732,7 +2748,7 @@ def plot_func_model_n(
     xlim_low, xlim_high = kwargs.get("xlims", (0, 5))
 
     # Shared horizon/grid; see plot_func_model for why noisy RT sims keep the
-    # simulator's long default horizon instead.
+    # simulator's long default horizon and default time step instead.
     max_t_geom = xlim_high + 0.5
     t_s = np.arange(0, max_t_geom, delta_t_model)
 
@@ -2757,7 +2773,8 @@ def plot_func_model_n(
             theta=theta_mean.values if obs is None else theta_ref.values,
             n_samples=n_reps,
             no_noise=False,
-            delta_t=delta_t_model,
+            # No delta_t: the simulator's default step, as in
+            # sample_posterior_predictive (see the max_t_geom note).
             random_state=int(rng.integers(0, 2**31 - 1)),
         )
 
@@ -2801,7 +2818,8 @@ def plot_func_model_n(
                 ),
                 n_samples=n_reps,
                 no_noise=False,
-                delta_t=delta_t_model,
+                # No delta_t: the simulator's default step, as in
+                # sample_posterior_predictive (see the max_t_geom note).
                 random_state=int(rng.integers(0, 2**31 - 1)),
             )
 
