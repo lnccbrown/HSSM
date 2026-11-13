@@ -133,7 +133,9 @@ def make_rldm_logp_func(
         ----------
         data:
             A 2D numpy array of shape (n_trials * n_participants, 2) containing the
-            response and reaction time for each trial.
+            reaction time and the response, in that order, for each trial. The
+            response may be coded 0/1 or -1/1; the positive response is the upper
+            boundary.
         dist_params:
             A list of parameters for the RLDM model, including:
             - rl_alpha: learning rate for the RL model.
@@ -165,7 +167,12 @@ def make_rldm_logp_func(
 
         # create parameter arrays to be passed to the likelihood function
         ddm_params_matrix = jnp.stack(dist_params[2:6], axis=1)
-        lan_matrix = jnp.concatenate((v, ddm_params_matrix, data), axis=1)
+        # The angle LAN declares -1/1 choices, so a 0/1 response is mapped
+        # to -1/1 before it reaches the network.
+        choice = jnp.where(action > 0, 1.0, -1.0).reshape((-1, 1))
+        lan_matrix = jnp.concatenate(
+            (v, ddm_params_matrix, data[:, :1], choice), axis=1
+        )
 
         return angle_logp_jax_func(lan_matrix)
 
