@@ -13,9 +13,11 @@ parameter of the same one (`missing_data_mixin.py:88-95`):
         return MissingDataNetwork.NONE
     network = MissingDataNetwork.OPN if deadline else MissingDataNetwork.CPN
 
-Both cases set `missing_data=True`; `deadline` only selects CPN vs OPN, which
-downstream is `params_only=True` vs `False`. So the network becomes a `mode`
-column in one covering array rather than a second copy of the grid.
+Both cases set `missing_data=True`; `deadline` only selects CPN vs OPN, i.e.
+which data column (the response or the deadline) is spliced in as the network's
+last input -- both are wired with `params_only=False` (#1324). So the network
+becomes a `mode` column in one covering array rather than a second copy of the
+grid.
 """
 
 from copy import deepcopy

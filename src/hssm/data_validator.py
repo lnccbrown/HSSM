@@ -84,6 +84,28 @@ class DataValidatorMixin:
                 f"Invalid responses found in your dataset: {invalid_responses}"
             )
 
+        if self.missing_data and not self.deadline:
+            # Missing-RT rows (no deadline) still carry an observed choice: the
+            # choice-probability network receives it as its last input, so it
+            # must be a valid response code (lnccbrown/HSSM#1324).
+            missing_responses_col = self.data.loc[self.data["rt"] == -999.0, "response"]
+            is_invalid = ~missing_responses_col.isin(self.choices)
+            if is_invalid.any():
+                invalid = [
+                    "NaN"
+                    if pd.isna(value)
+                    else (value.item() if isinstance(value, np.generic) else value)
+                    for value in pd.unique(missing_responses_col[is_invalid])
+                ]
+                raise ValueError(
+                    "Missing-RT rows (rt == -999.0) must carry the observed "
+                    "response: HSSM passes each missing row's `response` to the "
+                    "choice-probability network (CPN) as its last input. Found "
+                    f"invalid responses on missing-RT rows: {invalid}; valid "
+                    f"choices are {list(self.choices)}. See "
+                    "https://github.com/lnccbrown/HSSM/issues/1324."
+                )
+
         if len(unique_responses) != self.n_choices:
             missing_responses = sorted(
                 np.setdiff1d(self.choices, unique_responses).tolist()

@@ -220,40 +220,45 @@ def test_lan_logp_vjp_op_jax_linker_data_params(fixture_path):
     _assert_jax_matches_default([data, v, a, z, t, theta], grads, values)
 
 
+# The CPN fixture takes [v, a, z, t, choice] (#1324). The `params_only=True`
+# branches below are for callables that take only parameters; they are kept
+# covered by handing the fixture its choice as a fifth scalar "parameter".
+
+
 def test_lan_logp_vjp_op_jax_linker_scalars_only(fixture_path):
-    """The scalars-only CPN branch compiles under the JAX linker."""
+    """The scalars-only params-only branch compiles under the JAX linker."""
     model = onnx.load(fixture_path / "ddm_cpn.onnx")
     logp_op = make_jax_logp_ops(
         *make_jax_logp_funcs_from_onnx(
-            model, params_is_reg=[False] * 4, params_only=True
+            model, params_is_reg=[False] * 5, params_only=True
         )
     )
 
-    v, a, z, t = (pt.scalar(name) for name in ["v", "a", "z", "t"])
-    grads = pytensor.grad(logp_op(None, v, a, z, t).sum(), wrt=[v, a, z, t])
-    values = [np.float32(x) for x in (0.5, 1.2, 0.5, 0.2)]
+    v, a, z, t, c = (pt.scalar(name) for name in ["v", "a", "z", "t", "c"])
+    grads = pytensor.grad(logp_op(None, v, a, z, t, c).sum(), wrt=[v, a, z, t])
+    values = [np.float32(x) for x in (0.5, 1.2, 0.5, 0.2, 1.0)]
 
-    _assert_jax_matches_default([v, a, z, t], grads, values)
+    _assert_jax_matches_default([v, a, z, t, c], grads, values)
 
 
 def test_lan_logp_vjp_op_jax_linker_params_only_regression(fixture_path):
-    """The no-data + regression-params CPN branch compiles under the JAX linker."""
+    """The no-data + regression-params branch compiles under the JAX linker."""
     model = onnx.load(fixture_path / "ddm_cpn.onnx")
     logp_op = make_jax_logp_ops(
         *make_jax_logp_funcs_from_onnx(
-            model, params_is_reg=[True] + [False] * 3, params_only=True
+            model, params_is_reg=[True] + [False] * 4, params_only=True
         )
     )
 
     v = pt.vector("v")
-    a, z, t = (pt.scalar(name) for name in ["a", "z", "t"])
-    grads = pytensor.grad(logp_op(None, v, a, z, t).sum(), wrt=[v, a, z, t])
+    a, z, t, c = (pt.scalar(name) for name in ["a", "z", "t", "c"])
+    grads = pytensor.grad(logp_op(None, v, a, z, t, c).sum(), wrt=[v, a, z, t])
     values = [
         np.linspace(0.2, 0.8, 5).astype(np.float32),
-        *(np.float32(x) for x in (1.2, 0.5, 0.2)),
+        *(np.float32(x) for x in (1.2, 0.5, 0.2, 1.0)),
     ]
 
-    _assert_jax_matches_default([v, a, z, t], grads, values)
+    _assert_jax_matches_default([v, a, z, t, c], grads, values)
 
 
 @pytest.mark.parametrize("mode", [None, "JAX"])
@@ -272,7 +277,7 @@ def test_lan_logp_op_cotangent_flows(fixture_path, mode):
     )
     cpn = onnx.load(fixture_path / "ddm_cpn.onnx")
     cpn_op = make_jax_logp_ops(
-        *make_jax_logp_funcs_from_onnx(cpn, params_is_reg=[False] * 4, params_only=True)
+        *make_jax_logp_funcs_from_onnx(cpn, params_is_reg=[False] * 5, params_only=True)
     )
 
     data = pt.matrix("data")
@@ -286,13 +291,13 @@ def test_lan_logp_op_cotangent_flows(fixture_path, mode):
         *(np.float32(x) for x in (1.2, 0.5, 0.2, 0.1)),
     ]
 
-    vs, as_, zs, ts = (pt.scalar(name) for name in ["vs", "as", "zs", "ts"])
-    cpn_inputs = [vs, as_, zs, ts]
-    cpn_values = [np.float32(x) for x in (0.5, 1.2, 0.5, 0.2)]
+    vs, as_, zs, ts, cs = (pt.scalar(name) for name in ["vs", "as", "zs", "ts", "cs"])
+    cpn_inputs = [vs, as_, zs, ts, cs]
+    cpn_values = [np.float32(x) for x in (0.5, 1.2, 0.5, 0.2, 1.0)]
 
     for logp, inputs, values, wrt in [
         (angle_op(data, v, a, z, t, theta), angle_inputs, angle_values, v),
-        (cpn_op(None, vs, as_, zs, ts), cpn_inputs, cpn_values, vs),
+        (cpn_op(None, vs, as_, zs, ts, cs), cpn_inputs, cpn_values, vs),
     ]:
         g1 = pytensor.grad(logp.sum(), wrt=wrt)
         g2 = pytensor.grad((2.0 * logp).sum(), wrt=wrt)
