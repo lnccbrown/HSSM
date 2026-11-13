@@ -308,18 +308,19 @@ def log_likelihood(
             on_unused_input="ignore",
         )
 
-    # Loop through chain and draws
-    for ids in itertools.product(coords["chain"].values, coords["draw"].values):
+    # Loop through chain and draws by position: the coordinate values need not
+    # be 0, 1, ..., e.g. once burn-in draws are dropped or the trace is thinned.
+    for i_chain, i_draw in itertools.product(range(n_chains), range(n_draws)):
         kwargs_tmp = {
             key_: (
-                val[ids[0], ids[1], ...]
+                val[i_chain, i_draw, ...]
                 if (val.shape[0] == n_chains and val.shape[1] == n_draws)
                 else val[0, 0, ...]
             )
             for key_, val in kwargs.items()
         }
 
-        output_array[ids[0], ids[1], :] = logp_compiled(**kwargs_tmp)
+        output_array[i_chain, i_draw, :] = logp_compiled(**kwargs_tmp)
 
     # output_array
     return xr.DataArray(output_array, coords=coords)
