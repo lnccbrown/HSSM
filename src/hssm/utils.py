@@ -247,6 +247,7 @@ def log_likelihood(
     """
     # Child classes pass "y_values" through the "y" kwarg
     y_values = kwargs.pop("y", None)
+    response_term = model.response_component.term
 
     # Get the values of the outcome variable
     if y_values is None:  # when it's not handled by the specific family
@@ -254,9 +255,12 @@ def log_likelihood(
             y_values = np.squeeze(model.response_component.term.data)
         else:
             y_values = response_evaluate_new_data(model, data)
+        # Bambi stores a constrained response as three columns: the observed
+        # values, then the lower and upper bounds. Only the first is the response.
+        if response_term.is_constrained:
+            y_values = y_values[..., 0]
 
     response_dist = get_response_dist(model.family)
-    response_term = model.response_component.term
     kwargs, coords = family._make_dist_kwargs_and_coords(model, posterior, **kwargs)
 
     # If it's multivariate, it's going to have a fourth coord,
@@ -293,11 +297,13 @@ def log_likelihood(
         lower = lower if lower != -np.inf else None
         upper = upper if upper != np.inf else None
 
-        # Finally evaluate logp
+        # Finally evaluate logp. Build the distribution from the symbolic inputs,
+        # as in the unconstrained branch: built from the first draw's values, it
+        # would compile them in as constants, and every draw would return the
+        # first draw's log-likelihood.
         rv_logp = pm.logp(
-            pm.Truncated.dist(
-                response_dist.dist(**kwargs_prep), lower=lower, upper=upper
-            ),
+            # pyrefly: ignore[no-matching-overload]
+            pm.Truncated.dist(response_dist.dist(**pt_dict), lower=lower, upper=upper),
             y_values,
         )
         logp_compiled = pm.compile(
