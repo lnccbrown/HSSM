@@ -130,6 +130,39 @@ def test_lapse_distribution():
     np.testing.assert_array_equal(random_sample_a, random_sample_b)
 
 
+def test_make_hssm_rv_simulates_fixed_vector_params():
+    """``rng_fn`` simulates a fixed-vector parameter row by row (#1453).
+
+    The RV receives Bambi's scalar ``0.0`` placeholder for such a parameter. A
+    DDM response time is ``t`` plus a positive decision time, so every rt exceeds
+    its own row's ``t`` only if the vector reached the simulator in row order.
+    """
+    t_fixed = np.array([0.2, 1.5, 0.2, 1.5, 0.2, 1.5])
+    rv = distribution_utils.make_hssm_rv(
+        "ddm", ["v", "a", "z", "t"], fixed_vector_params={"t": t_fixed}
+    )
+    rng = np.random.default_rng(42)
+    placeholder = np.zeros((1, 1, 1))
+
+    # Posterior predictive: Bambi passes (chain, draw, obs) or (chain, draw, 1)
+    # arrays, and the constant placeholder as (1, 1, 1).
+    v = np.full((1, 3, t_fixed.size), 0.5)
+    a = np.full((1, 3, 1), 1.0)
+    z = np.full((1, 1, 1), 0.5)
+    sims = rv.rng_fn(rng, v, a, z, placeholder, None)
+    assert sims.shape == (1, 3, t_fixed.size, 2)
+    assert np.all(sims[..., 0] > t_fixed)
+
+    # Prior predictive: scalar parameters and one draw per row.
+    sims = rv.rng_fn(rng, 0.5, 1.0, 0.5, 0.0, (t_fixed.size,))
+    assert sims.shape == (t_fixed.size, 2)
+    assert np.all(sims[:, 0] > t_fixed)
+
+    # Rows other than the model's have no value of the vector.
+    with pytest.raises(ValueError, match="fixed to a vector"):
+        rv.rng_fn(rng, np.full((1, 3, 4), 0.5), a, z, placeholder, None)
+
+
 def test_apply_lapse_model_rejects_numeric_lapse_distribution():
     """Numeric choice-only lapse values cannot simulate RT lapse samples."""
     sims_out = np.asarray([[0.2, 0.0], [0.3, 1.0]], dtype=float)
@@ -150,7 +183,13 @@ def test_make_distribution_forwards_choice_only_to_generated_rv(monkeypatch, rv)
     """Generated RVs must keep the choice-only support-shape contract."""
     captured = {}
 
-    def fake_make_hssm_rv(simulator_fun, list_params, lapse=None, is_choice_only=False):
+    def fake_make_hssm_rv(
+        simulator_fun,
+        list_params,
+        lapse=None,
+        is_choice_only=False,
+        fixed_vector_params=None,
+    ):
         captured["is_choice_only"] = is_choice_only
 
         class FakeRV:

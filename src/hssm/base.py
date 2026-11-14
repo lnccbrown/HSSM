@@ -1171,6 +1171,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         ------
         ValueError
             If the model has not been sampled yet and datatree is not provided.
+        ValueError
+            If `data` other than the model's own data is given with
+            `kind="response"` and a parameter is fixed to a vector, which has
+            values only for the rows of the model's data.
 
         Returns
         -------
@@ -1178,6 +1182,28 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             A DataTree object with the posterior predictive samples added,
             or None if inplace is True.
         """
+        # A fixed vector holds one value per row of the model's data, so there is
+        # no value to simulate other rows with (#1453). The plotting functions
+        # pass `data=self.data`, which is allowed.
+        fixed_vector_names = [
+            name
+            for name, param in self.params.items()
+            if isinstance(param.prior, np.ndarray)
+        ]
+        if (
+            data is not None
+            and kind == "response"
+            and fixed_vector_names
+            and not data.equals(self.data)
+        ):
+            raise ValueError(
+                f"Parameter(s) {fixed_vector_names} are fixed to a vector with one "
+                "value per row of the data the model was built on, so they have no "
+                "values for the rows of `data`. Call sample_posterior_predictive "
+                "without `data`, or build a model on the new data with its own "
+                "vector."
+            )
+
         if dt is None:
             if self._inference_obj is None:
                 raise ValueError(

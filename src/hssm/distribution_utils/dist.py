@@ -233,6 +233,7 @@ def make_hssm_rv(
     list_params: list[str],
     lapse: bmb.Prior | float | None = None,
     is_choice_only: bool = False,
+    fixed_vector_params: dict[str, np.ndarray] | None = None,
 ) -> type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
 
@@ -246,6 +247,10 @@ def make_hssm_rv(
         A bmb.Prior object representing the lapse distribution.
     is_choice_only : bool
         Whether the model is a choice-only model.
+    fixed_vector_params : optional
+        A dictionary mapping parameter names to their fixed ``np.ndarray``
+        values, one per row of the data. ``rng_fn`` simulates with these vectors
+        in place of the scalar placeholders it receives for these parameters.
 
     Returns
     -------
@@ -257,6 +262,11 @@ def make_hssm_rv(
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
+
+    fixed_vectors = {
+        list_params.index(name): pm.pytensorf.floatX(np.asarray(vector))
+        for name, vector in (fixed_vector_params or {}).items()
+    }
 
     # pylint: disable=W0511, R0903
     class HSSMRV(RandomVariable):
@@ -346,13 +356,31 @@ def make_hssm_rv(
             requested_size = kwargs.get("size", args[-1])
             size, args, kwargs = _extract_size(args, kwargs)
             arg_arrays = _create_arg_arrays(cls, args)
+            # A parameter fixed to a vector reaches this RV as the scalar 0.0
+            # placeholder that Bambi holds for it (see `make_distribution`).
+            # Simulate with the vector, as HSSMDistribution.logp() does (#1453).
+            for idx, vector in fixed_vectors.items():
+                arg_arrays[idx] = vector
             param_shapes = [arr.shape for arr in arg_arrays]
             p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
 
-            # A trial-wise p_outlier (a p_outlier regression) needs one simulated
-            # trial per p_outlier value, even when the model parameters are scalar.
-            if p_outlier is not None and p_outlier.size > 1:
-                batch_shape = np.broadcast_shapes(*param_shapes)
+            # A trial-wise p_outlier (a p_outlier regression) or a fixed vector
+            # needs one simulated trial per value, even when the other model
+            # parameters are scalar.
+            if fixed_vectors or (p_outlier is not None and p_outlier.size > 1):
+                try:
+                    batch_shape = np.broadcast_shapes(*param_shapes)
+                except ValueError as err:
+                    if not fixed_vectors:
+                        raise
+                    # The vector has one value per row the model was built on,
+                    # so it cannot be matched to any other set of rows.
+                    raise ValueError(
+                        "Cannot simulate: the parameter(s) fixed to a vector "
+                        f"({', '.join(list_params[i] for i in fixed_vectors)}) have "
+                        "one value per row of the model's data, which does not match "
+                        f"the shapes of the other parameters ({param_shapes})."
+                    ) from err
                 arg_arrays = [np.broadcast_to(arr, batch_shape) for arr in arg_arrays]
 
             # Forward observed per-trial covariates to the simulator when the RV
@@ -670,8 +698,9 @@ def make_distribution(
         Bambi receives a scalar ``0.0`` placeholder, and the real vector is
         injected as a constant PyTensor tensor inside
         ``HSSMDistribution.logp()``, replacing the placeholder at the
-        correct position in ``dist_params``.  Defaults to ``None``
-        (no fixed-vector parameters).
+        correct position in ``dist_params``.  When ``rv`` is a string or a
+        simulator function, the RV's ``rng_fn`` likewise simulates with the
+        vector.  Defaults to ``None`` (no fixed-vector parameters).
     params_is_trialwise : optional
         A list of booleans, one per parameter in ``list_params`` (plus extra
         fields), indicating whether each parameter is trial-wise (i.e. should
@@ -713,6 +742,7 @@ def make_distribution(
             list_params=list_params,
             lapse=lapse,
             is_choice_only=is_choice_only,
+            fixed_vector_params=fixed_vector_params,
         )
         rv_instance = random_variable()
     elif isinstance(rv, str):
@@ -721,6 +751,7 @@ def make_distribution(
             list_params=list_params,
             lapse=lapse,
             is_choice_only=is_choice_only,
+            fixed_vector_params=fixed_vector_params,
         )
         rv_instance = random_variable()
     else:
