@@ -187,3 +187,62 @@ def test_posterior_predictive_with_p_outlier_regression(model):
     hssm_model.sample_posterior_predictive(draws=5)
 
     assert hssm_model.traces["posterior_predictive"].sizes["__obs__"] == 100
+
+
+# Non-decision time fixed to a vector: 0.2 on even rows, 1.5 on odd rows.
+FIXED_T = np.where(np.arange(40) % 2 == 0, 0.2, 1.5)
+
+
+def _fixed_t_model():
+    """Return a DDM whose ``t`` is fixed to ``FIXED_T``, without a lapse."""
+    n_obs = FIXED_T.size
+    theta = {
+        "v": np.full(n_obs, 0.5),
+        "a": np.full(n_obs, 1.0),
+        "z": np.full(n_obs, 0.5),
+        "t": FIXED_T,
+    }
+    data = hssm.simulate_data(model="ddm", theta=theta, size=1, random_state=0)
+    return hssm.HSSM(data=data, model="ddm", t=FIXED_T, p_outlier=None)
+
+
+@pytest.mark.parametrize("predictive", ["posterior", "prior"])
+def test_predictive_simulates_fixed_vector_params(predictive):
+    """Predictive draws use each row's value of a fixed-vector parameter (#1453).
+
+    A DDM response time is ``t`` plus a positive decision time, so every
+    simulated rt exceeds its own row's ``t``. The simulator used to receive
+    Bambi's ``0.0`` placeholder for ``t``, so rows with ``t = 1.5`` were
+    simulated with response times below 1.5.
+    """
+    model = _fixed_t_model()
+    if predictive == "posterior":
+        model.sample(
+            draws=10, tune=10, chains=1, cores=1, random_seed=0, progressbar=False
+        )
+        # The plotting functions pass the model's own data.
+        all_sims = [
+            model.sample_posterior_predictive(draws=5, inplace=False, data=data)[
+                "posterior_predictive"
+            ]["rt,response"].values
+            for data in (None, model.data)
+        ]
+    else:
+        dt = model.sample_prior_predictive(draws=5, random_seed=0)
+        all_sims = [dt["prior_predictive"]["rt,response"].values]
+
+    for sims in all_sims:
+        assert sims.shape[-2:] == (FIXED_T.size, 2)
+        assert np.all(sims[..., 0] > FIXED_T)
+
+
+def test_posterior_predictive_rejects_new_data_with_fixed_vector_params(
+    minimal_posterior_datatree,
+):
+    """New rows have no value of a fixed vector, so simulating them raises."""
+    model = _fixed_t_model()
+
+    with pytest.raises(ValueError, match="fixed to a vector"):
+        model.sample_posterior_predictive(
+            dt=minimal_posterior_datatree(), data=model.data.iloc[:10]
+        )

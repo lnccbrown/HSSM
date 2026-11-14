@@ -130,7 +130,8 @@ class Params(UserDict[str, Param]):
             # Fixed-vector parameters: tell Bambi this is a scalar constant
             # (0.0). The actual vector substitution happens inside
             # HSSMDistribution.logp(), which replaces the scalar with the
-            # real vector at the correct position in the parameter list.
+            # real vector at the correct position in the parameter list, and
+            # in the RV's rng_fn for simulation (see make_hssm_rv).
             if isinstance(prior, np.ndarray):
                 priors[param_name] = 0.0
             elif param.is_parent:
