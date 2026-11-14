@@ -163,6 +163,31 @@ def test_make_hssm_rv_simulates_fixed_vector_params():
         rv.rng_fn(rng, np.full((1, 3, 4), 0.5), a, z, placeholder, None)
 
 
+def test_make_hssm_rv_simulates_fixed_vector_p_outlier():
+    """A fixed-vector ``p_outlier`` gives each row its own lapse probability (#1453).
+
+    Rows with ``p_outlier=1`` are all lapses, drawn here from Uniform(10, 20); rows
+    with ``p_outlier=0`` are DDM draws, whose response times stay far below 10.
+    """
+    p_fixed = np.array([0.0, 1.0, 0.0, 1.0, 0.0, 1.0])
+    rv = distribution_utils.make_hssm_rv(
+        "ddm",
+        ["v", "a", "z", "t"],
+        lapse=bmb.Prior("Uniform", lower=10.0, upper=20.0),
+        fixed_vector_params={"p_outlier": p_fixed},
+    )
+    rng = np.random.default_rng(42)
+    v = np.full((1, 3, p_fixed.size), 0.5)
+    a = np.full((1, 3, 1), 1.0)
+    z = np.full((1, 1, 1), 0.5)
+    t = np.full((1, 1, 1), 0.3)
+    sims = rv.rng_fn(rng, v, a, z, t, np.zeros((1, 1, 1)), None)
+    assert sims.shape == (1, 3, p_fixed.size, 2)
+    lapsed = p_fixed == 1.0
+    assert np.all(sims[..., lapsed, 0] >= 10.0)
+    assert np.all(sims[..., ~lapsed, 0] < 10.0)
+
+
 def test_apply_lapse_model_rejects_numeric_lapse_distribution():
     """Numeric choice-only lapse values cannot simulate RT lapse samples."""
     sims_out = np.asarray([[0.2, 0.0], [0.3, 1.0]], dtype=float)

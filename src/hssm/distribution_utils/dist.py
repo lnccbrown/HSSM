@@ -382,6 +382,10 @@ def make_hssm_rv(
                         f"the shapes of the other parameters ({param_shapes})."
                     ) from err
                 arg_arrays = [np.broadcast_to(arr, batch_shape) for arr in arg_arrays]
+                # p_outlier was taken out of arg_arrays above, so a fixed-vector
+                # p_outlier needs the same broadcast, one probability per trial.
+                if p_outlier is not None and p_outlier.size > 1:
+                    p_outlier = np.broadcast_to(p_outlier, batch_shape)
 
             # Forward observed per-trial covariates to the simulator when the RV
             # has been given them (covariate-conditioned PPC); a no-op otherwise.
