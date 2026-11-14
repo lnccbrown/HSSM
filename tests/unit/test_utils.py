@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 
+import bambi as bmb
 import numpy as np
 import pandas as pd
 import pymc as pm
@@ -9,6 +10,7 @@ import pytensor
 import pytest
 import xarray as xr
 from jax import config
+from scipy import stats
 from ssms.basic_simulators.simulator import simulator
 
 import hssm
@@ -209,6 +211,55 @@ def test_compute_log_likelihood_warns_and_replaces_existing_group(
         np.array([[[-1.0], [-2.0]]]),
     )
     assert "Replacing existing log_likelihood group in dt." in caplog.text
+
+
+@pytest.mark.parametrize("bounds", [{"lb": -2.0, "ub": 2.0}, {"lb": -2.0}, {"ub": 2.0}])
+@pytest.mark.parametrize("response", ["model", "explicit_y", "new_data"])
+def test_log_likelihood_constrained_response(bounds, response):
+    """A Bambi `constrained` response is evaluated as a truncated Normal at each draw.
+
+    The response is read from the first column of the term's data, not from the
+    bound columns, and every draw uses its own parameters rather than the first
+    draw's. scipy's truncnorm is the reference.
+    """
+    rng = np.random.default_rng(1452)
+    y = rng.uniform(-1.5, 1.5, 6)
+    mu = rng.normal(0.0, 1.0, (2, 3))
+    sigma = rng.uniform(0.5, 2.0, (2, 3))
+    bound_args = ", ".join(f"{key}={value}" for key, value in bounds.items())
+    model = bmb.Model(
+        f"constrained(y, {bound_args}) ~ 1", pd.DataFrame({"y": y}), family="gaussian"
+    )
+    model.build()
+    posterior = xr.Dataset(
+        {
+            "Intercept": (("chain", "draw"), mu),
+            "sigma": (("chain", "draw"), sigma),
+        },
+        coords={"chain": [0, 1], "draw": [0, 1, 2]},
+    )
+
+    kwargs = {}
+    data = None
+    y_eval = y
+    if response == "explicit_y":
+        kwargs["y"] = y
+    elif response == "new_data":
+        y_eval = rng.uniform(-1.5, 1.5, 4)
+        data = pd.DataFrame({"y": y_eval})
+    dt = model._compute_likelihood_params(
+        xr.DataTree.from_dict({"posterior": posterior}), data, True, False
+    )
+    result = log_likelihood(
+        model.family, model, dt.children["posterior"], data=data, **kwargs
+    )
+
+    loc, scale = mu[..., None], sigma[..., None]
+    lower, upper = bounds.get("lb", -np.inf), bounds.get("ub", np.inf)
+    expected = stats.truncnorm.logpdf(
+        y_eval, (lower - loc) / scale, (upper - loc) / scale, loc=loc, scale=scale
+    )
+    np.testing.assert_allclose(result.values, expected, rtol=1e-5)
 
 
 def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
