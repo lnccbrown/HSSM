@@ -322,7 +322,12 @@ def log_likelihood(
     if response_term.is_censored:
         # pyrefly: ignore[no-matching-overload]
         rv_dist = pm.Censored.dist(rv_dist, lower=lower, upper=upper)
-    elif response_term.is_truncated or response_term.is_constrained:
+    elif (response_term.is_truncated or response_term.is_constrained) and (
+        lower is not None or upper is not None
+    ):
+        # Rows that are all unbounded (e.g. new rows of a truncated(y, lb=lb)
+        # model that all have lb=-inf) keep the base density: pm.Truncated
+        # rejects lower=upper=None.
         # pyrefly: ignore[no-matching-overload]
         rv_dist = pm.Truncated.dist(rv_dist, lower=lower, upper=upper)
 

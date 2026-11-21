@@ -418,6 +418,22 @@ def test_log_likelihood_censored_explicit_y_is_the_censoring_point():
     np.testing.assert_allclose(result.values, expected, rtol=1e-5)
 
 
+def test_log_likelihood_truncated_response_unbounded_new_rows():
+    """New rows that are all unbounded get the untruncated Normal density."""
+    rng = np.random.default_rng(14526)
+    lb = np.array([-2.0, -np.inf, -1.0, -np.inf, -2.0])
+    df = pd.DataFrame({"y": rng.uniform(-0.5, 1.5, 5), "lb": lb})
+    model = bmb.Model("truncated(y, lb=lb) ~ 1", df, family="gaussian")
+    model.build()
+    posterior, loc, scale = _gaussian_posterior(rng)
+    data = pd.DataFrame({"y": rng.uniform(-1.5, 1.5, 3), "lb": -np.inf})
+
+    result = _evaluate_log_likelihood(model, posterior, data)
+
+    expected = stats.norm.logpdf(data["y"].to_numpy(), loc, scale)
+    np.testing.assert_allclose(result.values, expected, rtol=1e-5)
+
+
 def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
     """Post-sampling likelihoods honor the requested JAX compiler."""
     compile_calls = []
