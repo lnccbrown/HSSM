@@ -262,6 +262,101 @@ def test_log_likelihood_constrained_response(bounds, response):
     np.testing.assert_allclose(result.values, expected, rtol=1e-5)
 
 
+def _gaussian_posterior(rng):
+    """Two chains and three draws of an intercept-only Gaussian model."""
+    mu = rng.normal(0.0, 1.0, (2, 3))
+    sigma = rng.uniform(0.5, 2.0, (2, 3))
+    posterior = xr.Dataset(
+        {
+            "Intercept": (("chain", "draw"), mu),
+            "sigma": (("chain", "draw"), sigma),
+        },
+        coords={"chain": [0, 1], "draw": [0, 1, 2]},
+    )
+    return posterior, mu[..., None], sigma[..., None]
+
+
+def _evaluate_log_likelihood(model, posterior, data=None):
+    dt = model._compute_likelihood_params(
+        xr.DataTree.from_dict({"posterior": posterior}), data, True, False
+    )
+    return log_likelihood(model.family, model, dt.children["posterior"], data=data)
+
+
+@pytest.mark.parametrize("kind", ["constrained", "truncated"])
+@pytest.mark.parametrize("n_new", [None, 1, 4])
+def test_log_likelihood_truncated_response(kind, n_new):
+    """`truncated` and `constrained` responses are truncated Normals.
+
+    `n_new` is the number of rows of new data (None: the model's data). A single
+    row must give one log-likelihood per draw, not one per column of the
+    response. scipy's truncnorm is the reference.
+    """
+    rng = np.random.default_rng(1452)
+    df = pd.DataFrame({"y": rng.uniform(-1.5, 1.5, 5)})
+    model = bmb.Model(f"{kind}(y, lb=-2.0) ~ 1", df, family="gaussian")
+    model.build()
+    posterior, loc, scale = _gaussian_posterior(rng)
+
+    data = None if n_new is None else pd.DataFrame({"y": rng.uniform(-1.5, 1.5, n_new)})
+    n_obs = len(df if data is None else data)
+    y_eval = (df if data is None else data)["y"].to_numpy()
+    result = _evaluate_log_likelihood(model, posterior, data)
+
+    expected = stats.truncnorm.logpdf(
+        y_eval, (-2.0 - loc) / scale, np.inf, loc=loc, scale=scale
+    )
+    assert result.shape == (2, 3, n_obs)
+    np.testing.assert_allclose(result.values, expected, rtol=1e-5)
+
+
+def test_log_likelihood_truncated_response_row_bounds():
+    """A `truncated` response with one lower bound per row uses each row's bound."""
+    rng = np.random.default_rng(14521)
+    lb = np.array([-2.0, -1.0, -0.5, -2.0, -1.0])
+    df = pd.DataFrame({"y": lb + rng.uniform(0.1, 1.5, 5), "lb": lb})
+    model = bmb.Model("truncated(y, lb=lb) ~ 1", df, family="gaussian")
+    model.build()
+    posterior, loc, scale = _gaussian_posterior(rng)
+
+    result = _evaluate_log_likelihood(model, posterior)
+
+    expected = stats.truncnorm.logpdf(
+        df["y"].to_numpy(), (lb - loc) / scale, np.inf, loc=loc, scale=scale
+    )
+    np.testing.assert_allclose(result.values, expected, rtol=1e-5)
+
+
+@pytest.mark.parametrize("new_data", [False, True])
+def test_log_likelihood_censored_response(new_data):
+    """A `censored` response uses the CDF, survival function or density per row."""
+    rng = np.random.default_rng(14522)
+    status = ["none", "left", "right", "none", "right", "left"]
+    df = pd.DataFrame({"y": rng.uniform(-1.5, 1.5, 6), "status": status})
+    model = bmb.Model("censored(y, status) ~ 1", df, family="gaussian")
+    model.build()
+    posterior, loc, scale = _gaussian_posterior(rng)
+
+    data = None
+    if new_data:
+        data = pd.DataFrame(
+            {"y": rng.uniform(-1.5, 1.5, 3), "status": ["right", "none", "left"]}
+        )
+    eval_df = df if data is None else data
+    result = _evaluate_log_likelihood(model, posterior, data)
+
+    y_eval = eval_df["y"].to_numpy()
+    by_status = {
+        "none": stats.norm.logpdf(y_eval, loc, scale),
+        "left": stats.norm.logcdf(y_eval, loc, scale),
+        "right": stats.norm.logsf(y_eval, loc, scale),
+    }
+    expected = np.stack(
+        [by_status[s][..., i] for i, s in enumerate(eval_df["status"])], axis=-1
+    )
+    np.testing.assert_allclose(result.values, expected, rtol=1e-5)
+
+
 def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
     """Post-sampling likelihoods honor the requested JAX compiler."""
     compile_calls = []
@@ -287,7 +382,12 @@ def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
     )
     model = SimpleNamespace(
         response_component=SimpleNamespace(
-            term=SimpleNamespace(data=np.array([0.0, 1.0]), is_constrained=False)
+            term=SimpleNamespace(
+                data=np.array([0.0, 1.0]),
+                is_constrained=False,
+                is_truncated=False,
+                is_censored=False,
+            )
         ),
         family=family,
     )
