@@ -259,11 +259,22 @@ def log_likelihood(
     )
 
     if is_multi_column:
-        response_data = (
-            response_term.data
-            if data is None
-            else response_evaluate_new_data(model, data)
-        )
+        if data is None or (y_values is not None and response_term.is_constrained):
+            # Bambi only allows scalar bounds in constrained(...), so the model's
+            # data holds them, and an explicit `y` may come with `data` that has
+            # only the predictors.
+            response_data = response_term.data
+        else:
+            try:
+                response_data = response_evaluate_new_data(model, data)
+            except KeyError as err:
+                if y_values is None:
+                    raise
+                raise ValueError(
+                    "The bounds of a truncated(...) response and the statuses of a "
+                    "censored(...) response are read per row, so `data` must hold "
+                    "every column of the response term, even when `y` is passed."
+                ) from err
         # Keep the row axis: np.squeeze would turn a single observation of shape
         # (1, k) into (k,), and the bounds into observations.
         response_data = np.asarray(response_data).reshape(
@@ -271,7 +282,9 @@ def log_likelihood(
         )
         if y_values is None:
             y_values = response_data[:, 0]
-        lower, upper = _response_bounds(response_term, response_data)
+        lower, upper = _response_bounds(
+            response_term, response_data, np.asarray(y_values)
+        )
     elif y_values is None:  # when it's not handled by the specific family
         if data is None:
             y_values = np.squeeze(response_term.data)
@@ -351,7 +364,9 @@ def _get_response_term(model: bmb.Model) -> Any:
     return model.response_component.term
 
 
-def _response_bounds(response_term: Any, response_data: np.ndarray) -> tuple[Any, Any]:
+def _response_bounds(
+    response_term: Any, response_data: np.ndarray, observed: np.ndarray
+) -> tuple[Any, Any]:
     """Get the likelihood bounds of a multi-column Bambi response.
 
     Mirrors ``ResponseTerm.build_distribution`` in Bambi's PyMC backend, so the
@@ -364,6 +379,10 @@ def _response_bounds(response_term: Any, response_data: np.ndarray) -> tuple[Any
     response_data
         The response as a 2-D array: one row per observation, with the columns
         Bambi builds for that kind of response.
+    observed
+        The values the likelihood is evaluated at: the first column of
+        `response_data`, or the `y` passed to `log_likelihood`. A censored row is
+        censored at its observed value.
 
     Returns
     -------
@@ -371,7 +390,6 @@ def _response_bounds(response_term: Any, response_data: np.ndarray) -> tuple[Any
         ``(lower, upper)``. Each is ``None`` when unbounded, a scalar when every
         row has the same bound, and an array with one value per row otherwise.
     """
-    observed = response_data[:, 0]
     if response_term.is_censored:
         if response_data.shape[1] != 2:
             # censored(lower, upper, status) is interval censoring, which

@@ -357,6 +357,67 @@ def test_log_likelihood_censored_response(new_data):
     np.testing.assert_allclose(result.values, expected, rtol=1e-5)
 
 
+def _log_likelihood_with_y(model, posterior, data, y):
+    dt = model._compute_likelihood_params(
+        xr.DataTree.from_dict({"posterior": posterior}), data, True, False
+    )
+    return log_likelihood(model.family, model, dt.children["posterior"], data=data, y=y)
+
+
+def test_log_likelihood_constrained_explicit_y_with_predictor_only_data():
+    """`constrained` bounds are scalars, so `data` needs no response column with `y`."""
+    rng = np.random.default_rng(14523)
+    df = pd.DataFrame({"y": rng.uniform(-1.5, 1.5, 5), "other": 0.0})
+    model = bmb.Model("constrained(y, lb=-2.0) ~ 1", df, family="gaussian")
+    model.build()
+    posterior, loc, scale = _gaussian_posterior(rng)
+    y_new = rng.uniform(-1.5, 1.5, 4)
+
+    result = _log_likelihood_with_y(
+        model, posterior, pd.DataFrame({"other": np.zeros(4)}), y_new
+    )
+
+    expected = stats.truncnorm.logpdf(
+        y_new, (-2.0 - loc) / scale, np.inf, loc=loc, scale=scale
+    )
+    np.testing.assert_allclose(result.values, expected, rtol=1e-5)
+
+
+def test_log_likelihood_truncated_explicit_y_needs_response_columns():
+    """Per-row bounds come from `data`, so predictor-only `data` raises clearly."""
+    rng = np.random.default_rng(14524)
+    df = pd.DataFrame({"y": rng.uniform(-1.5, 1.5, 5), "lb": -2.0, "other": 0.0})
+    model = bmb.Model("truncated(y, lb=lb) ~ 1", df, family="gaussian")
+    model.build()
+    posterior, _, _ = _gaussian_posterior(rng)
+
+    with pytest.raises(ValueError, match="every column of the response term"):
+        _log_likelihood_with_y(
+            model, posterior, pd.DataFrame({"other": np.zeros(4)}), np.zeros(4)
+        )
+
+
+def test_log_likelihood_censored_explicit_y_is_the_censoring_point():
+    """With `y` passed, a censored row is censored at its value of `y`."""
+    rng = np.random.default_rng(14525)
+    status = ["none", "left", "right", "left"]
+    df = pd.DataFrame({"y": rng.uniform(-1.5, 1.5, 4), "status": status})
+    model = bmb.Model("censored(y, status) ~ 1", df, family="gaussian")
+    model.build()
+    posterior, loc, scale = _gaussian_posterior(rng)
+    y_new = df["y"].to_numpy() + 0.25
+
+    result = _log_likelihood_with_y(model, posterior, df, y_new)
+
+    by_status = {
+        "none": stats.norm.logpdf(y_new, loc, scale),
+        "left": stats.norm.logcdf(y_new, loc, scale),
+        "right": stats.norm.logsf(y_new, loc, scale),
+    }
+    expected = np.stack([by_status[s][..., i] for i, s in enumerate(status)], axis=-1)
+    np.testing.assert_allclose(result.values, expected, rtol=1e-5)
+
+
 def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
     """Post-sampling likelihoods honor the requested JAX compiler."""
     compile_calls = []
