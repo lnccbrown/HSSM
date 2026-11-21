@@ -111,6 +111,28 @@ def _get_regression_term_prior(prior: dict[str, Any], term: str) -> Any:
     return prior.get(term, prior.get("common"))
 
 
+def _has_same_rows(data: pd.DataFrame, reference: pd.DataFrame) -> bool:
+    """Check that `data` holds the rows of `reference`, in the same order.
+
+    Only the values of the columns the two frames share are compared, so a
+    different index, other dtypes (e.g. int and float) or extra columns do not
+    make the rows differ. Missing values compare equal to each other.
+    """
+    shared = [col for col in reference.columns if col in data.columns]
+    if len(data) != len(reference) or not shared:
+        return False
+    for col in shared:
+        values = data[col].to_numpy()
+        reference_values = reference[col].to_numpy()
+        try:
+            same = np.array_equal(values, reference_values, equal_nan=True)
+        except TypeError:  # equal_nan does not apply to non-numeric columns
+            same = np.array_equal(values, reference_values)
+        if not same:
+            return False
+    return True
+
+
 class classproperty:
     """A decorator that combines the behavior of @property and @classmethod.
 
@@ -1182,27 +1204,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             A DataTree object with the posterior predictive samples added,
             or None if inplace is True.
         """
-        # A fixed vector holds one value per row of the model's data, so there is
-        # no value to simulate other rows with (#1453). The plotting functions
-        # pass `data=self.data`, which is allowed.
-        fixed_vector_names = [
-            name
-            for name, param in self.params.items()
-            if isinstance(param.prior, np.ndarray)
-        ]
-        if (
-            data is not None
-            and kind == "response"
-            and fixed_vector_names
-            and not data.equals(self.data)
-        ):
-            raise ValueError(
-                f"Parameter(s) {fixed_vector_names} are fixed to a vector with one "
-                "value per row of the data the model was built on, so they have no "
-                "values for the rows of `data`. Call sample_posterior_predictive "
-                "without `data`, or build a model on the new data with its own "
-                "vector."
-            )
+        self._check_fixed_vectors_for_new_data(data, kind)
 
         if dt is None:
             if self._inference_obj is None:
@@ -1371,8 +1373,72 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return plotting.plot_model_cartoon(self, **kwargs)
 
     def predict(self, **kwargs) -> DataTree:
-        """Generate samples from the predictive distribution."""
+        """Generate samples from the predictive distribution.
+
+        Raises
+        ------
+        ValueError
+            If `data` with rows other than the model's own is given with
+            `kind="response"` and a parameter is fixed to a vector (see
+            `sample_posterior_predictive`).
+        """
+        self._check_fixed_vectors_for_new_data(
+            kwargs.get("data"), kwargs.get("kind", "response_params")
+        )
         return self.model.predict(**kwargs)
+
+    def _reject_fixed_vectors(self) -> None:
+        """Raise for parameters fixed to a vector in classes that do not use it.
+
+        RLSSM and aDDM build their distribution without the fixed vectors, so
+        such a parameter would be fitted and simulated with Bambi's scalar 0.0
+        placeholder on every row, without a warning (#1453).
+        """
+        fixed_vector_names = [
+            name
+            for name, param in self.params.items()
+            if isinstance(param.prior, np.ndarray)
+        ]
+        if fixed_vector_names:
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support parameters fixed to a "
+                f"vector ({fixed_vector_names}): the likelihood and the simulator "
+                "would use 0.0 in their place. Fix them to a scalar, or give them "
+                "a prior or a regression."
+            )
+
+    def _check_fixed_vectors_for_new_data(
+        self, data: pd.DataFrame | None, kind: str
+    ) -> None:
+        """Refuse to simulate fixed-vector parameters on rows they have no value for.
+
+        A fixed vector holds one value per row of the model's data, and the RV
+        simulates row *i* of `self.data` with value *i* (#1453; with
+        `missing_data` or `deadline`, this also needs the vector reordered with
+        the rows, #1451). So
+        `data` is accepted only when its rows are the model's rows, in the same
+        order: the columns it shares with `self.data` must hold the same values.
+        The index, the dtypes and extra columns do not matter. The plotting
+        functions pass `data=self.data`, which is accepted.
+        """
+        if data is None or kind != "response":
+            return
+        fixed_vector_names = [
+            name
+            for name, param in self.params.items()
+            if isinstance(param.prior, np.ndarray)
+        ]
+        if not fixed_vector_names or _has_same_rows(data, self.data):
+            return
+        raise ValueError(
+            f"Parameter(s) {fixed_vector_names} are fixed to a vector with one value "
+            "per row of the model's data, so `data` must hold those rows in the "
+            "order of `model.data`. The rows of `data` differ from them: they are "
+            "new rows, or the model's rows in another order (with `missing_data` "
+            "or `deadline`, the model moves the missing-RT rows to the top; pass "
+            "`model.data`). Omit `data`, or build a model on the new data with "
+            "its own vector."
+        )
 
     def sample_do(
         self, params: dict[str, Any], draws: int = 100, return_model=False, **kwargs

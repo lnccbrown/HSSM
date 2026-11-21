@@ -117,6 +117,11 @@ class aDDM(HSSMBase):
             **kwargs,
         )
 
+    def _validate_fixed_vectors(self) -> None:
+        """Reject parameters fixed to a vector, which this class does not use."""
+        super()._validate_fixed_vectors()
+        self._reject_fixed_vectors()
+
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Build a ``pm.Distribution`` from the pre-built aDDM log-likelihood Op.
 

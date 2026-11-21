@@ -280,6 +280,15 @@ class TestRLSSMInit:
         with pytest.raises(NotImplementedError, match="deadline"):
             RLSSM(data=rldm_data, model_config=rlssm_config, deadline=True)
 
+    def test_rlssm_fixed_vector_raises(self, rldm_data, rlssm_config) -> None:
+        """A parameter fixed to a vector would be used as 0.0, so it raises (#1453)."""
+        with pytest.raises(NotImplementedError, match="fixed to a vector"):
+            RLSSM(
+                data=rldm_data,
+                model_config=rlssm_config,
+                a=np.full(len(rldm_data), 1.0),
+            )
+
     def test_rlssm_loglik_missing_data_init_raises(
         self, rldm_data, rlssm_config
     ) -> None:

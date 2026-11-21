@@ -111,6 +111,13 @@ def test_addm_rejects_invalid_setting_presets(setting_name, invalid_value, prese
     make_params.assert_not_called()
 
 
+def test_fixed_vector_raises():
+    """A parameter fixed to a vector would be used as 0.0, so it raises (#1453)."""
+    df = make_addm_dataframe(20)
+    with pytest.raises(NotImplementedError, match="fixed to a vector"):
+        hssm.aDDM(data=df, a=np.full(len(df), 1.0))
+
+
 def test_is_hssmbase_subclass():
     """``aDDM`` is an ``HSSMBase`` subclass."""
     assert issubclass(hssm.aDDM, HSSMBase)

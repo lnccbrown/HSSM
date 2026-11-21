@@ -371,8 +371,18 @@ def make_hssm_rv(
                 try:
                     batch_shape = np.broadcast_shapes(*param_shapes)
                 except ValueError as err:
-                    if not fixed_vectors:
-                        raise
+                    other_shapes = [
+                        shape
+                        for i, shape in enumerate(param_shapes)
+                        if i not in fixed_vectors
+                    ]
+                    # Blame the fixed vector only when the other parameters
+                    # broadcast with each other; otherwise the mismatch is
+                    # elsewhere, and the original error says where.
+                    try:
+                        np.broadcast_shapes(*other_shapes)
+                    except ValueError:
+                        raise err from None
                     # The vector has one value per row the model was built on,
                     # so it cannot be matched to any other set of rows.
                     raise ValueError(
@@ -736,9 +746,22 @@ def make_distribution(
     type[pm.Distribution]
         A pymc.Distribution that uses the log-likelihood function.
     """
-    if isinstance(rv, type) and issubclass(rv, RandomVariable):
-        rv_instance = rv()
-    elif not isinstance(rv, type) and isinstance(rv, RandomVariable):
+    is_rv_class = isinstance(rv, type) and issubclass(rv, RandomVariable)
+    is_rv_instance = not isinstance(rv, type) and isinstance(rv, RandomVariable)
+    if fixed_vector_params and (is_rv_class or is_rv_instance):
+        # A ready-made RandomVariable is used as given: its rng_fn receives the
+        # scalar 0.0 placeholder for these parameters (#1453).
+        _logger.warning(
+            "Parameter(s) %s are fixed to a vector, but `rv` is a RandomVariable, "
+            "whose rng_fn receives the placeholder 0.0 for them, not the vector. "
+            "The likelihood uses the vector; draws from the predictive "
+            "distributions do not. Pass a simulator function or a model name as "
+            "`rv` to simulate with the vector.",
+            sorted(fixed_vector_params),
+        )
+    if is_rv_class:
+        rv_instance = cast("type[RandomVariable]", rv)()
+    elif is_rv_instance:
         rv_instance = rv
     elif callable(rv):
         random_variable = make_hssm_rv(

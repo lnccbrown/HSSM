@@ -188,6 +188,39 @@ def test_make_hssm_rv_simulates_fixed_vector_p_outlier():
     assert np.all(sims[..., ~lapsed, 0] < 10.0)
 
 
+def test_make_hssm_rv_reports_other_mismatches_as_they_are():
+    """A shape mismatch between other parameters is not blamed on the fixed vector.
+
+    Only when the other parameters broadcast together does the error point at
+    the fixed vector; otherwise numpy's own broadcasting error is raised.
+    """
+    t_fixed = np.array([0.2, 1.5, 0.2, 1.5, 0.2, 1.5])
+    rv = distribution_utils.make_hssm_rv(
+        "ddm", ["v", "a", "z", "t"], fixed_vector_params={"t": t_fixed}
+    )
+    rng = np.random.default_rng(42)
+    v = np.full((1, 3, 5), 0.5)
+    a = np.full((1, 3, 4), 1.0)
+    z = np.full((1, 1, 1), 0.5)
+    with pytest.raises(ValueError, match="broadcast") as excinfo:
+        rv.rng_fn(rng, v, a, z, np.zeros((1, 1, 1)), None)
+    assert "fixed to a vector" not in str(excinfo.value)
+
+
+@pytest.mark.parametrize("as_instance", [False, True])
+def test_make_distribution_warns_fixed_vector_with_random_variable(caplog, as_instance):
+    """A ready-made RandomVariable cannot simulate with a fixed vector (#1453)."""
+    rv_class = distribution_utils.make_hssm_rv("ddm", ["v", "a", "z", "t"])
+    with caplog.at_level("WARNING", logger="hssm"):
+        make_distribution(
+            rv=rv_class() if as_instance else rv_class,
+            loglik=logp_ddm,
+            list_params=["v", "a", "z", "t"],
+            fixed_vector_params={"t": np.array([0.2, 1.5])},
+        )
+    assert "rng_fn receives the placeholder 0.0" in caplog.text
+
+
 def test_apply_lapse_model_rejects_numeric_lapse_distribution():
     """Numeric choice-only lapse values cannot simulate RT lapse samples."""
     sims_out = np.asarray([[0.2, 0.0], [0.3, 1.0]], dtype=float)

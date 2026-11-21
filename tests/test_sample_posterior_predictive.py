@@ -246,3 +246,64 @@ def test_posterior_predictive_rejects_new_data_with_fixed_vector_params(
         model.sample_posterior_predictive(
             dt=minimal_posterior_datatree(), data=model.data.iloc[:10]
         )
+
+
+def _fixed_t_posterior():
+    """Two posterior draws of the free parameters of ``_fixed_t_model``."""
+    values = {"v": [0.4, 0.6], "a": [1.0, 1.2], "z": [0.5, 0.5]}
+    posterior = xr.Dataset(
+        {
+            name: (("chain", "draw"), np.array([draws]))
+            for name, draws in values.items()
+        },
+        coords={"chain": [0], "draw": [0, 1]},
+    )
+    return xr.DataTree.from_dict({"posterior": posterior})
+
+
+def test_posterior_predictive_accepts_model_rows_with_fixed_vector_params():
+    """The model's rows are accepted whatever the index, dtypes or extra columns."""
+    model = _fixed_t_model()
+    data = model.data.copy()
+    data.index = data.index + 100
+    data["response"] = data["response"].astype("float32")
+    data["extra"] = 1.0
+
+    dt = model.sample_posterior_predictive(
+        dt=_fixed_t_posterior(), data=data, inplace=False
+    )
+    sims = dt["posterior_predictive"]["rt,response"].values
+    assert sims.shape[-2:] == (FIXED_T.size, 2)
+    assert np.all(sims[..., 0] > FIXED_T)
+
+
+def test_posterior_predictive_rejects_reordered_rows_with_fixed_vector_params(
+    minimal_posterior_datatree,
+):
+    """The model's rows in another order would pair rows with other rows' values."""
+    model = _fixed_t_model()
+
+    with pytest.raises(ValueError, match="in the order of `model.data`"):
+        model.sample_posterior_predictive(
+            dt=minimal_posterior_datatree(), data=model.data.iloc[::-1]
+        )
+
+
+def test_predict_rejects_new_data_with_fixed_vector_params():
+    """`predict` applies the same check as `sample_posterior_predictive` (#1453).
+
+    In an intercept-only model the other parameters broadcast against any rows,
+    so without the check new rows of the same length would be simulated with the
+    model's vector, without an error.
+    """
+    model = _fixed_t_model()
+    new_data = model.data.copy()
+    new_data["rt"] = new_data["rt"] + 0.5
+
+    with pytest.raises(ValueError, match="fixed to a vector"):
+        model.predict(idata=_fixed_t_posterior(), kind="response", data=new_data)
+
+    # The parameters themselves need no fixed-vector value for new rows.
+    model.predict(
+        idata=_fixed_t_posterior(), kind="response_params", data=new_data, inplace=False
+    )
