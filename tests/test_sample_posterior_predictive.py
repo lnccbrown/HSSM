@@ -300,10 +300,32 @@ def test_predict_rejects_new_data_with_fixed_vector_params():
     new_data = model.data.copy()
     new_data["rt"] = new_data["rt"] + 0.5
 
-    with pytest.raises(ValueError, match="fixed to a vector"):
-        model.predict(idata=_fixed_t_posterior(), kind="response", data=new_data)
+    # "pps" is the deprecated alias of "response" in Bambi 0.19 and 0.20.
+    for kind in ("response", "pps"):
+        with pytest.raises(ValueError, match="fixed to a vector"):
+            model.predict(idata=_fixed_t_posterior(), kind=kind, data=new_data)
 
     # The parameters themselves need no fixed-vector value for new rows.
     model.predict(
         idata=_fixed_t_posterior(), kind="response_params", data=new_data, inplace=False
     )
+
+
+def test_has_same_rows_treats_missing_values_as_equal():
+    """Missing values match in numeric and object columns; other values must match."""
+    from hssm.base import _has_same_rows
+
+    reference = pd.DataFrame(
+        {"rt": [0.5, np.nan, 0.7], "label": ["a", np.nan, None]}, index=[0, 1, 2]
+    )
+    same = reference.copy()
+    same.index = [10, 11, 12]
+    assert _has_same_rows(same, reference)
+
+    for col, value in [("rt", 0.6), ("label", "b")]:
+        changed = reference.copy()
+        changed.loc[1, col] = value
+        assert not _has_same_rows(changed, reference)
+    changed = reference.copy()
+    changed.loc[0, "label"] = np.nan
+    assert not _has_same_rows(changed, reference)

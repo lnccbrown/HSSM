@@ -124,11 +124,12 @@ def _has_same_rows(data: pd.DataFrame, reference: pd.DataFrame) -> bool:
     for col in shared:
         values = data[col].to_numpy()
         reference_values = reference[col].to_numpy()
-        try:
-            same = np.array_equal(values, reference_values, equal_nan=True)
-        except TypeError:  # equal_nan does not apply to non-numeric columns
-            same = np.array_equal(values, reference_values)
-        if not same:
+        # Compare the missing-value masks, then the other values: NaN != NaN, and
+        # np.array_equal(..., equal_nan=True) raises TypeError on object columns.
+        missing = np.asarray(pd.isna(values))
+        if not np.array_equal(missing, np.asarray(pd.isna(reference_values))):
+            return False
+        if not np.array_equal(values[~missing], reference_values[~missing]):
             return False
     return True
 
@@ -1421,7 +1422,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         The index, the dtypes and extra columns do not matter. The plotting
         functions pass `data=self.data`, which is accepted.
         """
-        if data is None or kind != "response":
+        # Bambi 0.19 and 0.20 still accept "pps", a deprecated alias of "response".
+        if data is None or kind not in ("response", "pps"):
             return
         fixed_vector_names = [
             name
