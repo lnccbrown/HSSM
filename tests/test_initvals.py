@@ -678,7 +678,14 @@ def test_seeded_hierarchical_sample_reproducible_across_processes():
     The initval jitter used the unseeded global numpy RNG, so group-term
     offsets started (and the posterior ended) differently in every process.
     """
-    env = {**os.environ, "PYTHONHASHSEED": "0"}
+    # PyTensor's numba backend compiles with fast-math, and newly compiled code
+    # rounds differently from code loaded from its on-disk cache. A process
+    # that finds the other's cache entries would then disagree with it, so
+    # turn fast-math off and compare HSSM's own seeding only.
+    flags = ",".join(
+        filter(None, [os.environ.get("PYTENSOR_FLAGS"), "numba__fastmath=False"])
+    )
+    env = {**os.environ, "PYTHONHASHSEED": "0", "PYTENSOR_FLAGS": flags}
     procs = [
         subprocess.Popen(
             [sys.executable, "-c", _SEEDED_HIER_FIT],
