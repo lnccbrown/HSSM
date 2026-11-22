@@ -9,6 +9,7 @@ import bambi as bmb
 import numpy as np
 import pandas as pd
 import pymc as pm
+import pytensor
 import pytensor.tensor as pt
 import pytest
 
@@ -33,7 +34,20 @@ from hssm.likelihoods.analytical import DDM, logp_ddm
 from hssm.likelihoods.blackbox import logp_full_ddm
 from hssm.register import register_model
 
-hssm.set_floatX("float32")
+
+@pytest.fixture(autouse=True)
+def _float32():
+    """Run every test in this file in float32, whatever ran before it.
+
+    The expected values below are float32 ones. Setting floatX at import does
+    not give the tests that precision: pytest imports every test module before
+    the first test runs, and any earlier test can leave another floatX behind.
+    """
+    floatX = pytensor.config.floatX
+    hssm.set_floatX("float32")
+    yield
+    hssm.set_floatX(floatX)
+
 
 # LOGP_LB as these float32 graphs store it.
 FLOOR = np.float32(LOGP_LB)
@@ -216,7 +230,7 @@ def test_apply_param_bounds_to_loglik():
         apply_param_bounds_to_loglik(
             logp, list_params, scalar_in_bound, scalar_out_of_bound, bounds=bounds
         ).eval(),
-        -66.1,
+        FLOOR,
     )
 
     results_vector = np.asarray(
@@ -225,7 +239,7 @@ def test_apply_param_bounds_to_loglik():
         ).eval(),
     )
 
-    np.testing.assert_array_equal(results_vector[out_of_bound_indices], -66.1)
+    np.testing.assert_array_equal(results_vector[out_of_bound_indices], FLOOR)
 
     np.testing.assert_array_equal(
         results_vector[~out_of_bound_indices], logp[~out_of_bound_indices]
@@ -264,12 +278,12 @@ def test_make_distribution():
 
     np.testing.assert_array_equal(
         Dist.logp(data, scalar_in_bound, scalar_out_of_bound).eval(),
-        -66.1,
+        FLOOR,
     )
 
     results_vector = np.asarray(Dist.logp(data, scalar_in_bound, random_vector).eval())
 
-    np.testing.assert_array_equal(results_vector[out_of_bound_indices], -66.1)
+    np.testing.assert_array_equal(results_vector[out_of_bound_indices], FLOOR)
 
     np.testing.assert_array_equal(
         results_vector[~out_of_bound_indices],
@@ -384,9 +398,11 @@ def test_extra_fields(data_ddm):
 
     true_values = dict(v=0.5, a=1.5, z=0.5, t=0.5)
 
-    np.testing.assert_almost_equal(
+    # rtol, not decimals: one float32 ulp of these values is about 2.4e-7.
+    np.testing.assert_allclose(
         pm.logp(DDM.dist(**true_values), data_ddm).eval(),
         pm.logp(DDM_WITH_XY.dist(**true_values), data_ddm).eval() / 2.0,
+        rtol=1e-6,
     )
 
     data_ddm_copy = data_ddm.copy()
@@ -401,10 +417,11 @@ def test_extra_fields(data_ddm):
         lapse=None,
     )
 
-    np.testing.assert_almost_equal(
+    np.testing.assert_allclose(
         pm.logp(DDM.dist(**true_values), data_ddm).eval(),
         pm.logp(ddm_model_xy.model_distribution.dist(**true_values), data_ddm).eval()
         / 2.0,
+        rtol=1e-6,
     )
 
     ddm_model = hssm.HSSM(data=data_ddm)
@@ -425,11 +442,12 @@ def test_extra_fields(data_ddm):
         + 0.05
         * pt.exp(pm.logp(pm.Uniform.dist(lower=0.0, upper=20.0), data_ddm["rt"].values))
     )
-    np.testing.assert_almost_equal(
+    np.testing.assert_allclose(
         pm.logp(
             ddm_model.model_distribution.dist(**true_values, p_outlier=0.05), data_ddm
         ).eval(),
         ddm_model_p_logp_lapse.eval(),
+        rtol=1e-6,
     )
 
 
