@@ -60,6 +60,8 @@ This version includes the following changes:
 
 28. **Posterior predictive draws can be seeded** (closes #1473). `sample_posterior_predictive` takes `random_seed` (an `int` or a `numpy.random.Generator`) and passes it to bambi's `predict`; in safe mode each chunk of draws gets its own seed spawned from it. `plot_predictive` and `plot_quantile_probability` take `random_seed` too: it picks the posterior draws they use and, when they sample the posterior predictive themselves, the simulated responses, so a seeded plot is the same on every run. Without a seed nothing changes.
 
+29. **A formula that uses a data column named like a model parameter now fails with a clear error** (closes #1471). For example, `cavanagh_theta`'s `theta` column in an angle-family model, which has a `theta` parameter: `a ~ 1 + theta` failed later with `Variable name a_theta already exists`, and with another regression in the model it built without any message. HSSM now raises a `ValueError` at construction that names the column and suggests renaming it.
+
 #### Breaking changes that require migration:
 
 1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.
