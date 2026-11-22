@@ -32,6 +32,9 @@ from hssm.register import register_model
 
 hssm.set_floatX("float32")
 
+# LOGP_LB as these float32 graphs store it.
+FLOOR = np.float32(LOGP_LB)
+
 # Response times for the ndt_edge_shift wiring tests. With t = 0.5 and st = 0.1
 # the candidate edges are 0.5 (no declaration), 0.45 (scale 0.5), 0.4 (scale 1.0)
 # and 0.2 (scale 3.0); every grid point keeps 0.01 clear of all of them, so
@@ -60,7 +63,7 @@ def _ndt_grid_data():
 
 def _floored_at(edge):
     """Return the expected logp on the grid for a floor at ``edge``."""
-    return np.where(NDT_RT_GRID <= edge, LOGP_LB, 1.0)
+    return np.where(NDT_RT_GRID <= edge, FLOOR, 1.0)
 
 
 def test_make_hssm_rv():
@@ -281,7 +284,7 @@ def test_make_distribution_floors_at_t_without_declaration():
 
     result = np.asarray(Dist.logp(data, 0.5, 0.5, 0.5, 0.5, 0.2).eval())
 
-    np.testing.assert_array_equal(result, [LOGP_LB] * 5 + [1.0])
+    np.testing.assert_array_equal(result, [FLOOR] * 5 + [1.0])
 
 
 @pytest.mark.parametrize(
@@ -434,7 +437,7 @@ def test_ensure_positive_ndt(edge, trialwise):
     after = ensure_positive_ndt(data, logp, lower_edge).eval()
     mask = (rt - edge <= 1e-15) & (rt != -999.0)
 
-    assert np.all(after[mask] == LOGP_LB)
+    assert np.all(after[mask] == FLOOR)
     assert np.all(after[~mask] == logp[~mask])
 
 
