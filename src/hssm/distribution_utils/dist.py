@@ -17,6 +17,7 @@ import pytensor
 import pytensor.tensor as pt
 from bambi.backend.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
+from ssms.config import get_model_registry
 from ssms.hssm_support import (
     get_simulator_fun_internal,
     validate_simulator_fun,
@@ -254,6 +255,14 @@ def make_hssm_rv(
     """
     simulator_fun_internal = get_simulator_fun_internal(simulator_fun)
     model_name, choices, obs_dim_int = validate_simulator_fun(simulator_fun_internal)
+
+    # ssm-simulators up to 0.16.0 reports its fallback choices [0, 1, 2] for a
+    # model registered after import. Lapse responses are drawn from `choices`,
+    # so a model named by a string takes its own from the live registry.
+    if isinstance(simulator_fun, str):
+        registry = get_model_registry()
+        if registry.has_model(simulator_fun):
+            choices = registry.get(simulator_fun).get("choices", choices)
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")

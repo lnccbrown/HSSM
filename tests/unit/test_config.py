@@ -272,6 +272,13 @@ class TestSsmsRegisteredModel:
             "t": (0.1, 1.5),
         }
         assert config.choices == (-1, 1)
+        assert config.ndt_edge_shift is None
+
+    def test_from_defaults_takes_the_support_edge_from_ssms(self):
+        """ssms simulates full_ddm_rv with RTs down to t - st and declares it."""
+        config = Config.from_defaults("full_ddm_rv", "approx_differentiable")
+
+        assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}
 
     def test_from_defaults_ssms_builtin(self):
         """An ssms built-in HSSM does not ship resolves the same way."""

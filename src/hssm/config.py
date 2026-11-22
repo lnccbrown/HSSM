@@ -292,7 +292,8 @@ class Config(BaseModelConfig):
             # A model HSSM does not ship but ssm-simulators knows (a built-in or
             # one registered with `register_model_config`): its ssms config
             # names the parameters, their bounds (for a LAN trained on it, the
-            # training range) and the choices.
+            # training range), the choices and, where the simulator's RTs start
+            # below `t`, the support edge.
             ssms_config = _get_ssms_model_config(model_name)
             if ssms_config is not None:
                 return Config(
@@ -302,6 +303,7 @@ class Config(BaseModelConfig):
                     list_params=list(ssms_config["params"]),
                     bounds=_bounds_from_ssms(ssms_config),
                     choices=tuple(ssms_config.get("choices", DEFAULT_SSM_CHOICES)),
+                    ndt_edge_shift=ssms_config.get("ndt_edge_shift"),
                 )
 
             return Config(
