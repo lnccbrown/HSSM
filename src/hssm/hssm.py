@@ -193,7 +193,12 @@ class HSSM(HSSMBase):
         following:
 
         - `"safe"`: fills eligible missing common and group-specific regression-term
-        priors with HSSM's weakly informative defaults.
+        priors with HSSM's weakly informative defaults. An identity-link intercept
+        of a parameter with finite bounds gets a Normal centered in the bounds,
+        with an SD of a quarter of their width (`ddm`, `ddm_sdv` and `full_ddm`
+        without a LAN likelihood use HDDM-based priors instead). If the bounds are
+        much wider than the parameter's plausible values, that prior is nearly
+        flat: give the parameter an explicit `prior`.
         - `None`: leaves missing regression-term priors to Bambi. This is not
         recommended for hierarchical models.
 
