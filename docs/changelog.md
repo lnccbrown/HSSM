@@ -50,6 +50,8 @@ This version includes the following changes:
 
 23. **Documentation: the site uses the shared HSSM design-system theme** (#1501, closes #1500). The docs now match the HSSM website: an indigo header, a navy dark mode, IBM Plex Sans and Mono (self-hosted, so pages no longer request Google Fonts), the design system's code colours in code blocks and notebook cells, and plots on a white card in dark mode. The theme is vendored from HSSMSpine's `docs-brand/` bundle; `mkdocs.yml` now starts from its shared base (`INHERIT: docs/overrides/.mkdocs-brand.yml`), which owns the palette, fonts, logo and stylesheets. The home page shows the on-dark HSSM logo in dark mode.
 
+24. **`plot_quantile_probability` stays readable when conditions have similar accuracy** (closes #1488). The observed markers had seaborn's white edge, which cut each quantile line around its markers; where two conditions sit at nearly the same proportion (`LL` and `WW` in `cavanagh_theta`), the short step between them vanished under two touching markers and one line read as three. Markers are now drawn without an edge; `data_kwargs={"markeredgewidth": ...}` (or `mew`) still sets one. The condition labels on the top axis overlapped for the same conditions; a label that would overlap its left neighbour now sits one row higher.
+
 #### Breaking changes that require migration:
 
 1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.
