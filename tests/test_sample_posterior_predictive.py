@@ -1,6 +1,7 @@
 """Tests for HSSM posterior-predictive sampling."""
 
 import numpy as np
+import pandas as pd
 import pytest
 import xarray as xr
 
@@ -99,6 +100,31 @@ def test_sample_posterior_predictive(
         raise
 
 
+@pytest.mark.parametrize("safe_mode", [True, False])
+def test_sample_posterior_predictive_random_seed(cav_dt, cavanagh_test, safe_mode):
+    """The same random_seed gives the same draws; another seed does not."""
+    model = hssm.HSSM(
+        data=cavanagh_test,
+        include=[{"name": "v", "formula": "v ~ theta + (1|participant_id)"}],
+    )
+    if "posterior_predictive" in cav_dt:
+        del cav_dt["posterior_predictive"]
+
+    def simulate(seed):
+        # 12 draws make two chunks in safe mode
+        result = model.sample_posterior_predictive(
+            dt=cav_dt.copy(),
+            draws=12,
+            safe_mode=safe_mode,
+            inplace=False,
+            random_seed=seed,
+        )
+        return result["posterior_predictive"]["rt,response"].values
+
+    np.testing.assert_array_equal(simulate(1), simulate(1))
+    assert not np.array_equal(simulate(1), simulate(2))
+
+
 def test_sample_posterior_predictive_uses_attached_traces_for_response_params(
     data_ddm, minimal_posterior_datatree, monkeypatch
 ):
@@ -161,3 +187,28 @@ def test_sample_posterior_predictive_replaces_existing_group_inplace(
         np.array([[1.0, 2.0]]),
     )
     assert "pre-existing posterior_predictive group deleted" in caplog.text
+
+
+@pytest.mark.parametrize("model", ["ddm", "softmax_inv_temperature_2"])
+def test_posterior_predictive_with_p_outlier_regression(model):
+    """A trial-wise ``p_outlier`` alone still gives one draw per trial.
+
+    A regression on any other parameter hides a missing broadcast (#1416), so
+    every other parameter stays intercept-only.
+    """
+    rng = np.random.default_rng(0)
+    if model == "ddm":
+        theta = {"v": 0.5, "a": 1.5, "z": 0.5, "t": 0.3}
+        data = hssm.simulate_data(model="ddm", theta=theta, size=100, random_state=1)
+    else:
+        data = pd.DataFrame({"response": rng.choice([-1, 1], size=100)})
+    hssm_model = hssm.HSSM(
+        data=data.assign(x=rng.normal(size=100)),
+        model=model,
+        p_outlier={"formula": "p_outlier ~ 1 + x", "link": "logit"},
+    )
+    hssm_model.sample(draws=10, tune=10, chains=1, cores=1, progressbar=False)
+
+    hssm_model.sample_posterior_predictive(draws=5)
+
+    assert hssm_model.traces["posterior_predictive"].sizes["__obs__"] == 100

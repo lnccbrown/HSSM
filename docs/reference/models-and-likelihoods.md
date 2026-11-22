@@ -29,6 +29,7 @@ model.
 | `poisson_race` | `analytical` | `analytical` | `r1`, `r2`, `k1`, `k2`, `t` | `-1`, `1` |
 | `softmax_inv_temperature_2` | `analytical` | `analytical` | `beta`, `logit1` | `-1`, `1` |
 | `softmax_inv_temperature_3` | `analytical` | `analytical` | `beta`, `logit1`, `logit2` | `0`, `1`, `2` |
+| `softmax_inv_temperature_4` | `analytical` | `analytical` | `beta`, `logit1`, `logit2`, `logit3` | `0`, `1`, `2`, `3` |
 
 ## Specialized model families
 
