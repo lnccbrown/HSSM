@@ -763,6 +763,8 @@ def make_distribution(
         _params = list_params
 
         @classmethod
+        # PyMC idiom (cf. pm.Flat.dist): named params in, a list to super().dist.
+        # pyrefly: ignore[bad-override]
         def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
             dist_params = [
                 pt.as_tensor_variable(pm.pytensorf.floatX(kwargs[param]))
