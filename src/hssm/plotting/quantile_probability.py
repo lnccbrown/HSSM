@@ -359,7 +359,9 @@ def _plot_quantile_probability_1D(
     for tick in secax.xaxis.get_major_ticks():
         box = tick.label2.get_window_extent()
         if box.x0 < right_edge + box.height / 2:
-            tick.set_pad(tick.get_pad() + tick.label2.get_size())
+            # matplotlib's stubs type the pad as optional and the size as
+            # float | str; both are floats here
+            tick.set_pad((tick.get_pad() or 0.0) + float(tick.label2.get_fontsize()))
         else:
             right_edge = box.x1
 
