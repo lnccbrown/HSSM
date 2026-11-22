@@ -28,7 +28,6 @@ from hssm.defaults import (
 from hssm.distribution_utils import (
     assemble_callables,
     make_distribution,
-    make_hssm_rv,
     make_likelihood_callable,
     make_missing_data_callable,
 )
@@ -168,7 +167,9 @@ class HSSM(HSSMBase):
         likelihood with weight `p_outlier`, marginalised per row type: observed
         rows use the lapse density at the observed `rt`; missing-RT rows (choice
         observed, no deadline) use `1 / n_choices`; omission rows (deadline) use
-        the lapse survival probability at the deadline.
+        the lapse survival probability at the deadline. Choice-only models accept
+        only the uniform lapse over choices, `1 / n_choices`, which is their
+        default; any other value raises a `ValueError`.
     global_formula : optional
         A string that specifies a regressions formula which will be used for all model
         parameters. If you specify parameter-wise regressions in addition, these will
@@ -196,7 +197,12 @@ class HSSM(HSSMBase):
         following:
 
         - `"safe"`: fills eligible missing common and group-specific regression-term
-        priors with HSSM's weakly informative defaults.
+        priors with HSSM's weakly informative defaults. An identity-link intercept
+        of a parameter with finite bounds gets a Normal centered in the bounds,
+        with an SD of a quarter of their width (`ddm`, `ddm_sdv` and `full_ddm`
+        without a LAN likelihood use HDDM-based priors instead). If the bounds are
+        much wider than the parameter's plausible values, that prior is nearly
+        flat: give the parameter an explicit `prior`.
         - `None`: leaves missing regression-term priors to Bambi. This is not
         recommended for hierarchical models.
 
@@ -440,33 +446,6 @@ class HSSM(HSSMBase):
                 self.missing_data_value,
             )
 
-        # TODO: This is a temporary solution to allow choice-only models without a
-        # specified simulator in ssm-simulators
-        if self.is_choice_only and self.model_config.rv is None:
-            _logger.warning(
-                "You are building a choice-only model without specifying "
-                "a RandomVariable class. Using a dummy simulator function. "
-                "Simulating data from this model will result in an error."
-            )
-
-            def dummy_simulator_func(*args, **kwargs):
-                raise NotImplementedError(
-                    "You are trying to simulate data from a choice-only model "
-                    "without specifying a RandomVariable class. Please specify "
-                    "a RandomVariable class via the `model_config.rv` argument."
-                )
-
-            setattr(dummy_simulator_func, "model_name", self.model_name)
-            setattr(dummy_simulator_func, "choices", self.choices)
-            setattr(dummy_simulator_func, "obs_dim", 1)
-
-            self.model_config.rv = make_hssm_rv(
-                dummy_simulator_func,
-                list_params=self.list_params or [],
-                lapse=self.lapse,
-                is_choice_only=True,
-            )
-
         self.data = typing_cast("pd.DataFrame", _rearrange_data(self.data))
 
         # Collect fixed-vector params to substitute in the distribution logp
@@ -483,12 +462,20 @@ class HSSM(HSSMBase):
         # HSSM.__init__ always builds a Config, which is where ndt_edge_shift lives.
         ndt_edge_shift = typing_cast("Config", self.model_config).ndt_edge_shift
 
+        # make_distribution() reads a float lapse as a log probability, while
+        # _check_lapse() sets the choice-only lapse as the probability 1 / n_choices.
+        lapse = (
+            float(np.log(self.lapse))
+            if self.is_choice_only and isinstance(self.lapse, int | float)
+            else self.lapse
+        )
+
         return make_distribution(
             rv=rv_name,
             loglik=self.loglik,
             list_params=_list_params,
             bounds=self.bounds,
-            lapse=self.lapse,
+            lapse=lapse,
             extra_fields=(
                 None
                 if not self.extra_fields

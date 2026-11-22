@@ -27,6 +27,7 @@ import seaborn as sns
 import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
+from bambi.utils import get_aliased_name
 from pymc.model.transform.conditioning import do
 from pymc.pytensorf import resolve_backend_compile_kwargs
 from pymc.variational import Approximation
@@ -211,7 +212,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         following:
 
         - `"safe"`: fills eligible missing common and group-specific regression-term
-        priors with HSSM's weakly informative defaults.
+        priors with HSSM's weakly informative defaults. An identity-link intercept
+        of a parameter with finite bounds gets a Normal centered in the bounds,
+        with an SD of a quarter of their width (`ddm`, `ddm_sdv` and `full_ddm`
+        without a LAN likelihood use HDDM-based priors instead). If the bounds are
+        much wider than the parameter's plausible values, that prior is nearly
+        flat: give the parameter an explicit `prior`.
         - `None`: leaves missing regression-term priors to Bambi. This is not
         recommended for hierarchical models.
 
@@ -463,6 +469,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self.list_params,
             self.link,
             self._parent,
+            is_choice_only=self.is_choice_only,
         )
 
         # Targeted statistical-identifiability warnings for common/group or
@@ -1125,6 +1132,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         kind: Literal["response", "response_params"] = "response",
         draws: int | float | list[int] | np.ndarray | None = None,
         safe_mode: bool = True,
+        random_seed: int | np.random.Generator | None = None,
     ) -> DataTree | None:
         """Perform posterior predictive sampling from the HSSM model.
 
@@ -1165,6 +1173,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         safe_mode: bool
             If True, the function will split the draws into chunks of 10 to avoid memory
             issues. Defaults to True.
+        random_seed: optional
+            Seed for the simulated responses, an `int` or a `numpy.random.Generator`.
+            The same seed and posterior draws give the same posterior predictive draws.
+            Defaults to None, which is not reproducible.
 
         Raises
         ------
@@ -1231,12 +1243,24 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 # memory issues (TODO: Figure out the source of memory issues)
                 split_draws = _split_array(dt_copy["posterior"].draw.values, divisor=10)
 
+                # One independent seed per chunk, so chunks don't repeat each other
+                chunk_seeds = (
+                    [None] * len(split_draws)
+                    if random_seed is None
+                    else np.random.default_rng(random_seed).spawn(len(split_draws))
+                )
+
                 posterior_predictive_list = []
-                for samples_tmp in split_draws:
+                for samples_tmp, chunk_seed in zip(split_draws, chunk_seeds):
                     tmp_posterior = dt["posterior"].sel(draw=samples_tmp)
                     dt_copy["posterior"] = tmp_posterior
                     self.model.predict(
-                        dt_copy, kind, data, True, include_group_specific
+                        dt_copy,
+                        kind,
+                        data,
+                        True,
+                        include_group_specific,
+                        random_seed=chunk_seed,
                     )
                     posterior_predictive_list.append(dt_copy["posterior_predictive"])
 
@@ -1267,7 +1291,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     # .predict() is called on the copy of dt
                     # since we still subsampled (or assigned) the draws
                     self.model.predict(
-                        dt_copy, kind, data, True, include_group_specific
+                        dt_copy,
+                        kind,
+                        data,
+                        True,
+                        include_group_specific,
+                        random_seed=random_seed,
                     )
 
                     # posterior predictive group added to dt
@@ -1280,7 +1309,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     # .predict(). It just operates on the
                     # dt_copy object
                     return self.model.predict(
-                        dt_copy, kind, data, False, include_group_specific
+                        dt_copy,
+                        kind,
+                        data,
+                        False,
+                        include_group_specific,
+                        random_seed=random_seed,
                     )
         elif kind == "response_params":
             # If kind == 'response_params', we don't need to run the RV directly,
@@ -1348,9 +1382,59 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return self.model.predict(**kwargs)
 
     def sample_do(
-        self, params: dict[str, Any], draws: int = 100, return_model=False, **kwargs
+        self,
+        params: dict[str, Any],
+        draws: int = 100,
+        return_model=False,
+        strict: bool = False,
+        **kwargs,
     ) -> DataTree | tuple[DataTree, pm.Model]:
-        """Generate samples from the predictive distribution using the `do-operator`."""
+        """Simulate data with some or all parameters fixed, using the `do-operator`.
+
+        Fixes the model's free variables named in `params` with `pymc.do`, then
+        draws from the prior predictive of the resulting model.
+
+        Parameters
+        ----------
+        params
+            Values for the PyMC model's free variables, by name, as listed by
+            `{rv.name for rv in model.pymc_model.free_RVs}`: for example
+            `v_Intercept`, `v_x`, `v_1|participant_id_sigma`, and
+            `v_1|participant_id` (with `noncentered=False`) or
+            `v_1|participant_id_offset` (with `noncentered=True`). A term with
+            several columns takes one value per column, e.g. `"v_stim": [0.4, -0.1]`
+            for the non-reference levels of `stim`, and a group-specific term one
+            value per group. Intercepts are on the original scale of the
+            predictors, as the posterior reports them, even though the model
+            centers its predictors (bambi's `center_predictors=True`, the default).
+            Free variables not in `params` are drawn from their priors.
+        draws : optional
+            The number of draws. Defaults to 100.
+        return_model : optional
+            Whether to also return the intervened PyMC model. Defaults to False.
+        strict : optional
+            If True, raise an error when a free variable of the model is not in
+            `params`, instead of drawing it from its prior. Defaults to False.
+        kwargs
+            Passed to `pymc.sample_prior_predictive` (e.g. `random_seed`).
+
+        Returns
+        -------
+        DataTree | tuple[DataTree, pm.Model]
+            The simulated draws (the `prior` group holds the trial-wise parameters,
+            the `prior_predictive` group the responses), and the intervened model if
+            `return_model` is True.
+        """
+        if strict:
+            unfixed = sorted(
+                {rv.name for rv in self.pymc_model.free_RVs}.difference(params)
+            )
+            if unfixed:
+                raise ValueError(
+                    "`strict=True`, but these free variables are not in `params` "
+                    f"and would be drawn from their priors: {unfixed}"
+                )
+        params = self._center_do_intercepts(params)
         do_model = do(
             self.pymc_model, cast("Mapping[str | TensorVariable, Any]", params)
         )
@@ -1372,6 +1456,51 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         if return_model:
             return do_dt, do_model
         return do_dt
+
+    def _center_do_intercepts(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Translate original-scale intercepts in `params` to the centered design.
+
+        With bambi's `center_predictors=True`, the PyMC intercept of a component with
+        common predictors belongs to the centered design, and bambi adds the
+        centering back only when it reports a posterior. Fixing that variable to an
+        original-scale value would therefore simulate a different intercept. This
+        adds `mean(X) @ slopes` to each fixed intercept, the inverse of bambi's
+        `Model._re_center_intercept`.
+        """
+        if not self.model.center_predictors or self.model.backend is None:
+            return params
+        params = dict(params)
+        for pymc_component in self.model.backend.distributional_components.values():
+            component = pymc_component.component
+            x = pymc_component.design_matrix_without_intercept
+            if not (component.intercept_term and component.common_terms):
+                continue
+            if x is None:
+                continue
+            intercept = get_aliased_name(component.intercept_term)
+            if intercept not in params:
+                continue
+            slopes = [get_aliased_name(t) for t in component.common_terms.values()]
+            unfixed = [s for s in slopes if s not in params]
+            if unfixed:
+                _logger.warning(
+                    "%s is fixed but %s are not, so %s is applied to the centered "
+                    "predictors and the simulated intercept depends on the drawn "
+                    "slopes. Fix all slopes, or build the model with "
+                    "`center_predictors=False`.",
+                    intercept,
+                    unfixed,
+                    intercept,
+                )
+                continue
+            coefs = np.concatenate(
+                [np.atleast_1d(np.asarray(params[s], dtype=float)) for s in slopes]
+            )
+            centered = np.asarray(params[intercept], dtype=float) + (
+                np.asarray(x).mean(0) @ coefs
+            )
+            params[intercept] = centered.astype(self.pymc_model[intercept].dtype)
+        return params
 
     def sample_prior_predictive(
         self,
@@ -2062,11 +2191,22 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     + "parameter is not None"
                 )
         if self.has_lapse:
-            if lapse is None:
-                if self.is_choice_only:
-                    self.lapse = 1 / self.n_choices
-                else:
-                    self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
+            if self.is_choice_only:
+                # Choice-only lapses are simulated as uniform random choices, so
+                # the likelihood must use the same uniform probability.
+                uniform = 1 / self.n_choices
+                if lapse is not None and not (
+                    isinstance(lapse, int | float | np.floating)
+                    and np.isclose(lapse, uniform)
+                ):
+                    raise ValueError(
+                        "Choice-only models only support a uniform lapse over "
+                        f"choices (1 / n_choices = {uniform:g}), but got {lapse!r}. "
+                        "Omit `lapse` to use it."
+                    )
+                self.lapse = uniform
+            elif lapse is None:
+                self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
             else:
                 self.lapse = lapse
             self.list_params.append("p_outlier")

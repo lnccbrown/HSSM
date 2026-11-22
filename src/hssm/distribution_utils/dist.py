@@ -37,7 +37,7 @@ _logger = logging.getLogger("hssm")
 # The placeholder `rt` value that marks missing-RT and omission (deadline) rows.
 MISSING_RT = -999.0
 
-LOGP_LB = pm.pytensorf.floatX(-66.1)
+LOGP_LB = -66.1  # a Python float takes the graph's dtype (see likelihoods.analytical)
 
 
 def apply_param_bounds_to_loglik(
@@ -343,9 +343,17 @@ def make_hssm_rv(
             # First figure out what the size specified here is
             # Since the number of unnamed arguments is undetermined,
             # we are going to use this hack.
+            requested_size = kwargs.get("size", args[-1])
             size, args, kwargs = _extract_size(args, kwargs)
             arg_arrays = _create_arg_arrays(cls, args)
+            param_shapes = [arr.shape for arr in arg_arrays]
             p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
+
+            # A trial-wise p_outlier (a p_outlier regression) needs one simulated
+            # trial per p_outlier value, even when the model parameters are scalar.
+            if p_outlier is not None and p_outlier.size > 1:
+                batch_shape = np.broadcast_shapes(*param_shapes)
+                arg_arrays = [np.broadcast_to(arr, batch_shape) for arr in arg_arrays]
 
             # Forward observed per-trial covariates to the simulator when the RV
             # has been given them (covariate-conditioned PPC); a no-op otherwise.
@@ -362,12 +370,28 @@ def make_hssm_rv(
                 **kwargs,
             )
 
+            # ssm-simulators returns (rt, response) pairs; keep only the response.
+            if is_choice_only and obs_dim_int > 1:
+                sims_out = sims_out[..., -1]
+
+            # With all-scalar parameters ssm-simulators squeezes a single draw's
+            # batch axis away; restore the batch shape PyMC expects.
+            if all(arr.size == 1 for arr in arg_arrays):
+                batch_shape = (
+                    np.broadcast_shapes(*param_shapes)
+                    if requested_size is None
+                    else tuple(np.atleast_1d(requested_size))
+                )
+                support_shape = () if is_choice_only else (obs_dim_int,)
+                sims_out = sims_out.reshape(batch_shape + support_shape)
+
             sims_out = _apply_lapse_model(
                 sims_out=sims_out,
                 p_outlier=p_outlier,
                 rng=rng,
                 lapse_dist=cls._lapse,
                 choices=choices,
+                is_choice_only=is_choice_only,
             )
 
             return sims_out
@@ -381,6 +405,7 @@ def _apply_lapse_model(
     rng: np.random.Generator,
     lapse_dist: bmb.Prior | float | None,
     choices: list,
+    is_choice_only: bool = False,
 ) -> np.ndarray:
     """Apply lapse model to the simulation output.
 
@@ -396,6 +421,10 @@ def _apply_lapse_model(
         The lapse distribution to draw from
     choices : list
         List of possible choices
+    is_choice_only : bool
+        Whether `sims_out` holds responses only, without a reaction-time column.
+        Lapses then draw a uniformly random choice, matching the choice-only
+        lapse likelihood of 1 / n_choices.
 
     Returns
     -------
@@ -411,17 +440,16 @@ def _apply_lapse_model(
             "distribution but did not specify the distribution."
         )
 
-    if not isinstance(lapse_dist, bmb.Prior):
-        # A numeric `lapse` (e.g. `1 / n_choices` for choice-only models) has no
-        # reaction-time distribution to draw lapse RTs from, so it cannot drive
-        # simulation via this RT/response path.
+    if not is_choice_only and not isinstance(lapse_dist, bmb.Prior):
+        # A numeric `lapse` has no reaction-time distribution to draw lapse RTs
+        # from, so it cannot drive simulation via this RT/response path.
         raise TypeError(
-            "Lapse simulation is not supported for choice-only models with a "
-            f"numeric lapse ({lapse_dist!r}). Provide a `bmb.Prior` lapse "
+            "Lapse simulation is not supported for models with reaction times "
+            f"and a numeric lapse ({lapse_dist!r}). Provide a `bmb.Prior` lapse "
             "distribution to simulate lapses, or disable `p_outlier`."
         )
 
-    out_shape = sims_out.shape[:-1]
+    out_shape = sims_out.shape if is_choice_only else sims_out.shape[:-1]
 
     # Handle p_outlier shape/type to ensure consistent shape:
     # - 0-dim numpy array (scalar array) -> convert to float
@@ -443,13 +471,19 @@ def _apply_lapse_model(
     if replace_n == 0:
         return sims_out
 
+    if is_choice_only:
+        sims_out[replace] = rng.choice(choices, size=replace_n)
+        return sims_out
+
+    lapse_prior = cast("bmb.Prior", lapse_dist)  # numeric lapse rejected above
+
     replace_shape = (*out_shape[:-1], replace_n)
     replace_mask = np.stack([replace, replace], axis=-1)
     n_draws = np.prod(replace_shape)
     lapse_rt = cast(
         "np.ndarray",
         pm.draw(
-            get_distribution_from_prior(lapse_dist).dist(**lapse_dist.args),
+            get_distribution_from_prior(lapse_prior).dist(**lapse_prior.args),
             n_draws,
             random_seed=rng,
         ),
@@ -729,6 +763,8 @@ def make_distribution(
         _params = list_params
 
         @classmethod
+        # PyMC idiom (cf. pm.Flat.dist): named params in, a list to super().dist.
+        # pyrefly: ignore[bad-override]
         def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
             dist_params = [
                 pt.as_tensor_variable(pm.pytensorf.floatX(kwargs[param]))
@@ -797,8 +833,9 @@ def make_distribution(
                     )
                 # The lapse term is a graph constant: it is evaluated once on
                 # the (constant) observed data, and p_outlier's gradient flows
-                # through the mixture weights only.
-                lapse_logp = lapse_func(_to_numpy(data))
+                # through the mixture weights only. In floatX: a float64
+                # constant would upcast a float32 graph.
+                lapse_logp = lapse_func(_to_numpy(data)).astype(pytensor.config.floatX)
 
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
@@ -895,6 +932,7 @@ def make_family(
     parent: str = "v",
     likelihood_name: str = "SSM Likelihood",
     family_name="SSM Family",
+    is_choice_only: bool = False,
 ) -> bmb.Family:
     """Build a family in bambi.
 
@@ -912,6 +950,9 @@ def make_family(
         the name of the likelihood function. Defaults to "SSM Likelihood".
     family_name
         the name of the family. Defaults to "SSM Family".
+    is_choice_only : optional
+        Whether the model is choice-only. Choice-only draws have no (rt, response)
+        axis, so the family must not add one to the posterior predictive coords.
 
     Returns
     -------
@@ -922,12 +963,31 @@ def make_family(
         likelihood_name, parent=parent, params=list_params, dist=dist
     )
 
-    family = SSMFamily(family_name, likelihood=likelihood, link=link)
+    family_cls = OrderedFamily if is_choice_only else SSMFamily
+    family = family_cls(family_name, likelihood=likelihood, link=link)
 
     return family
 
 
-class SSMFamily(bmb.Family):
+class OrderedFamily(bmb.Family):
+    """A bmb.Family whose auxiliary parameters keep the likelihood's order.
+
+    bambi returns them as a set, so the components that bambi builds from them,
+    and the free random variables of the PyMC model, follow Python's string-hash
+    seed. NUTS then explores a different ordering in each process, and a seeded
+    ``sample()`` gives different draws (#1492). Drop this override once the bambi
+    floor reaches a release that keeps the order
+    (bambinos/bambi#1091).
+    """
+
+    @property
+    def auxiliary_parameters(self):
+        """Get the likelihood's parameters other than the parent, in order."""
+        parent = self.likelihood.parent
+        return [param for param in self.likelihood.params if param != parent]
+
+
+class SSMFamily(OrderedFamily):
     """Extends bmb.Family to get around the dimensionality mismatch."""
 
     def create_extra_pps_coord(self):
