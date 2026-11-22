@@ -575,7 +575,8 @@ def _use_traces_or_sample(
     the model. When ``rng`` is given and posterior-predictive sampling is
     triggered with an integer ``n_samples``, the draws are a seeded random
     subset of the posterior instead of the legacy first-``n`` (which is
-    deterministic but biased toward early, warm-up-adjacent draws).
+    deterministic but biased toward early, warm-up-adjacent draws). ``rng`` also
+    seeds the simulated responses, so the samples are reproducible.
     """
     # First, determine whether posterior predictive samples are available
     # If not, we need to sample from the posterior
@@ -609,11 +610,13 @@ def _use_traces_or_sample(
                 data=data,
                 inplace=True,
                 draws=draws,
+                random_seed=rng,
             )
         elif predictive_group == "prior_predictive":
             dt = model.sample_prior_predictive(
                 draws=n_samples,
                 omit_offsets=False,
+                random_seed=rng,
             )
         else:  # pragma: no cover
             raise ValueError(f"Invalid predictive group: {predictive_group}")

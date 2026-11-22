@@ -530,6 +530,7 @@ def plot_predictive(
     ylabel: str | None = "Density",
     legend: bool = True,
     grid_kwargs: dict | None = None,
+    random_seed: int | np.random.Generator | None = None,
     **kwargs,
 ) -> Axes | sns.FacetGrid | list[sns.FacetGrid]:
     """Plot the posterior predictive distribution against the observed data.
@@ -682,6 +683,11 @@ def plot_predictive(
         (https://seaborn.pydata.org/generated/seaborn.FacetGrid.html#seaborn.FacetGrid.__init__)
         when any of row or col is provided. When producing a single plot, these
         arguments are ignored.
+    random_seed : optional
+        Seeds the samples the plot draws itself (an `int` or a
+        `numpy.random.Generator`): which posterior draws are used, and, when `dt` has
+        no predictive group yet, the simulated responses. The same seed gives the same
+        plot. Defaults to None, which keeps the previous, unseeded behavior.
     kwargs : optional
         Additional keyword arguments passed to ax.plot() functions.
 
@@ -738,8 +744,9 @@ def plot_predictive(
         else:
             data = model.data
 
+    rng = None if random_seed is None else np.random.default_rng(random_seed)
     dt, sampled = _use_traces_or_sample(
-        model, data, dt, n_samples=n_samples, predictive_group=predictive_group
+        model, data, dt, n_samples=n_samples, predictive_group=predictive_group, rng=rng
     )
 
     plotting_df = _get_plotting_df(
@@ -749,6 +756,7 @@ def plot_predictive(
         n_samples=None if sampled else n_samples,
         response_str=model.response_str,
         predictive_group=predictive_group,
+        rng=rng,
     )
 
     if uncertainty is not None:
