@@ -42,10 +42,12 @@ def get_ddm_config() -> DefaultConfig:
                         "sigma": 2.0,
                     },
                 },
+                # The network's training box (ssms `ddm` param_bounds, Fengler
+                # et al. 2021); outside it the LAN extrapolates (#1440).
                 "bounds": {
                     "v": (-3.0, 3.0),
                     "a": (0.3, 2.5),
-                    "z": (0.0, 1.0),
+                    "z": (0.1, 0.9),
                     "t": (0.0, 2.0),
                 },
                 "extra_fields": None,
