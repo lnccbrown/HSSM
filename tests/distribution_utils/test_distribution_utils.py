@@ -105,6 +105,20 @@ def test_make_hssm_rv():
     assert random_sample.shape == (100, 2)
 
 
+def test_lapse_responses_use_a_registered_models_choices(registered_ssms_model):
+    """A model registered in ssm-simulators after import draws lapse responses
+    from its own choices, not from ssm-simulators' fallback [0, 1, 2]."""
+    rv = distribution_utils.make_hssm_rv(
+        registered_ssms_model["name"],
+        ["v", "a", "z", "t"],
+        lapse=bmb.Prior("Uniform", lower=0.0, upper=1.0),
+    )
+    # p_outlier = 1: every response is a lapse draw.
+    sample = rv.rng_fn(np.random.default_rng(1), *[0.5, 1.0, 0.5, 0.3], 1.0, 200)
+
+    assert set(np.unique(sample[:, 1])) == {-1.0, 1.0}
+
+
 def test_lapse_distribution():
     """Check lapse sampling shape, support, and reproducibility."""
     lapse_dist = bmb.Prior("Uniform", lower=0.0, upper=1.0)
