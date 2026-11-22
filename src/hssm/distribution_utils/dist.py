@@ -37,7 +37,7 @@ _logger = logging.getLogger("hssm")
 # The placeholder `rt` value that marks missing-RT and omission (deadline) rows.
 MISSING_RT = -999.0
 
-LOGP_LB = pm.pytensorf.floatX(-66.1)
+LOGP_LB = -66.1  # a Python float takes the graph's dtype (see likelihoods.analytical)
 
 
 def apply_param_bounds_to_loglik(
@@ -763,6 +763,8 @@ def make_distribution(
         _params = list_params
 
         @classmethod
+        # PyMC idiom (cf. pm.Flat.dist): named params in, a list to super().dist.
+        # pyrefly: ignore[bad-override]
         def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
             dist_params = [
                 pt.as_tensor_variable(pm.pytensorf.floatX(kwargs[param]))
@@ -831,8 +833,9 @@ def make_distribution(
                     )
                 # The lapse term is a graph constant: it is evaluated once on
                 # the (constant) observed data, and p_outlier's gradient flows
-                # through the mixture weights only.
-                lapse_logp = lapse_func(_to_numpy(data))
+                # through the mixture weights only. In floatX: a float64
+                # constant would upcast a float32 graph.
+                lapse_logp = lapse_func(_to_numpy(data)).astype(pytensor.config.floatX)
 
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
@@ -960,13 +963,31 @@ def make_family(
         likelihood_name, parent=parent, params=list_params, dist=dist
     )
 
-    family_cls = bmb.Family if is_choice_only else SSMFamily
+    family_cls = OrderedFamily if is_choice_only else SSMFamily
     family = family_cls(family_name, likelihood=likelihood, link=link)
 
     return family
 
 
-class SSMFamily(bmb.Family):
+class OrderedFamily(bmb.Family):
+    """A bmb.Family whose auxiliary parameters keep the likelihood's order.
+
+    bambi returns them as a set, so the components that bambi builds from them,
+    and the free random variables of the PyMC model, follow Python's string-hash
+    seed. NUTS then explores a different ordering in each process, and a seeded
+    ``sample()`` gives different draws (#1492). Drop this override once the bambi
+    floor reaches a release that keeps the order
+    (bambinos/bambi#1091).
+    """
+
+    @property
+    def auxiliary_parameters(self):
+        """Get the likelihood's parameters other than the parent, in order."""
+        parent = self.likelihood.parent
+        return [param for param in self.likelihood.params if param != parent]
+
+
+class SSMFamily(OrderedFamily):
     """Extends bmb.Family to get around the dimensionality mismatch."""
 
     def create_extra_pps_coord(self):
