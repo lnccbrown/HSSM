@@ -671,6 +671,22 @@ class TestFixedVectorParams:
         assert "z" in idata.posterior.data_vars
 
 
+def test_fixed_vector_with_distribution_loglik_raises(data_ddm):
+    """A `pm.Distribution` class as `loglik` would use 0.0 for a fixed vector (#1453).
+
+    HSSM uses such a class as given, so neither its logp nor its RV receives
+    the vector in place of Bambi's scalar placeholder.
+    """
+    with pytest.raises(NotImplementedError, match="pm.Distribution"):
+        HSSM(
+            data=data_ddm,
+            model="ddm",
+            loglik=DDM,
+            loglik_kind="analytical",
+            t=np.full(len(data_ddm), 0.3),
+        )
+
+
 @pytest.mark.slow
 def test_sample_do(data_ddm):
     """Return intervention samples and the intervened PyMC model."""

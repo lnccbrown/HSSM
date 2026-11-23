@@ -311,21 +311,128 @@ def test_predict_rejects_new_data_with_fixed_vector_params():
     )
 
 
-def test_has_same_rows_treats_missing_values_as_equal():
+def test_first_differing_column_treats_missing_values_as_equal():
     """Missing values match in numeric and object columns; other values must match."""
-    from hssm.base import _has_same_rows
+    from hssm.base import _first_differing_column
 
     reference = pd.DataFrame(
         {"rt": [0.5, np.nan, 0.7], "label": ["a", np.nan, None]}, index=[0, 1, 2]
     )
+    columns = ["rt", "label"]
     same = reference.copy()
     same.index = [10, 11, 12]
-    assert _has_same_rows(same, reference)
+    assert _first_differing_column(same, reference, columns) is None
 
     for col, value in [("rt", 0.6), ("label", "b")]:
         changed = reference.copy()
         changed.loc[1, col] = value
-        assert not _has_same_rows(changed, reference)
+        assert _first_differing_column(changed, reference, columns) == (col, 1)
     changed = reference.copy()
     changed.loc[0, "label"] = np.nan
-    assert not _has_same_rows(changed, reference)
+    assert _first_differing_column(changed, reference, columns) == ("label", 0)
+    # Only the columns asked for are compared.
+    assert _first_differing_column(changed, reference, ["rt"]) is None
+
+
+def _fixed_t_model_with_covariate():
+    """Return a DDM with ``t`` fixed to ``FIXED_T`` and ``v ~ 1 + x``.
+
+    Its data also has columns the model does not read: a session, a timestamp
+    and a note.
+    """
+    n_obs = FIXED_T.size
+    x = np.linspace(-1.0, 1.0, n_obs)
+    theta = {
+        "v": 0.5 + 0.5 * x,
+        "a": np.full(n_obs, 1.0),
+        "z": np.full(n_obs, 0.5),
+        "t": FIXED_T,
+    }
+    data = hssm.simulate_data(model="ddm", theta=theta, size=1, random_state=0)
+    data["x"] = x
+    data["session"] = 1
+    data["timestamp"] = pd.Timestamp("2026-11-23 10:00:00")
+    data["note"] = "block 1"
+    return hssm.HSSM(
+        data=data,
+        model="ddm",
+        include=[{"name": "v", "formula": "v ~ 1 + x"}],
+        t=FIXED_T,
+        p_outlier=None,
+    )
+
+
+def _fixed_t_covariate_posterior():
+    """Two posterior draws of the free parameters of the model with ``v ~ 1 + x``."""
+    values = {
+        "v_Intercept": [0.4, 0.6],
+        "v_x": [0.4, 0.6],
+        "a": [1.0, 1.2],
+        "z": [0.5, 0.5],
+    }
+    posterior = xr.Dataset(
+        {
+            name: (("chain", "draw"), np.array([draws]))
+            for name, draws in values.items()
+        },
+        coords={"chain": [0], "draw": [0, 1]},
+    )
+    return xr.DataTree.from_dict({"posterior": posterior})
+
+
+def test_posterior_predictive_ignores_columns_the_model_does_not_read(tmp_path):
+    """The model's rows are accepted when only columns it does not read differ.
+
+    After `to_csv` and `read_csv` the timestamp comes back as a string, and a
+    note may have been edited; neither reaches the model, so the rows are its own.
+    """
+    model = _fixed_t_model_with_covariate()
+    path = tmp_path / "data.csv"
+    model.data.to_csv(path, index=False)
+    data = pd.read_csv(path)
+    data["note"] = "checked"
+    assert data["timestamp"].dtype != model.data["timestamp"].dtype
+
+    dt = model.sample_posterior_predictive(
+        dt=_fixed_t_covariate_posterior(), data=data, inplace=False
+    )
+    sims = dt["posterior_predictive"]["rt,response"].values
+    assert sims.shape[-2:] == (FIXED_T.size, 2)
+    assert np.all(sims[..., 0] > FIXED_T)
+
+
+def test_posterior_predictive_names_a_changed_covariate():
+    """A changed covariate on the model's own rows makes them other rows.
+
+    The error names the column and says that a changed value counts as another
+    row, instead of suggesting that the rows are new or reordered.
+    """
+    model = _fixed_t_model_with_covariate()
+    data = model.data.copy()
+    data.loc[3, "x"] = data.loc[3, "x"] + 0.1
+
+    with pytest.raises(ValueError, match="fixed to a vector") as excinfo:
+        model.sample_posterior_predictive(
+            dt=_fixed_t_covariate_posterior(), data=data, inplace=False
+        )
+    message = str(excinfo.value)
+    assert "Column 'x'" in message
+    assert "row 3" in message
+    assert "counts as another row" in message
+
+
+def test_posterior_predictive_rejects_data_without_model_columns():
+    """Rows that share no column the model reads cannot be matched to its rows.
+
+    A constant `session` column says nothing about which rows `data` holds, so
+    in an intercept-only model other rows of the same length used to be
+    simulated with the model's vector.
+    """
+    data = _fixed_t_model().data.assign(session=1)
+    model = hssm.HSSM(data=data, model="ddm", t=FIXED_T, p_outlier=None)
+    new_rows = pd.DataFrame({"session": np.ones(FIXED_T.size, dtype=int)})
+
+    with pytest.raises(ValueError, match="none of the columns the model reads"):
+        model.sample_posterior_predictive(
+            dt=_fixed_t_posterior(), data=new_rows, inplace=False
+        )

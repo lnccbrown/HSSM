@@ -746,9 +746,10 @@ def make_distribution(
     type[pm.Distribution]
         A pymc.Distribution that uses the log-likelihood function.
     """
-    is_rv_class = isinstance(rv, type) and issubclass(rv, RandomVariable)
-    is_rv_instance = not isinstance(rv, type) and isinstance(rv, RandomVariable)
-    if fixed_vector_params and (is_rv_class or is_rv_instance):
+    is_ready_made_rv = isinstance(rv, RandomVariable) or (
+        isinstance(rv, type) and issubclass(rv, RandomVariable)
+    )
+    if fixed_vector_params and is_ready_made_rv:
         # A ready-made RandomVariable is used as given: its rng_fn receives the
         # scalar 0.0 placeholder for these parameters (#1453).
         _logger.warning(
@@ -759,9 +760,10 @@ def make_distribution(
             "`rv` to simulate with the vector.",
             sorted(fixed_vector_params),
         )
-    if is_rv_class:
-        rv_instance = cast("type[RandomVariable]", rv)()
-    elif is_rv_instance:
+    # The isinstance checks stay in the branches so that type checkers narrow `rv`.
+    if isinstance(rv, type) and issubclass(rv, RandomVariable):
+        rv_instance = rv()
+    elif not isinstance(rv, type) and isinstance(rv, RandomVariable):
         rv_instance = rv
     elif callable(rv):
         random_variable = make_hssm_rv(
