@@ -212,7 +212,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         following:
 
         - `"safe"`: fills eligible missing common and group-specific regression-term
-        priors with HSSM's weakly informative defaults.
+        priors with HSSM's weakly informative defaults. An identity-link intercept
+        of a parameter with finite bounds gets a Normal centered in the bounds,
+        with an SD of a quarter of their width (`ddm`, `ddm_sdv` and `full_ddm`
+        without a LAN likelihood use HDDM-based priors instead). If the bounds are
+        much wider than the parameter's plausible values, that prior is nearly
+        flat: give the parameter an explicit `prior`.
         - `None`: leaves missing regression-term priors to Bambi. This is not
         recommended for hierarchical models.
 
@@ -2453,20 +2458,30 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     def _jitter_initvals(
         self, jitter_epsilon: float = 0.01, vector_only: bool = False
     ) -> None:
-        """Apply controlled jitter to initial values."""
-        if vector_only:
-            self.__jitter_initvals_vector_only(jitter_epsilon)
-        else:
-            self.__jitter_initvals_all(jitter_epsilon)
+        """Apply controlled jitter to initial values.
 
-    def __jitter_initvals_vector_only(self, jitter_epsilon: float) -> None:
+        The jitter comes from a fixed-seed generator, not the global numpy RNG,
+        so the jittered initvals (and so a seeded ``sample()``) are the same in
+        every process.
+        """
+        # ponytail: fixed seed; the jitter only breaks symmetry, and `initvals=`
+        # overrides it when a different start is wanted.
+        rng = np.random.default_rng(0)
+        if vector_only:
+            self.__jitter_initvals_vector_only(jitter_epsilon, rng)
+        else:
+            self.__jitter_initvals_all(jitter_epsilon, rng)
+
+    def __jitter_initvals_vector_only(
+        self, jitter_epsilon: float, rng: np.random.Generator
+    ) -> None:
         # Note: Calling our initial point function here
         # --> operate on untransformed variables
         initial_point_dict = self.initvals
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             if starting_value.ndim != 0 and starting_value.shape[0] != 1:
-                starting_value_tmp = starting_value + np.random.uniform(
+                starting_value_tmp = starting_value + rng.uniform(
                     -jitter_epsilon, jitter_epsilon, starting_value.shape
                 ).astype(np.float32)
 
@@ -2474,14 +2489,16 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 dtype = self._initvals[name_tmp].dtype
                 self._initvals[name_tmp] = np.array(starting_value_tmp).astype(dtype)
 
-    def __jitter_initvals_all(self, jitter_epsilon: float) -> None:
+    def __jitter_initvals_all(
+        self, jitter_epsilon: float, rng: np.random.Generator
+    ) -> None:
         # Note: Calling our initial point function here
         # --> operate on untransformed variables
         initial_point_dict = self.initvals
         # initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
-            starting_value_tmp = starting_value + np.random.uniform(
+            starting_value_tmp = starting_value + rng.uniform(
                 -jitter_epsilon, jitter_epsilon, starting_value.shape
             ).astype(np.float32)
 
