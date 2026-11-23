@@ -154,7 +154,7 @@ class TestPriorUnit:
     @pytest.mark.parametrize(
         ("bounds", "expected_args"),
         [
-            pytest.param((-2.0, 3.0), {"mu": 0.5, "sigma": 0.25}, id="finite"),
+            pytest.param((-2.0, 3.0), {"mu": 0.5, "sigma": 1.25}, id="finite"),
             pytest.param((0.0, np.inf), {"mu": 0.0, "sigma": 0.25}, id="lower-bounded"),
             pytest.param(
                 (-np.inf, 4.0), {"mu": 0.0, "sigma": 0.25}, id="upper-bounded"
