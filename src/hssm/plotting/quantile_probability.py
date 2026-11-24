@@ -21,6 +21,7 @@ from .utils import (
     _get_plotting_df,
     _get_title,
     _process_df_for_qp_plot,
+    _set_facet_suptitle,
     _subset_df,
     _use_traces_or_sample,
 )
@@ -448,8 +449,7 @@ def _plot_quantile_probability_2D(
 
     g.add_legend()
     if title:
-        g.figure.subplots_adjust(top=0.85)
-        g.figure.suptitle(title)
+        _set_facet_suptitle(g, title)
 
     g.set_xlabels(xlabel)
     g.set_ylabels(ylabel)
