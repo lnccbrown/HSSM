@@ -4,12 +4,12 @@ import numpy as np
 import pandas as pd
 from numpy.typing import ArrayLike
 from ssms.basic_simulators.simulator import simulator
-from ssms.config import model_config
+from ssms.config import get_model_registry
 
 
 def simulate_data(
     model: str,
-    theta: ArrayLike,
+    theta: dict[str, ArrayLike] | list[float] | np.ndarray,
     size: int,
     random_state: int | None = None,
     output_df: bool = True,
@@ -20,17 +20,18 @@ def simulate_data(
     Parameters
     ----------
     model
-        A model name that must be supported in `ssm_simulators`. For a detailed list of
-        supported models, please see all fields in the `model_config` dict
-        [here](https://github.com/AlexanderFengler/ssm-simulators/blob
-        /e09eb2528d885c7b3340516597849fff4d9a5bf8/ssms/config/config.py#L6)
+        A model name that must be known to `ssm_simulators`: one of its built-in
+        models or a model registered with `ssms.config.register_model_config`.
+        `ssms.config.get_model_registry().list_models()` lists them.
     theta
-        An ArrayLike of floats that represent the true values of the parameters of the
-        specified `model`. Please see [here](https://github.com/AlexanderFengler/
-        ssm-simulators/blob/e09eb2528d885c7b3340516597849fff4d9a5bf8/ssms/config/config.py#L6)
-        for what the parameters are. True values must be supplied in the same order
-        as the parameters. You can also supply a 2D ArrayLike to simulate data for
-        different trials with different true values.
+        Parameters of the process. Can be supplied as dictionary with parameter names as
+        key and np.array or float as values. Can also be supplied as a list or 1D-array,
+        however in this case the order of parameters is important and must match
+        specifications [here](https://github.com/AlexanderFengler/
+        ssm-simulators/blob/e09eb2528d885c7b3340516597849fff4d9a5bf8/ssms/config/config.py#L6).
+        Parameters can be specificed 'trial-wise', by supplying 1D arrays of shape
+        `size` to the dictionary, or by supplying a 2D array
+        of shape `(size, n_parameters)` dicrectly.
     size
         The size of the data to be simulated. If `theta` is a 2D ArrayLike, this
         parameter indicates the size of data to be simulated for each trial.
@@ -47,8 +48,17 @@ def simulate_data(
     np.ndarray | pd.DataFrame
         An array or DataFrame with simulated data.
     """
-    if model not in model_config:
-        raise ValueError(f"model must be one of {list(model_config.keys())}.")
+    # The registry, not the `ssms.config.model_config` snapshot taken at import,
+    # also knows models registered with `register_model_config`.
+    registry = get_model_registry()
+    if not registry.has_model(model):
+        raise ValueError(f"model must be one of {registry.list_models()}.")
+
+    # The analytical Poisson-race likelihood assumes exact race finishing times.
+    # ssms defaults to smooth_unif=True; override to False unless the caller
+    # explicitly requests otherwise.
+    if model == "poisson_race" and "smooth_unif" not in kwargs:
+        kwargs["smooth_unif"] = False
 
     sims = simulator(
         theta,

@@ -1,0 +1,201 @@
+"""Unit tests for DataValidatorMixin sanity and field validation logic."""
+
+from typing import Callable
+
+import pytest
+import pandas as pd
+import numpy as np
+from hssm.data_validator import DataValidatorMixin
+from hssm.defaults import MissingDataNetwork
+
+
+class DataValidatorTester(DataValidatorMixin):
+    """A concrete class for testing DataValidatorMixin."""
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        extra_fields: list[str] | None = None,
+        deadline: bool = False,
+        missing_data: bool = False,
+        choices: list[int] | None = None,
+        n_choices: int | None = None,
+    ):
+        self.data = data
+        self.response = ["rt", "response"]
+        self.choices = choices if choices is not None else [0, 1]
+        self.n_choices = n_choices if n_choices is not None else len(self.choices)
+        self.extra_fields = extra_fields
+        self.deadline = deadline
+        self.deadline_name = "deadline"
+        self.missing_data = missing_data
+        self.missing_data_value = -999.0
+        self.is_choice_only = False
+
+
+def _base_data():
+    return pd.DataFrame(
+        {
+            "rt": [0.5, 0.7, 0.9, 1.1],
+            "response": [1, 0, 1, 0],
+            "deadline": [1.0, 1.0, 1.0, 1.0],
+            "extra": [10, 20, 30, 40],
+        }
+    )
+
+
+@pytest.fixture
+def base_data():
+    return _base_data()
+
+
+def base_data_with_missing():
+    return pd.DataFrame(
+        {
+            "rt": [0.5, 0.7, -999.0, 1.1],
+            "response": [1, 0, -999.0, 0],
+            "deadline": [1.0, 1.0, 1.0, 1.0],
+            "extra": [10, 20, -999.0, 40],
+        }
+    )
+
+
+def base_data_nan_missing():
+    return pd.DataFrame(
+        {
+            "rt": [-999.0, 0.7, np.nan, 1.1],
+            "response": [1, 0, np.nan, 0],
+            "deadline": [1.0, 1.0, 1.0, 1.0],
+            "extra": [10, 20, np.nan, 40],
+        }
+    )
+
+
+def dv_instance(
+    data_factory: Callable = _base_data, deadline: bool = True
+) -> DataValidatorTester:
+    return DataValidatorTester(
+        data=data_factory(),
+        extra_fields=["extra"],
+        deadline=deadline,
+    )
+
+
+def test_constructor(base_data):
+    dv = DataValidatorTester(
+        data=base_data,
+        extra_fields=["extra"],
+        deadline=True,
+    )
+
+    assert dv.data.equals(_base_data())
+    assert dv.response == ["rt", "response"]
+    assert dv.choices == [0, 1]
+    assert dv.n_choices == 2
+    assert dv.extra_fields == ["extra"]
+    assert dv.deadline is True
+    assert dv.deadline_name == "deadline"
+    assert dv.missing_data is False
+    assert dv.missing_data_value == -999.0
+
+
+def test_check_extra_fields():
+    dv = dv_instance()
+    # Should not raise an exception
+    assert dv._check_extra_fields()
+
+    # Test with missing extra field
+    dv.extra_fields = ["missing_field", "foo", "bar"]
+    with pytest.raises(ValueError, match="Field.* not found in data."):
+        dv._check_extra_fields()
+
+
+def test_pre_check_data_sanity():
+    dv_instance()._pre_check_data_sanity()  # Should not raise any exceptions
+
+
+def test_post_check_data_sanity_valid(base_data):
+    dv = dv_instance(base_data_with_missing)
+    dv._post_check_data_sanity()  # Should not raise any exceptions
+
+    dv_instance_no_missing = dv_instance()
+    with pytest.raises(ValueError, match="You have no missing data in your dataset"):
+        dv_instance_no_missing._post_check_data_sanity()
+
+    dv_instance_nan = dv_instance(base_data_nan_missing)
+    with pytest.raises(ValueError, match="You have NaN response times in your dataset"):
+        dv_instance_nan._post_check_data_sanity()
+
+    dv_instance_no_missing.data = dv_instance_no_missing.data * -1
+    dv_instance_no_missing.deadline = False
+    with pytest.raises(
+        ValueError, match="You have negative response times in your dataset"
+    ):
+        dv_instance_no_missing._post_check_data_sanity()
+
+    dv_instance_no_missing = DataValidatorTester(
+        data=base_data,
+        deadline=False,
+        missing_data=False,
+        choices=[0, 1, 2],
+        n_choices=3,
+    )
+
+    invalid_response = max(dv_instance_no_missing.choices) + 1
+    dv_instance_no_missing.data.loc[0, "response"] = invalid_response
+    with pytest.raises(ValueError, match=f"Invalid responses found in your dataset: "):
+        dv_instance_no_missing._post_check_data_sanity()
+
+    dv_instance_no_missing.data.loc[0, "response"] = 1  # Reset to valid response
+    with pytest.warns(
+        UserWarning,
+        match=(r"missing from your dataset"),
+    ):
+        dv_instance_no_missing._post_check_data_sanity()
+
+
+def test_update_extra_fields(monkeypatch):
+    # Create a DataValidatorTester with extra_fields
+    data = pd.DataFrame(
+        {
+            "rt": [0.5, 0.7],
+            "response": [1, 0],
+            "deadline": [1.0, 1.0],
+            "extra": [10, 20],
+            "extra2": [100, 200],
+        }
+    )
+    dv = DataValidatorTester(
+        data=data,
+        extra_fields=["extra", "extra2"],
+    )
+
+    # Mock the model_distribution attribute
+    class DummyModelDist:
+        extra_fields: list
+
+    dv.model_distribution = DummyModelDist()  # type: ignore[assignment]
+
+    # Call the method
+    dv._update_extra_fields()
+
+    # Check that extra_fields were updated correctly
+    assert len(dv.model_distribution.extra_fields) == 2
+    assert (dv.model_distribution.extra_fields[0] == data["extra"].values).all()
+    for i, field in enumerate(dv.extra_fields):  # type: ignore[union-attr]
+        assert (dv.model_distribution.extra_fields[i] == data[field].values).all()
+
+
+def test_validate_choices():
+    # ====== Valid choices =====
+    dv = DataValidatorTester(
+        data=_base_data(),
+        choices=[0, 1],
+        n_choices=2,
+    )
+    dv._validate_choices()  # Should not raise an exception
+
+    # ===== Invalid choices =====
+    dv.choices = None  # type: ignore[assignment]
+    with pytest.raises(ValueError, match="`choices` must be provided*."):
+        dv._validate_choices()

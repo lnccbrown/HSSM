@@ -3,34 +3,207 @@
 # This is necessary to enable forward looking
 from __future__ import annotations
 
+import math
+from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, cast
+from numbers import Real
+from os import PathLike
+from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
 
-from .defaults import LogLik, LoglikKind, SupportedModels, default_model_config
+import numpy as np
+from bambi import Prior
+
+from ._types import LogLik, LoglikKind, NDTEdgeShift, SupportedModels
+from .defaults import (
+    default_model_config,
+)
+from .modelconfig import get_default_model_config
+from .register import register_model
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from pytensor.tensor.random.op import RandomVariable
 
-    from .param import ParamSpec
+import logging
+
+from ssms.config import get_model_registry
+
+_logger = logging.getLogger("hssm")
+
+
+# ====== Centralized SSM defaults =====
+DEFAULT_SSM_OBSERVED_DATA = ["rt", "response"]
+DEFAULT_SSM_CHOICES = (0, 1)
+
+ParamSpec = Union[float, dict[str, Any], Prior, None]
+
+
+def _get_ssms_model_config(model: str) -> dict[str, Any] | None:
+    """Return ssm-simulators' config for ``model``, or None if ssms does not know it.
+
+    Looks the name up in ssms' model registry rather than the
+    ``ssms.config.model_config`` snapshot taken at import, so models registered
+    with ``ssms.config.register_model_config`` are found too.
+    """
+    registry = get_model_registry()
+    return registry.get(model) if registry.has_model(model) else None
+
+
+def _bounds_from_ssms(ssms_config: dict[str, Any]) -> dict[str, tuple[float, float]]:
+    """Convert an ssms config's ``param_bounds`` to HSSM's ``bounds`` dict.
+
+    ssms gives bounds either as ``[[lower, ...], [upper, ...]]`` in ``params``
+    order or as a ``{name: (lower, upper)}`` dict; configs built with
+    ``ModelConfigBuilder`` also carry the dict form as ``param_bounds_dict``.
+    """
+    bounds = ssms_config.get("param_bounds_dict")
+    if bounds is None:
+        bounds = ssms_config.get("param_bounds")
+    if bounds is None:
+        return {}
+    if not isinstance(bounds, dict):
+        lower, upper = bounds
+        bounds = dict(zip(ssms_config["params"], zip(lower, upper)))
+    # A bound that names another parameter (full_ddm_rv's st < t) has no HSSM
+    # form, so that parameter gets none.
+    return {
+        name: (float(lo), float(hi))
+        for name, (lo, hi) in bounds.items()
+        if not isinstance(lo, str) and not isinstance(hi, str)
+    }
+
+
+def _validate_ndt_edge_shift(
+    ndt_edge_shift: NDTEdgeShift | None, list_params: list[str]
+) -> None:
+    """Check an ``ndt_edge_shift`` declaration against a likelihood's parameters.
+
+    Shared by every config that carries the declaration (``Config`` and the RL
+    decision-process registry), so the rules and messages stay the same.
+
+    Parameters
+    ----------
+    ndt_edge_shift
+        The declaration to check. ``None`` means nothing is declared and is
+        accepted as is.
+    list_params
+        The parameters of the likelihood the declaration belongs to.
+
+    Raises
+    ------
+    ValueError
+        If the declaration is not a dict with exactly the keys ``param`` and
+        ``scale``, if ``t`` or the named parameter is not in ``list_params``,
+        or if ``scale`` is not a finite, non-negative number.
+    """
+    if ndt_edge_shift is None:
+        return
+    if not isinstance(ndt_edge_shift, dict) or set(ndt_edge_shift) != {
+        "param",
+        "scale",
+    }:
+        raise ValueError(
+            "`ndt_edge_shift` must be a dict with the keys 'param' and "
+            f"'scale', got {ndt_edge_shift!r}."
+        )
+    param = ndt_edge_shift["param"]
+    scale = ndt_edge_shift["scale"]
+    if "t" not in list_params:
+        raise ValueError(
+            "`ndt_edge_shift` places the support edge relative to `t`, "
+            "but `t` is not in `list_params`."
+        )
+    if param not in list_params:
+        raise ValueError(
+            f"`ndt_edge_shift` names the parameter {param!r}, "
+            "which is not in `list_params`."
+        )
+    # bool is a subclass of int, so it is excluded explicitly.
+    if (
+        isinstance(scale, bool)
+        or not isinstance(scale, Real)
+        or not math.isfinite(scale)
+        or scale < 0
+    ):
+        raise ValueError(
+            "`ndt_edge_shift['scale']` must be a finite, non-negative "
+            f"number, got {scale!r}."
+        )
 
 
 @dataclass
-class Config:
+class BaseModelConfig(ABC):
+    """Base configuration class for all model types."""
+
+    # Core identification
+    model_name: str
+    description: str | None = None
+
+    # Data specification
+    response: list[str] | None = field(default_factory=DEFAULT_SSM_OBSERVED_DATA.copy)
+    choices: tuple[int, ...] | None = DEFAULT_SSM_CHOICES
+
+    # Parameter specification
+    list_params: list[str] | None = None
+    bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
+
+    # Likelihood configuration
+    loglik: LogLik | None = None
+    loglik_kind: LoglikKind | None = None
+    backend: Literal["jax", "pytensor"] | None = None
+
+    # Additional data requirements
+    extra_fields: list[str] | None = None
+
+    # Random variable (simulator) for posterior predictive sampling
+    rv: Any | None = None
+
+    @abstractmethod
+    def validate(self) -> None:
+        """Validate configuration. Must be implemented by subclasses."""
+        ...
+
+    @abstractmethod
+    def get_defaults(self, param: str) -> Any:
+        """Get default values for a parameter. Must be implemented by subclasses."""
+        ...
+
+    @property
+    def n_params(self) -> int | None:
+        """Return the number of parameters."""
+        return len(self.list_params) if self.list_params else None
+
+    @property
+    def n_extra_fields(self) -> int | None:
+        """Return the number of extra fields."""
+        return len(self.extra_fields) if self.extra_fields else None
+
+    @property
+    def is_choice_only(self) -> bool:
+        """Return whether the model is choice-only (no RT)."""
+        return self.response is not None and len(self.response) == 1
+
+
+@dataclass
+class Config(BaseModelConfig):
     """Config class that stores the configurations for models."""
 
-    model_name: SupportedModels | str
-    loglik_kind: LoglikKind
-    response: list[str] | None = None
-    list_params: list[str] | None = None
-    description: str | None = None
-    loglik: LogLik | None = None
-    backend: Literal["jax", "pytensor"] | None = None
     rv: RandomVariable | None = None
-    extra_fields: list[str] | None = None
     # Fields with dictionaries are automatically deepcopied
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
-    bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
+    # Which parameter shifts the lower edge of the response-time support, and by
+    # how much (edge at t - scale * param). None keeps the edge at t.
+    ndt_edge_shift: NDTEdgeShift | None = None
+    # A JAX implementation of this same likelihood, f(data, *list_params), read by
+    # the RLSSM registry; plain HSSM evaluates `loglik`.
+    jax_loglik: Callable[..., Any] | None = None
+
+    def __post_init__(self):
+        """Validate that loglik_kind is provided."""
+        if self.loglik_kind is None:
+            raise ValueError("loglik_kind is required for Config")
 
     @classmethod
     def from_defaults(
@@ -45,6 +218,17 @@ class Config:
         loglik_kind
             The kind of the log-likelihood for the model.
         """
+        model_name_casted = cast("SupportedModels", model_name)
+        if all(
+            [
+                model_name_casted in get_args(SupportedModels),
+                model_name_casted not in default_model_config,
+            ]
+        ):
+            register_model(
+                model_name_casted, **get_default_model_config(model_name_casted)
+            )
+
         if loglik_kind is None:
             if model_name not in default_model_config:
                 raise ValueError(
@@ -53,16 +237,17 @@ class Config:
             # Setting loglik_kind to be the first of analytical or
             # approx_differentiable
             for kind in ["analytical", "approx_differentiable", "blackbox"]:
-                model_name = cast(SupportedModels, model_name)
+                model_name = cast("SupportedModels", model_name)
                 default_config = deepcopy(default_model_config[model_name])
                 if kind in default_config["likelihoods"]:
-                    kind = cast(LoglikKind, kind)
+                    kind = cast("LoglikKind", kind)
                     loglik_config = default_config["likelihoods"][kind]
 
                     return Config(
-                        model_name,
+                        model_name=model_name,
                         loglik_kind=kind,
-                        response=default_config["response"],
+                        response=list(default_config["response"]),
+                        choices=tuple(default_config["choices"]),
                         list_params=default_config["list_params"],
                         description=default_config["description"],
                         **loglik_config,
@@ -82,27 +267,50 @@ class Config:
                     + '"analytical", "approx_differentiable", "blackbox".'
                 )
             if model_name in default_model_config:
-                model_name = cast(SupportedModels, model_name)
+                model_name = cast("SupportedModels", model_name)
                 default_config = deepcopy(default_model_config[model_name])
                 if loglik_kind in default_config["likelihoods"]:
                     loglik_config = default_config["likelihoods"][loglik_kind]
                     return Config(
-                        model_name,
+                        model_name=model_name,
                         loglik_kind=loglik_kind,
-                        response=default_config["response"],
+                        response=list(default_config["response"]),
+                        choices=tuple(default_config["choices"]),
                         list_params=default_config["list_params"],
                         description=default_config["description"],
                         **loglik_config,
                     )
                 return Config(
-                    model_name,
+                    model_name=model_name,
                     loglik_kind=loglik_kind,
-                    response=default_config["response"],
+                    response=list(default_config["response"]),
+                    choices=tuple(default_config["choices"]),
                     list_params=default_config["list_params"],
                     description=default_config["description"],
                 )
 
-            return Config(model_name, loglik_kind, response=["rt", "response"])
+            # A model HSSM does not ship but ssm-simulators knows (a built-in or
+            # one registered with `register_model_config`): its ssms config
+            # names the parameters, their bounds (for a LAN trained on it, the
+            # training range), the choices and, where the simulator's RTs start
+            # below `t`, the support edge.
+            ssms_config = _get_ssms_model_config(model_name)
+            if ssms_config is not None:
+                return Config(
+                    model_name=model_name,
+                    loglik_kind=loglik_kind,
+                    response=list(DEFAULT_SSM_OBSERVED_DATA),
+                    list_params=list(ssms_config["params"]),
+                    bounds=_bounds_from_ssms(ssms_config),
+                    choices=tuple(ssms_config.get("choices", DEFAULT_SSM_CHOICES)),
+                    ndt_edge_shift=ssms_config.get("ndt_edge_shift"),
+                )
+
+            return Config(
+                model_name=model_name,
+                loglik_kind=loglik_kind,
+                response=DEFAULT_SSM_OBSERVED_DATA,
+            )
 
     def update_loglik(self, loglik: Any | None) -> None:
         """Update the log-likelihood function from user input.
@@ -117,24 +325,43 @@ class Config:
 
         self.loglik = loglik
 
+    def update_choices(self, choices: tuple[int, ...] | None) -> None:
+        """Update the choices from user input.
+
+        Parameters
+        ----------
+        choices : tuple[int, ...] | None
+            A tuple of choices.
+        """
+        if choices is None:
+            return
+
+        self.choices = choices
+
     def update_config(self, user_config: ModelConfig) -> None:
         """Update the object from a ModelConfig object.
 
         Parameters
         ----------
-        loglik : optional
-            A user-defined log-likelihood function.
+        user_config: ModelConfig
+            User specified ModelConfig used update self.
         """
         if user_config.response is not None:
-            self.response = user_config.response
+            self.response = list(user_config.response)  # type: ignore[assignment]
         if user_config.list_params is not None:
             self.list_params = user_config.list_params
+        if user_config.choices is not None:
+            self.choices = user_config.choices
+        if user_config.rv is not None:
+            self.rv = user_config.rv
 
         if (
             self.loglik_kind == "approx_differentiable"
             and user_config.backend is not None
         ):
             self.backend = user_config.backend
+        if user_config.ndt_edge_shift is not None:
+            self.ndt_edge_shift = user_config.ndt_edge_shift
 
         self.default_priors |= user_config.default_priors
         self.bounds |= user_config.bounds
@@ -143,13 +370,16 @@ class Config:
     def validate(self) -> None:
         """Ensure that mandatory fields are not None."""
         if self.response is None:
-            raise ValueError("Please provide `response` via `model_config`.")
+            raise ValueError("Please provide `response` columns in the configuration.")
         if self.list_params is None:
-            raise ValueError("Please provide `list_params` via `model_config`.")
+            raise ValueError("Please provide `list_params`.")
+        if self.choices is None:
+            raise ValueError("Please provide `choices`.")
         if self.loglik is None:
             raise ValueError("Please provide a log-likelihood function via `loglik`.")
         if self.loglik_kind == "approx_differentiable" and self.backend is None:
             raise ValueError("Please provide `backend` via `model_config`.")
+        _validate_ndt_edge_shift(self.ndt_edge_shift, self.list_params)
 
     def get_defaults(
         self, param: str
@@ -163,15 +393,130 @@ class Config:
         """
         return self.default_priors.get(param), self.bounds.get(param)
 
+    @classmethod
+    def _build_model_config(
+        cls,
+        model: SupportedModels | str,
+        loglik_kind: LoglikKind | None,
+        model_config: ModelConfig | dict | None,
+        choices: int | np.integer | list[int] | tuple[int, ...] | None,
+        loglik: Any = None,
+    ) -> Config:
+        """Build and return a validated Config for standard HSSM models.
+
+        Resolves defaults, normalizes dict/ModelConfig overrides, applies
+        choices and loglik precedence rules, then validates before returning.
+        """
+        # An int is the number of choices: 2 -> (-1, 1), n > 2 -> (0, ..., n - 1).
+        if isinstance(choices, (int, np.integer)):
+            if choices < 2:
+                raise ValueError(f"`choices` must be at least 2, got {choices}.")
+            choices = (-1, 1) if choices == 2 else tuple(range(choices))
+
+        config = cls.from_defaults(model, loglik_kind)
+
+        final_config: ModelConfig | None = None
+        if model_config is not None:
+            final_config = _normalize_model_config_with_choices(model_config, choices)
+            config.update_config(final_config)
+
+        # No model_config provided: apply `choices` when appropriate.
+        # If caller passed a SupportedModels string, ignore explicit `choices`.
+        if (
+            model in get_args(SupportedModels)
+            and choices is not None
+            and model_config is None
+        ):
+            _logger.info(
+                "Model string is in SupportedModels. Ignoring choices arguments."
+            )
+
+        # If model is not a supported built-in and `model_config` did not set
+        # choices, prefer explicit choices or fall back to ssms-simulators lookup.
+        if model not in get_args(SupportedModels) and (
+            final_config is None or final_config.choices is None
+        ):
+            if choices is not None:
+                config.update_choices(choices)
+            elif (ssms_config := _get_ssms_model_config(model)) is not None and (
+                "choices" in ssms_config
+            ):
+                config.update_choices(tuple(ssms_config["choices"]))
+                _logger.info(
+                    "choices argument passed as None, "
+                    "but found %s in ssms-simulators. "
+                    "Using choices, from ssm-simulators configs: %s",
+                    model,
+                    ssms_config["choices"],
+                )
+
+        config.update_loglik(loglik)
+        # A str or PathLike `loglik` is an ONNX network (local or on the
+        # Hugging Face hub); "jax" is the backend every built-in LAN uses.
+        if (
+            config.loglik_kind == "approx_differentiable"
+            and config.backend is None
+            and isinstance(config.loglik, (str, PathLike))
+        ):
+            config.backend = "jax"
+        config.validate()
+        return config
+
 
 @dataclass
 class ModelConfig:
     """Representation for model_config provided by the user."""
 
-    response: list[str] | None = None
+    response: tuple[str, ...] | None = None
     list_params: list[str] | None = None
+    choices: tuple[int, ...] | None = None
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     backend: Literal["jax", "pytensor"] | None = None
     rv: RandomVariable | None = None
     extra_fields: list[str] | None = None
+    # Overrides the likelihood's own declaration when not None; see Config.
+    ndt_edge_shift: NDTEdgeShift | None = None
+
+
+def _normalize_model_config_with_choices(
+    model_config: "ModelConfig" | dict[str, Any],
+    choices: list[int] | tuple[int, ...] | None,
+) -> "ModelConfig":
+    """Normalize a user-supplied model_config and apply choices.
+
+    Returns a fresh `ModelConfig` instance and does not mutate the
+    caller's objects. If both ``model_config`` and ``choices`` are provided
+    and ``model_config`` already contains ``choices``, the value from
+    ``model_config`` wins (and a log entry is emitted).
+    """
+    # Normalize input to a mutable dict so we can coerce and avoid mutating
+    # the caller's objects. Build a fresh ModelConfig from that dict.
+    if isinstance(model_config, ModelConfig):
+        mc: dict[str, Any] = {
+            k: getattr(model_config, k) for k in model_config.__dataclass_fields__
+        }
+    else:
+        mc = model_config.copy()
+
+    # Coerce any existing choices on the input to a tuple for immutability
+    if mc.get("choices") is not None:
+        mc["choices"] = tuple(mc["choices"])
+
+    # If caller didn't provide an explicit `choices` argument, return the
+    # normalized ModelConfig built from the input (fresh instance).
+    if choices is None:
+        return ModelConfig(**{k: v for k, v in mc.items() if v is not None})
+
+    # Caller provided choices; prefer the one embedded in model_config if
+    # present, otherwise apply the provided value (coerced to tuple).
+    if mc.get("choices") is not None:
+        _logger.info(
+            "choices list provided in both model_config and "
+            "as an argument directly. Using the one provided in "
+            "model_config. We recommend providing choices in model_config."
+        )
+        return ModelConfig(**{k: v for k, v in mc.items() if v is not None})
+
+    mc["choices"] = tuple(choices)
+    return ModelConfig(**{k: v for k, v in mc.items() if v is not None})

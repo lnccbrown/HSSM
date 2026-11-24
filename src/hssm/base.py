@@ -1,0 +1,2506 @@
+"""HSSM: Hierarchical Sequential Sampling Models.
+
+A package based on pymc and bambi to perform Bayesian inference for hierarchical
+sequential sampling models.
+
+This file defines the entry class HSSM.
+"""
+
+import datetime
+import logging
+import warnings
+from abc import ABC, abstractmethod
+from copy import deepcopy
+from os import PathLike
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Literal, Union, cast
+
+import arviz as az
+import bambi as bmb
+import cloudpickle as cpickle
+import matplotlib as mpl
+import numpy as np
+import pandas as pd
+import pymc as pm
+import pytensor
+import seaborn as sns
+import xarray as xr
+from bambi.model_components import DistributionalComponent
+from bambi.transformations import transformations_namespace
+from bambi.utils import get_aliased_name
+from pymc.model.transform.conditioning import do
+from pymc.pytensorf import resolve_backend_compile_kwargs
+from pymc.variational import Approximation
+from xarray import DataTree
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from pytensor.tensor.variable import TensorVariable
+
+from hssm import _vi_compat
+from hssm._types import SupportedModels
+from hssm.data_validator import DataValidatorMixin
+from hssm.defaults import (
+    INITVAL_JITTER_SETTINGS,
+    INITVAL_SETTINGS,
+)
+from hssm.distribution_utils import (
+    make_family,
+)
+from hssm.missing_data_mixin import MissingDataMixin
+from hssm.utils import (
+    _compute_log_likelihood,
+    _get_alias_dict,
+    _print_prior,
+    _split_array,
+)
+
+from . import plotting, tracking
+from .config import BaseModelConfig
+from .modelconfig import list_models
+from .param import Params
+from .param import UserParam as Param
+from .param.parameterization_check import (
+    check_user_group_prior_compatibility,
+    check_user_priors_for_location_overparameterization,
+    emit_disconnected_node_warnings,
+    emit_parameterization_warnings,
+    find_disconnected_free_rvs,
+    raise_prior_compatibility_errors,
+)
+from .param.utils import _clamp_default_initval_to_bounds
+
+_logger = logging.getLogger("hssm")
+
+# NOTE: Temporary mapping from old sampler names to new ones in bambi 0.16.0
+_new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
+    "mcmc": "pymc",
+    "nuts_numpyro": "numpyro",
+    "nuts_blackjax": "blackjax",
+}
+
+
+def _validate_setting_preset(name: str, value: object, preset: str) -> None:
+    """Validate a model-level preset selector at the public boundary."""
+    if value is not None and (not isinstance(value, str) or value != preset):
+        raise ValueError(
+            f"`{name}` must be either {preset!r} or None, but got {value!r}."
+        )
+
+
+def _get_prior_args(prior: Any) -> dict[str, Any]:
+    """Return the original arguments of a Bambi or truncated HSSM prior.
+
+    Anything else, such as a missing regression-term prior, has no arguments and
+    hence no user-supplied initial value.
+    """
+    if not isinstance(prior, bmb.Prior):
+        return {}
+    if getattr(prior, "is_truncated", False):
+        return cast("dict[str, Any]", getattr(prior, "_args"))
+    return prior.args
+
+
+def _get_regression_term_prior(prior: dict[str, Any], term: str) -> Any:
+    """Return the prior Bambi uses for a common term of a regression.
+
+    As in Bambi, a prior named after the term takes precedence over the
+    ``"common"`` wildcard, which covers every common term, the intercept included.
+    Returns ``None`` when neither is given.
+    """
+    return prior.get(term, prior.get("common"))
+
+
+class classproperty:
+    """A decorator that combines the behavior of @property and @classmethod.
+
+    This decorator allows you to define a property that can be accessed on the class
+    itself, rather than on instances of the class. It is useful for defining class-level
+    properties that need to perform some computation or access class-level data.
+
+    This implementation is provided for compatibility with Python versions 3.10 through
+    3.12, as one cannot combine the @property and @classmethod decorators across all
+    these versions.
+
+    Example
+    -------
+    class MyClass:
+        @classproperty
+        def my_class_property(cls):
+            return "This is a class property"
+
+    print(MyClass.my_class_property)  # Output: This is a class property
+    """
+
+    def __init__(self, fget):
+        self.fget = fget
+
+    def __get__(self, instance, owner):  # noqa: D105
+        return self.fget(owner)
+
+
+class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
+    """The basic Hierarchical Sequential Sampling Model (HSSM) class.
+
+    Parameters
+    ----------
+    data
+        A pandas DataFrame with the minimum requirements of containing the data with the
+        columns "rt" and "response".
+    model
+        The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
+        "full_ddm", "angle", "angle_extended", "levy", "ornstein", "weibull",
+        "race_no_bias_angle_4",
+        "ddm_seq2_no_bias", "gamma_drift", "gamma_drift_angle". If any other string
+        is passed, the model will be considered custom, in which case all
+        `model_config`, `loglik`, and `loglik_kind` have to be provided by the user.
+    choices : optional
+        The choices that participants can make. An integer (Python `int` or numpy
+        integer) gives the number of choices: `2` means [-1, 1] and any `n > 2`
+        means [0, 1, ..., n - 1]. A `list` or `tuple` gives the choice values
+        directly. Ignored for supported models unless `model_config` is also passed,
+        and choices set in `model_config` take precedence. Defaults to `None`, which
+        uses the model's default choices (from ssm-simulators for custom models it
+        knows). If any value other than the choices provided is found in the
+        "response" column of the data, an error will be raised.
+    include : optional
+        A list of dictionaries specifying parameter specifications to include in the
+        model. If left unspecified, defaults will be used for all parameter
+        specifications. Defaults to None.
+    model_config
+        A fully initialised `hssm.config.BaseModelConfig` instance
+         (typically `hssm.config.Config`) produced by the subclass
+         before calling ``super().__init__``. All likelihood, parameter, and
+         data information used by `HSSMBase` is drawn from this object,
+         and it must provide populated ``loglik`` and ``list_params`` fields.
+    p_outlier : optional
+        The fixed lapse probability or the prior distribution of the lapse probability.
+        Defaults to a fixed value of 0.05. When `None`, the lapse probability will not
+        be included in estimation.
+    lapse : optional
+        The lapse distribution. This argument is required only if `p_outlier` is not
+        `None`. Defaults to Uniform(0.0, 20.0). The lapse process is mixed into the
+        likelihood with weight `p_outlier`, marginalised per row type: observed
+        rows use the lapse density at the observed `rt`; missing-RT rows (choice
+        observed, no deadline) use `1 / n_choices`; omission rows (deadline) use
+        the lapse survival probability at the deadline.
+    global_formula : optional
+        A string that specifies a regressions formula which will be used for all model
+        parameters. If you specify parameter-wise regressions in addition, these will
+        override the global regression for the respective parameter.
+    link_settings : optional
+        A preset for regression parameters whose link is not specified explicitly.
+        Helpful for hierarchical models where sampling might get stuck or become very
+        slow. Can be one of the following:
+
+        - `"log_logit"`: uses identity for bounds `(-inf, inf)`, log for
+        `(0, inf)`, and generalized logit when both bounds are finite.
+        - `None`: uses the `"identity"` link unless a regression parameter specifies
+        another link. A bounded parameter used in a regression with the identity link
+        does not have its bounds built into the parameterization: a draw that puts any
+        observation's value outside them is penalised by the likelihood rather than
+        mapped back inside. This is usually harmless when the parameter sits well
+        inside its bounds. If you see divergences, `"log_logit"` composes the
+        regression on the link scale (it also changes the generated default priors).
+
+        Explicit per-parameter links take precedence. Parameters without a regression
+        formula have no linear predictor and are unaffected. Defaults to `None`.
+    prior_settings : optional
+        A preset for generated regression-term priors. Helpful for hierarchical models
+        where sampling might get stuck or become very slow. Can be one of the
+        following:
+
+        - `"safe"`: fills eligible missing common and group-specific regression-term
+        priors with HSSM's weakly informative defaults. An identity-link intercept
+        of a parameter with finite bounds gets a Normal centered in the bounds,
+        with an SD of a quarter of their width (`ddm`, `ddm_sdv` and `full_ddm`
+        without a LAN likelihood use HDDM-based priors instead). If the bounds are
+        much wider than the parameter's plausible values, that prior is nearly
+        flat: give the parameter an explicit `prior`.
+        - `None`: leaves missing regression-term priors to Bambi. This is not
+        recommended for hierarchical models.
+
+        Explicit regression-term priors take precedence. This setting does not alter
+        explicit, model-configuration, or bounds-derived priors for parameters without
+        a regression formula. Defaults to `"safe"`.
+    extra_namespace : optional
+        Additional user supplied variables with transformations or data to include in
+        the environment where the formula is evaluated. Defaults to `None`.
+    missing_data : optional
+        Specifies whether the model should handle missing data. Can be a `bool` or a
+        `float`. If `False`, and if the `rt` column contains in the data -999.0,
+        the model will drop these rows and produce a warning. If `True`, the model will
+        treat code -999.0 as missing data. If a `float` is provided, the model will
+        treat this value as the missing data value. Defaults to `False`.
+    deadline : optional
+        Specifies whether the model should handle deadline data. Can be a `bool` or a
+        `str`. If `False`, the model will not do nothing even if a deadline column is
+        provided. If `True`, the model will treat the `deadline` column as deadline
+        data. If a `str` is provided, the model will treat this value as the name of the
+        deadline column. Defaults to `False`.
+    loglik_missing_data : optional
+        A likelihood function for missing data. Please see the `loglik` parameter to see
+        how to specify the likelihood function this parameter. If nothing is provided,
+        a default likelihood function will be used. This parameter is required only if
+        either `missing_data` or `deadline` is not `False`. Defaults to `None`.
+    process_initvals : optional
+        If `True`, the model will process the initial values. Defaults to `True`.
+        Processing also clamps a default initial value that falls outside its
+        parameter's declared `bounds` to a point just inside them; initial values
+        you supply yourself are used as given.
+    initval_jitter : optional
+        The jitter value for the initial values. Defaults to `0.01`.
+    noncentered : optional
+        Controls the centered vs. non-centered parameterization of
+        group-specific (hierarchical) terms. ``True`` (bambi's default) requests
+        the non-centered parameterization and ``False`` requests centered. Safe
+        generated group-only terms that own a population location may be centered
+        term by term, with a warning, when current bambi cannot preserve that
+        location under non-centering. A
+        ``dict`` keyed by HSSM parameter name (e.g. ``{"v": False, "a": True}``)
+        sets it per parameter; an unknown key raises at construction. A per-prior
+        ``noncentered`` field (inside a prior ``dict`` or on an ``hssm.Prior``)
+        overrides the model-level value for that term (precedence: per-prior >
+        model-level dict > default ``True``). Only affects parameters that have a
+        group-specific term (e.g. ``... + (1|participant_id)``); setting it for a
+        non-hierarchical parameter is a silent no-op. Passed to ``bmb.Model``.
+    **kwargs
+        Additional arguments passed to the `bmb.Model` object.
+
+    Attributes
+    ----------
+    data
+        A pandas DataFrame with at least two columns of "rt" and "response" indicating
+        the response time and responses.
+    list_params
+        The list of strs of parameter names.
+    model_name
+        The name of the model.
+    loglik:
+        The likelihood function or a path to an onnx file.
+    loglik_kind:
+        The kind of likelihood used.
+    model_config
+        A dictionary representing the model configuration.
+    model_distribution
+        The likelihood function of the model in the form of a pm.Distribution subclass.
+    family
+        A Bambi family object.
+    priors
+        A dictionary containing the prior distribution of parameters.
+    formula
+        A string representing the model formula.
+    link
+        A string or a dictionary representing the link functions for all parameters.
+    params
+        A list of Param objects representing model parameters.
+    initval_jitter
+        The jitter value for the initial values.
+    """
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        model_config: BaseModelConfig,
+        include: list[dict[str, Any] | Param] | None = None,
+        p_outlier: float | dict | bmb.Prior | None = 0.05,
+        lapse: float | dict | bmb.Prior | None = None,
+        global_formula: str | None = None,
+        link_settings: Literal["log_logit"] | None = None,
+        prior_settings: Literal["safe"] | None = "safe",
+        extra_namespace: dict[str, Any] | None = None,
+        missing_data: bool | float = False,
+        deadline: bool | str = False,
+        loglik_missing_data: (
+            str | PathLike | Callable | pytensor.graph.Op | None
+        ) = None,
+        process_initvals: bool = True,
+        initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
+        **kwargs,
+    ):
+        _validate_setting_preset("link_settings", link_settings, "log_logit")
+        _validate_setting_preset("prior_settings", prior_settings, "safe")
+
+        # ===== Input Data & Configuration =====
+        self.data = data.copy()
+        self.global_formula = global_formula
+        self.link_settings = link_settings
+        self.prior_settings = prior_settings
+        self.missing_data_value = -999.0
+
+        # Store a safe default for the constructor-arguments snapshot so that
+        # pickling / save-load cannot raise AttributeError if a subclass forgets
+        # to call `_store_init_args(locals(), kwargs)` early. Subclasses are
+        # still expected to overwrite this with the real snapshot. However,
+        # do not overwrite if a subclass already set `_init_args` prior to
+        # calling `super().__init__()` (the subclass may capture its
+        # constructor args before delegating to the base class).
+        if not hasattr(self, "_init_args"):
+            self._init_args: dict[str, Any] = {}
+
+        # Set up additional namespace for formula evaluation
+        additional_namespace = transformations_namespace.copy()
+        if extra_namespace is not None:
+            additional_namespace.update(extra_namespace)
+        self.additional_namespace = additional_namespace
+
+        # region ===== Inference Results (initialized to None/empty) =====
+        self._inference_obj: DataTree | None = None
+        self._inference_obj_vi: DataTree | Approximation | None = None
+        self._vi_approx = None
+        self._map_dict = None
+        # endregion
+
+        # ===== Initial Values Configuration =====
+        self._initvals: dict[str, Any] = {}
+        self.initval_jitter = initval_jitter
+
+        # region ===== Store the pre-built config =====
+        self.model_config: BaseModelConfig = model_config
+        # endregion
+
+        # region ===== Set up shortcuts so old code will work ======
+        self.response: list[str] = (  # type: ignore[assignment]
+            list(self.model_config.response)
+            if self.model_config.response is not None
+            else []
+        )
+        self.list_params = (
+            list(self.model_config.list_params)
+            if self.model_config.list_params is not None
+            else None
+        )
+        self.choices = self.model_config.choices  # type: ignore[assignment]
+        self.model_name = self.model_config.model_name
+        self.loglik = self.model_config.loglik
+        self.loglik_kind = self.model_config.loglik_kind
+        self.extra_fields = self.model_config.extra_fields
+        # endregion
+
+        # TODO: add to HSSMBase
+        self.is_choice_only: bool = self.model_config.is_choice_only
+
+        if self.choices is None:
+            raise ValueError(
+                "`choices` must be provided either in `model_config` or as an argument."
+            )
+
+        self._validate_choices()
+
+        # region Avoid mypy error later (None.append). Should list_params be Optional?
+        if self.list_params is None:
+            raise ValueError(
+                "`list_params` must be provided in the model configuration."
+            )
+        # endregion
+
+        self.n_choices = len(self.choices)  # type: ignore[arg-type]
+
+        self._pre_check_data_sanity()
+
+        self._process_missing_data_and_deadline(
+            missing_data=missing_data,
+            deadline=deadline,
+            loglik_missing_data=loglik_missing_data,
+        )
+
+        # region ===== Process lapse distribution =====
+        self.has_lapse = p_outlier is not None and p_outlier != 0
+        self._check_lapse(lapse)
+        # endregion
+
+        # Process all parameters
+        model_noncentered = kwargs.get("noncentered", True)
+        self.params = Params.from_user_specs(
+            model=self,  # type: ignore[arg-type]
+            include=[] if include is None else include,
+            kwargs=kwargs,
+            p_outlier=p_outlier,
+            noncentered=model_noncentered,
+        )
+
+        # Explicit group priors are authoritative, so reject any specification
+        # that bambi cannot build or would silently alter under the effective
+        # parameterization. Report all incompatible terms in one pre-build error.
+        raise_prior_compatibility_errors(
+            check_user_group_prior_compatibility(
+                self.params,
+                model_noncentered,
+            )
+        )
+
+        self._parent = self.params.parent
+        self._parent_param = self.params.parent_param
+
+        self._validate_fixed_vectors()
+        self.formula, self.priors, self.link = self.params.parse_bambi(model=self)  # type: ignore[arg-type]
+
+        # For parameters that have a regression backend, apply bounds at the likelihood
+        # level to ensure that the samples that are out of bounds
+        # are discarded (replaced with a large negative value).
+        self.bounds = {
+            name: param.bounds
+            for name, param in self.params.items()
+            if param.is_regression and param.bounds is not None
+        }
+
+        # Set p_outlier and lapse
+        self.p_outlier = self.params.get("p_outlier")
+
+        self._post_check_data_sanity()
+
+        # Which network this model runs on. The loader records downloads to a
+        # module-global, so clear it first and read it straight after: what is
+        # left belongs to this model's likelihood and nothing else. Reading it
+        # lazily at log time would attribute a later model's network to this
+        # one, and reading it without clearing would hand an analytical model
+        # whichever network the previous model loaded.
+        tracking.reset_network_record()
+        self.model_distribution = self._make_model_distribution()
+        networks = tracking.recorded_networks()
+        self._tracking_network = networks.get(tracking.LIKELIHOOD_ROLE, {})
+        self._tracking_missing_data_network = networks.get(
+            tracking.MISSING_DATA_ROLE, {}
+        )
+
+        self.family = make_family(
+            self.model_distribution,
+            self.list_params,
+            self.link,
+            self._parent,
+            is_choice_only=self.is_choice_only,
+        )
+
+        # Targeted statistical-identifiability warnings for common/group or
+        # repeated group-only population-location collisions.
+        emit_parameterization_warnings(
+            check_user_priors_for_location_overparameterization(
+                self.params, model_noncentered
+            )
+        )
+
+        self.model = bmb.Model(
+            self.formula,
+            data=self.data,
+            family=self.family,
+            priors=self.priors,  # center_predictors=False
+            extra_namespace=self.additional_namespace,
+            **kwargs,
+        )
+
+        self._aliases = _get_alias_dict(
+            self.model, self._parent_param, self.response_c, self.response_str
+        )
+        self.set_alias(self._aliases)
+        self.model.build()
+
+        # General safety net: walk the PyMC graph and surface any free RVs
+        # that do not feed an observed RV.
+        emit_disconnected_node_warnings(find_disconnected_free_rvs(self.pymc_model))
+
+        # region ===== Fix scalar deterministic dims for bambi >= 0.17 =====
+        # Bambi >= 0.17 declares dims=("__obs__",) for intercept-only
+        # deterministics that actually have shape (1,). This causes an
+        # xarray CoordinateValidationError during pm.sample() when ArviZ
+        # tries to create a DataArray with mismatched dimension sizes.
+        # Fix by removing the dims declaration for these deterministics.
+        self._fix_scalar_deterministic_dims()
+        # endregion
+
+        # region ===== Init vals and jitters =====
+        if process_initvals:
+            self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
+        if self.initval_jitter > 0:
+            self._jitter_initvals(
+                jitter_epsilon=self.initval_jitter,
+                vector_only=True,
+            )
+        # endregion
+
+        # Make sure we reset rvs_to_initial_values --> Only None's
+        # Otherwise PyMC barks at us when asking to compute likelihoods
+        self.pymc_model.rvs_to_initial_values.update(
+            {key_: None for key_ in self.pymc_model.rvs_to_initial_values.keys()}
+        )
+        _logger.info("Model initialized successfully.")
+
+    @abstractmethod
+    def _make_model_distribution(self) -> type[pm.Distribution]:
+        """Make a pm.Distribution for the model.
+
+        This method must be implemented by subclasses to create the appropriate
+        distribution for the specific model type.
+        """
+        ...
+
+    def _fix_scalar_deterministic_dims(self) -> None:
+        """Fix dims metadata for scalar deterministics.
+
+        Bambi >= 0.17 returns shape ``(1,)`` for intercept-only
+        deterministics but still declares ``dims=("__obs__",)``. This causes
+        an xarray ``CoordinateValidationError`` during ``pm.sample()`` because
+        the ``__obs__`` coordinate has ``n_obs`` entries. Removing the dims
+        declaration for these variables lets ArviZ handle them as
+        un-dimensioned arrays, avoiding the conflict.
+        """
+        n_obs = len(self.data)
+        dims_dict = self.pymc_model.named_vars_to_dims
+        for det in self.pymc_model.deterministics:
+            if det.name not in dims_dict:
+                continue
+            dims = dims_dict[det.name]
+            if "__obs__" in dims:
+                # Check static shape: if it doesn't match n_obs, remove dims
+                try:
+                    shape_0 = det.type.shape[0]
+                except (IndexError, TypeError):
+                    continue
+                if shape_0 is not None and shape_0 != n_obs:
+                    del dims_dict[det.name]
+
+    def _validate_fixed_vectors(self) -> None:
+        """Validate that fixed-vector parameters have the correct length.
+
+        Fixed-vector parameters (``prior=np.ndarray``) bypass Bambi's formula
+        system entirely --- they are passed as a scalar ``0.0`` placeholder to
+        Bambi, and the real vector is substituted inside
+        ``HSSMDistribution.logp()`` (see ``dist.py``).  Because this
+        substitution is invisible to Bambi, we must validate the vector length
+        against ``len(self.data)`` up front to catch shape mismatches early.
+        """
+        for name, param in self.params.items():
+            if isinstance(param.prior, np.ndarray):
+                if len(param.prior) != len(self.data):
+                    raise ValueError(
+                        f"Fixed vector for parameter '{name}' has length "
+                        f"{len(param.prior)}, but data has {len(self.data)} rows."
+                    )
+
+    @classproperty
+    def supported_models(cls) -> tuple[SupportedModels, ...]:
+        """Get a tuple of all supported models.
+
+        Deprecated in favor of ``hssm.list_models()``.
+
+        Returns
+        -------
+        tuple[SupportedModels, ...]
+            A tuple containing all supported model names.
+        """
+        warnings.warn(
+            "HSSM.supported_models is deprecated and will be removed in a "
+            "future release. Use hssm.list_models() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return list_models()
+
+    @staticmethod
+    def _store_init_args(
+        local_vars: dict[str, Any], extra_kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Capture subclass ``__init__`` arguments for save/load serialisation.
+
+        Call this at the very start of a subclass ``__init__`` before any local
+        variables are assigned, passing ``locals()`` and the ``**kwargs`` dict::
+
+            self._init_args = self._store_init_args(locals(), kwargs)
+
+        Parameters
+        ----------
+        local_vars
+            The ``locals()`` snapshot from the subclass ``__init__``.
+        extra_kwargs
+            The ``**kwargs`` dict captured by the subclass ``__init__``.
+
+        Returns
+        -------
+        dict[str, Any]
+            A mapping of parameter names to their values, suitable for
+            reconstructing the instance via ``cls(**init_args)``.
+
+        Notes
+        -----
+        The implementation filters out internal names that commonly appear in
+        ``locals()`` snapshots (for example, ``__class__`` and ``kwargs``) so
+        that the returned mapping is safe to pass back to the class
+        constructor during unpickling.
+        """
+        # Exclude internal names that appear in locals() snapshots and are not
+        # valid constructor parameters when re-instantiating the class.
+        exclude_keys = {"self", "kwargs", "__class__"}
+        result = {k: v for k, v in local_vars.items() if k not in exclude_keys}
+        result.update(extra_kwargs)
+        return result
+
+    def find_MAP(self, **kwargs):
+        """Perform Maximum A Posteriori estimation.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the MAP estimates of the model parameters.
+        """
+        self._map_dict = pm.find_MAP(model=self.pymc_model, **kwargs)
+        return self._map_dict
+
+    def sample(
+        self,
+        sampler: Literal["pymc", "numpyro", "blackjax", "nutpie", "laplace"]
+        | None = None,
+        init: str | None = None,
+        initvals: str | dict | None = None,
+        include_response_params: bool = False,
+        **kwargs,
+    ) -> DataTree | Approximation:
+        """Perform sampling using the `fit` method via bambi.Model.
+
+        Parameters
+        ----------
+        sampler: optional
+            The sampler to use. Can be one of "pymc", "numpyro",
+            "blackjax", "nutpie", or "laplace". If using `blackbox` likelihoods,
+            this cannot be "numpyro", "blackjax", or "nutpie". By default it is None,
+            and sampler will automatically be chosen: when the model uses the
+            `approx_differentiable` likelihood, and `jax` backend, "numpyro" will
+            be used. Otherwise, "pymc" (the default PyMC NUTS sampler) will be used.
+
+            Note that the old sampler names such as "mcmc", "nuts_numpyro",
+            "nuts_blackjax" will be deprecated and removed in future releases. A warning
+            will be raised if any of these old names are used.
+            By default, for the JAX samplers ("numpyro"/"blackjax"), HSSM disables
+            the sampler's built-in initial-value jitter and uses its own controlled
+            `initval_jitter` instead.
+        init: optional
+            Initialization method to use for the sampler. If any of the NUTS samplers
+            is used, defaults to `"adapt_diag"`. Otherwise, defaults to `"auto"`.
+        initvals: optional
+            Pass initial values to the sampler. This can be a dictionary of initial
+            values for parameters of the model, or a string "map" to use initialization
+            at the MAP estimate. If "map" is used, the MAP estimate will be computed if
+            not already attached to the base class from prior call to `find_MAP`.
+        include_response_params: optional
+            Include parameters of the response distribution in the output. These usually
+            take more space than other parameters as there's one of them per
+            observation. Defaults to False.
+        kwargs
+            Other arguments passed to bmb.Model.fit(). Please see [here]
+            (https://bambinos.github.io/bambi/api_reference.html#bambi.models.Model.fit)
+            for full documentation. For the JAX samplers ("numpyro"/"blackjax"),
+            `nuts={"jitter": ...}` / `nuts={"chain_method": ...}` are forwarded to
+            pymc's `sample_jax_nuts`; HSSM sets `jitter=False` unless the user
+            passes it.
+
+        Returns
+        -------
+        DataTree | Approximation
+            A reference to the `model.traces` object, which stores the traces of the
+            last call to `model.sample()`. `model.traces` is a `DataTree`
+            instance if `sampler` is `"pymc"` (default), `"numpyro"`,
+            `"blackjax"` or "`laplace".
+        """
+        # If initvals are None (default)
+        # we skip processing initvals here.
+        if sampler in _new_sampler_mapping:
+            _logger.warning(
+                f"Sampler '{sampler}' is deprecated. "
+                "Please use the new sampler names: "
+                "'pymc', 'numpyro', 'blackjax', 'nutpie', or 'laplace'."
+            )
+            sampler = _new_sampler_mapping[sampler]  # type: ignore
+
+        if sampler == "vi":
+            raise ValueError(
+                "VI is not supported via the sample() method. "
+                "Please use the vi() method instead."
+            )
+
+        if initvals is not None:
+            if isinstance(initvals, dict):
+                kwargs["initvals"] = initvals
+            else:
+                if isinstance(initvals, str):
+                    if initvals == "map":
+                        if self._map_dict is None:
+                            _logger.info(
+                                "initvals='map' but no map"
+                                "estimate precomputed. \n"
+                                "Running map estimation first..."
+                            )
+                            self.find_MAP()
+                            kwargs["initvals"] = self._map_dict
+                        else:
+                            kwargs["initvals"] = self._map_dict
+                else:
+                    raise ValueError(
+                        "initvals argument must be a dictionary or 'map'"
+                        " to use the MAP estimate."
+                    )
+        else:
+            kwargs["initvals"] = self._initvals
+            _logger.info("Using default initvals. \n")
+
+        if sampler is None:
+            if (
+                self.loglik_kind == "approx_differentiable"
+                and self.model_config.backend == "jax"
+            ):
+                sampler = "numpyro"
+            else:
+                sampler = "pymc"
+
+        if self.loglik_kind == "blackbox":
+            if sampler in ["blackjax", "numpyro", "nutpie"]:
+                raise ValueError(
+                    f"{sampler} sampler does not work with blackbox likelihoods."
+                )
+
+            if "step" not in kwargs:
+                # Black-box likelihoods execute arbitrary Python callbacks in
+                # ``Op.perform``. PyMC 6's default Numba linker object-mode
+                # lifts those callbacks and cloudpickles their closures; valid
+                # callbacks can hold native resources such as an ONNX Runtime
+                # session, which cannot be pickled. Compile the Slice logp with
+                # PyTensor's CVM linker instead, matching the pre-PyMC-6 path
+                # without reducing the caller's requested cores.
+                slice_compile_kwargs = resolve_backend_compile_kwargs(
+                    kwargs.get("backend"), kwargs.get("compile_kwargs")
+                )
+                slice_compile_kwargs.setdefault("mode", "cvm")
+                kwargs |= {
+                    "step": pm.Slice(
+                        model=self.pymc_model,
+                        compile_kwargs=slice_compile_kwargs,
+                    )
+                }
+
+        if (
+            self.loglik_kind == "approx_differentiable"
+            and self.model_config.backend == "jax"
+            and sampler == "pymc"
+            and kwargs.get("cores", None) != 1
+        ):
+            _logger.warning(
+                "Parallel sampling might not work with `jax` backend and the PyMC NUTS "
+                + "sampler on some platforms. Please consider using `numpyro`, "
+                + "`blackjax`, or `nutpie` sampler if that is a problem."
+            )
+
+        if self._check_extra_fields():
+            self._update_extra_fields()
+
+        if init is None:
+            if sampler in ["pymc", "numpyro", "blackjax", "nutpie"]:
+                init = "adapt_diag"
+            else:
+                init = "auto"
+
+        if sampler != "pymc" and "step" in kwargs:
+            raise ValueError(
+                "`step` samplers (enabled by the `step` argument) are only supported "
+                "by the `pymc` sampler."
+            )
+
+        if self._inference_obj is not None:
+            _logger.warning(
+                "The model has already been sampled. Overwriting the previous "
+                + "inference object. Any previous reference to the inference object "
+                + "will still point to the old object."
+            )
+
+        # Define whether likelihood should be computed
+        compute_likelihood = True
+        if "idata_kwargs" in kwargs:
+            if "log_likelihood" in kwargs["idata_kwargs"]:
+                compute_likelihood = kwargs["idata_kwargs"].pop("log_likelihood", True)
+
+        omit_offsets = kwargs.pop("omit_offsets", False)
+        # Pass the user's sampler choice through to bambi verbatim. Bambi's
+        # inference_method natively accepts "pymc"/"numpyro"/"blackjax"/"nutpie"
+        # and routes each to a distinct pm.sample(nuts_sampler=...) call.
+        # The previous conditional collapsed all four NUTS variants to "pymc",
+        # which silently downgraded user choice — surfaced via the sbi NLE
+        # tutorial where sampler="numpyro" still went through PyMC's multiprocess
+        # path and tripped cloudpickle on the ONNX ModelProto.
+        # HSSM applies its own controlled `initval_jitter`, so the JAX samplers'
+        # ("numpyro"/"blackjax") uniform(-1, 1) initial-value jitter is disabled
+        # by default (issue #999). Since PyMC 6.3.0, nuts={"jitter": ...} is
+        # lifted out of the kernel kwargs and passed to sample_jax_nuts
+        # (pymc#8380), so no monkeypatch is needed. Merge our default *under*
+        # the user's nuts dict so a user-supplied value wins.
+        if sampler in ("numpyro", "blackjax"):
+            nuts = {"jitter": False, **(kwargs.get("nuts") or {})}
+            kwargs["nuts"] = nuts
+
+        tracker = tracking.active()
+        if tracker is not None:
+            tracker.sample_started()
+
+        self._inference_obj = self.model.fit(
+            inference_method=sampler,
+            init=init,
+            include_response_params=include_response_params,
+            omit_offsets=omit_offsets,
+            **kwargs,
+        )
+
+        # Separate out log likelihood computation
+        if compute_likelihood:
+            self.log_likelihood(self._inference_obj, inplace=True)
+
+        # Subset data vars in posterior
+        self._clean_posterior_group(dt=self._inference_obj)
+
+        # Opt-in MLflow tracking (hssm.track): params, metrics, artifacts.
+        if tracker is not None:
+            tracker.log_sample(self, sampler, kwargs)
+        return self.traces
+
+    def vi(
+        self,
+        method: str = "advi",
+        niter: int = 10000,
+        draws: int = 1000,
+        return_idata: bool = True,
+        ignore_mcmc_start_point_defaults=False,
+        backend: Literal["numba", "c", "jax"] | None = None,
+        **vi_kwargs,
+    ) -> Approximation | DataTree:
+        """Perform Variational Inference.
+
+        Parameters
+        ----------
+        niter : int
+            The number of iterations to run the VI algorithm. Defaults to 10000.
+        method : str
+            The method to use for VI. Can be one of "advi" or "fullrank_advi", "svgd",
+            "asvgd".Defaults to "advi".
+        draws : int
+            The number of samples to draw from the posterior distribution.
+            Defaults to 1000.
+        return_idata : bool
+            If True, returns a DataTree object. Otherwise, returns the
+            approximation object directly. Defaults to True.
+        backend : {"numba", "c", "jax"}, optional
+            The computational backend passed to ``pm.fit``. If None (the
+            default), the backend is inferred from the model's
+            ``model_config.backend``: a "jax" model config uses the "jax"
+            backend, a "pytensor" model config uses the "c" backend, and if the
+            model config backend is also None, the "numba" backend is used.
+
+        Returns
+        -------
+            Approximation or DataTree: The mean field approximation object.
+        """
+        if self.loglik_kind == "analytical":
+            _logger.warning(
+                "VI is not recommended for the analytical likelihood,"
+                " since gradients can be brittle."
+            )
+        elif self.loglik_kind == "blackbox":
+            raise ValueError(
+                "VI is not supported for blackbox likelihoods, "
+                " since likelihood gradients are needed!"
+            )
+
+        if ("start" not in vi_kwargs) and not ignore_mcmc_start_point_defaults:
+            _logger.info("Using MCMC starting point defaults.")
+            vi_kwargs["start"] = self._initvals
+
+        # Resolve the computational backend passed to `pm.fit`. If not given
+        # explicitly, infer it from the model's configured backend so that a
+        # jax model config actually uses the jax backend for VI.
+        if backend is None:
+            config_backend = self.model_config.backend
+            if config_backend == "jax":
+                backend = "jax"
+            elif config_backend == "pytensor":
+                backend = "c"
+            else:
+                backend = "numba"
+
+        tracker = tracking.active()
+        if tracker is not None:
+            tracker.vi_started()
+
+        # Run variational inference directly from pymc model
+        # pyrefly: ignore[bad-context-manager]
+        with self.pymc_model:
+            if backend == "jax":
+                # Two PyMC bugs currently break backend="jax" for every
+                # model; this scoped, self-disabling shim works around the
+                # first (static parameter shapes) until the pinned PyMC
+                # includes the upstream fixes (see hssm._vi_compat, #1056).
+                # Gate on the *resolved* backend: it is a named parameter,
+                # so it never appears in vi_kwargs.
+                with _vi_compat.static_shape_vi_params():
+                    self._vi_approx = pm.fit(
+                        n=niter, method=method, backend=backend, **vi_kwargs
+                    )
+            else:
+                self._vi_approx = pm.fit(
+                    n=niter, method=method, backend=backend, **vi_kwargs
+                )
+
+            # Sample from the approximate posterior
+            if self._vi_approx is not None:
+                _vi_compat.coerce_approx_params_to_numpy(self._vi_approx)
+                self._inference_obj_vi = self._vi_approx.sample(draws)
+
+        # Post-processing
+        self._clean_posterior_group(dt=cast("DataTree | None", self._inference_obj_vi))
+
+        if tracker is not None:
+            tracker.log_vi(
+                self,
+                {
+                    "method": method,
+                    "niter": niter,
+                    "draws": draws,
+                    "backend": backend,
+                },
+            )
+
+        # Return the DataTree object if return_idata is True
+        if return_idata:
+            return cast("Approximation | DataTree", self._inference_obj_vi)
+        # Otherwise return the appromation object directly
+        return self.vi_approx
+
+    def _clean_posterior_group(self, dt: DataTree | None = None):
+        """Clean up the posterior group of the DataTree object.
+
+        Parameters
+        ----------
+        dt : DataTree | None
+            The DataTree object to clean up. If None, the last DataTree object
+            will be used.
+        """
+        # Logic behind which variables to keep:
+        # We essentially want to get rid of all the trial-wise variables.
+
+        # We drop all distributional components, IF they are deterministics
+        # (in which case they will be trial wise systematically)
+        # and we keep distributional components, IF they are
+        # basic random-variables (in which case they should never
+        # appear trial-wise).
+        if dt is None:
+            raise ValueError(
+                "The DataTree object is None. Cannot clean up the posterior group."
+            )
+
+        if "posterior" not in dt:
+            raise ValueError(
+                "The DataTree object does not have a posterior group. "
+                "Cannot clean up the posterior group."
+            )
+
+        vars_to_keep = set(dt["posterior"].data_vars.keys()).difference(
+            set(
+                key_
+                for key_ in self.model.distributional_components.keys()
+                if key_ in [var_.name for var_ in self.pymc_model.deterministics]
+            )
+        )
+        vars_to_keep_clean = [
+            var_
+            for var_ in vars_to_keep
+            if isinstance(var_, str) and "_mean" not in var_
+        ]
+        dt["posterior"] = dt["posterior"].to_dataset()[vars_to_keep_clean]
+
+    def log_likelihood(
+        self,
+        dt: DataTree | None = None,
+        data: pd.DataFrame | None = None,
+        inplace: bool = True,
+        keep_likelihood_params: bool = False,
+    ) -> DataTree | None:
+        """Compute the log likelihood of the model.
+
+        Parameters
+        ----------
+        dt : optional
+            The trace object returned by `HSSM.sample()`. If not provided,
+        data : optional
+            A pandas DataFrame with values for the predictors that are used to obtain
+            out-of-sample predictions. If omitted, the original dataset is used.
+        inplace : optional
+            If `True` will modify dt in-place and append a `log_likelihood` group to
+            `dt`. Otherwise, it will return a copy of dt with the predictions
+            added, by default True.
+        keep_likelihood_params : optional
+            If `True`, the trial wise likelihood parameters that are computed
+            on route to getting the log likelihood are kept in the `dt` object.
+            Defaults to False. See also the method
+            `add_likelihood_parameters_to_datatree`.
+
+        Returns
+        -------
+        DataTree | None
+            The DataTree object with the log likelihood computed and added to it, or
+            None if inplace is True.
+        """
+        if self._inference_obj is None and dt is None:
+            raise ValueError(
+                "Neither has the model been sampled yet nor"
+                + " a DataTree object has been provided."
+            )
+
+        if dt is None:
+            if self._inference_obj is None:
+                raise ValueError(
+                    "The model has not been sampled yet. "
+                    + "Please provide a DataTree object."
+                )
+            else:
+                dt = self._inference_obj
+
+        # Preserve the likelihood implementation's supported compilation path
+        # when attaching post-sampling log likelihoods. JAX-backed Ops use their
+        # ``jax_funcify`` registrations. Black-box Ops execute arbitrary Python
+        # callbacks, so compile them with CVM instead of PyMC 6's default Numba
+        # linker, which object-mode-lifts and cloudpickles callback closures.
+        if self.loglik_kind == "blackbox":
+            compile_mode = "cvm"
+        elif self.model_config.backend == "jax":
+            compile_mode = "JAX"
+        else:
+            compile_mode = None
+
+        # Actual likelihood computation
+        dt = _compute_log_likelihood(
+            self.model,
+            dt,
+            data,
+            inplace,
+            compile_mode=compile_mode,
+        )
+
+        # clean up posterior:
+        if not keep_likelihood_params:
+            self._clean_posterior_group(dt=dt)
+
+        if inplace:
+            return None
+        else:
+            return dt
+
+    def add_likelihood_parameters_to_datatree(
+        self,
+        dt: DataTree | None = None,
+        inplace: bool = False,
+    ) -> DataTree | None:
+        """Add likelihood parameters to the DataTree object.
+
+        Parameters
+        ----------
+        dt : DataTree
+            The trace object returned by HSSM.sample().
+        inplace : bool
+            If True, the likelihood parameters are added to datatree in-place.
+            Otherwise, a copy of datatree with the likelihood parameters added is
+            returned. Defaults to False.
+
+        Returns
+        -------
+        DataTree | None
+            DataTree object with likelihood parameters added or None if inplace is True.
+        """
+        if dt is None:
+            if self._inference_obj is None:
+                raise ValueError("No datatree provided and model not yet sampled!")
+            else:
+                dt = self.model._compute_likelihood_params(  # pylint: disable=protected-access
+                    deepcopy(self._inference_obj)
+                    if not inplace
+                    else self._inference_obj
+                )
+        else:
+            dt = self.model._compute_likelihood_params(  # pylint: disable=protected-access
+                deepcopy(dt) if not inplace else dt
+            )
+        return dt
+
+    def sample_posterior_predictive(
+        self,
+        dt: DataTree | None = None,
+        data: pd.DataFrame | None = None,
+        inplace: bool = True,
+        include_group_specific: bool = True,
+        kind: Literal["response", "response_params"] = "response",
+        draws: int | float | list[int] | np.ndarray | None = None,
+        safe_mode: bool = True,
+        random_seed: int | np.random.Generator | None = None,
+    ) -> DataTree | None:
+        """Perform posterior predictive sampling from the HSSM model.
+
+        Parameters
+        ----------
+        dt : optional
+            The `DataTree` object returned by `HSSM.sample()`. If not provided,
+            the `DataTree` from the last time `sample()` is called will be used.
+        data : optional
+            An optional data frame with values for the predictors that are used to
+            obtain out-of-sample predictions. If omitted, the original dataset is used.
+        inplace : optional
+            If `True` will modify datatree in-place and append a `posterior_predictive`
+            group to `datatree`. Otherwise, it will return a copy of datatree with the
+            predictions added, by default True.
+        include_group_specific : optional
+            If `True` will make predictions including the group specific effects.
+            Otherwise, predictions are made with common effects only (i.e. group-
+            specific are set to zero), by default True.
+        kind: optional
+            Indicates the type of prediction required. Can be `"response_params"` or
+            `"response"`. The first returns draws from the posterior distribution of the
+            likelihood parameters, while the latter returns the draws from the posterior
+            predictive distribution (i.e. the posterior probability distribution for a
+            new observation) in addition to the posterior distribution. Defaults to
+            "response_params".
+        draws: optional
+            The number of samples to draw from the posterior predictive distribution
+            from each chain.
+            When it's an integer >= 1, the number of samples to be extracted from the
+            `draw` dimension. If this integer is larger than the number of posterior
+            samples in each chain, all posterior samples will be used
+            in posterior predictive sampling. When a float between 0 and 1, the
+            proportion of samples from the draw dimension from each chain to be used in
+            posterior predictive sampling.. If this proportion is very
+            small, at least one sample will be used. When None, all posterior samples
+            will be used. Defaults to None.
+        safe_mode: bool
+            If True, the function will split the draws into chunks of 10 to avoid memory
+            issues. Defaults to True.
+        random_seed: optional
+            Seed for the simulated responses, an `int` or a `numpy.random.Generator`.
+            The same seed and posterior draws give the same posterior predictive draws.
+            Defaults to None, which is not reproducible.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet and datatree is not provided.
+
+        Returns
+        -------
+        DataTree | None
+            A DataTree object with the posterior predictive samples added,
+            or None if inplace is True.
+        """
+        if dt is None:
+            if self._inference_obj is None:
+                raise ValueError(
+                    "The model has not been sampled yet. "
+                    "Please either provide a datatree object or sample the model first."
+                )
+            dt = self._inference_obj
+            _logger.info(
+                "dt=None, we use the traces assigned to the HSSM object as datatree."
+            )
+        else:
+            if inplace and "posterior_predictive" in dt:
+                del dt["posterior_predictive"]
+                _logger.warning(
+                    "pre-existing posterior_predictive group deleted from datatree."
+                )
+
+        if self._check_extra_fields(data):
+            self._update_extra_fields(data)
+
+        if isinstance(draws, np.ndarray):
+            draws = draws.astype(int)
+        elif isinstance(draws, list):
+            draws = np.array(draws).astype(int)
+        elif isinstance(draws, int | float):
+            draws = np.arange(int(draws))
+        elif draws is None:
+            draws = dt["posterior"].draw.values
+        else:
+            raise ValueError(
+                "draws must be an integer, " + "a list of integers, or a numpy array."
+            )
+
+        assert isinstance(draws, np.ndarray)
+
+        # Make a copy of dt, set the `posterior` group to be a random sub-sample
+        # of the original (draw dimension gets sub-sampled)
+
+        dt_copy = dt.copy()
+
+        if (draws.shape != dt["posterior"].draw.values.shape) or (
+            (draws.shape == dt["posterior"].draw.values.shape)
+            and not np.allclose(draws, dt["posterior"].draw.values)
+        ):
+            # Reassign posterior to sub-sampled version
+            dt_copy["posterior"] = dt["posterior"].isel(draw=draws)
+
+        if kind == "response":
+            # If we run kind == 'response' we actually run the observation RV
+            if safe_mode:
+                # safe mode splits the draws into chunks of 10 to avoid
+                # memory issues (TODO: Figure out the source of memory issues)
+                split_draws = _split_array(dt_copy["posterior"].draw.values, divisor=10)
+
+                # One independent seed per chunk, so chunks don't repeat each other
+                chunk_seeds = (
+                    [None] * len(split_draws)
+                    if random_seed is None
+                    else np.random.default_rng(random_seed).spawn(len(split_draws))
+                )
+
+                posterior_predictive_list = []
+                for samples_tmp, chunk_seed in zip(split_draws, chunk_seeds):
+                    tmp_posterior = dt["posterior"].sel(draw=samples_tmp)
+                    dt_copy["posterior"] = tmp_posterior
+                    self.model.predict(
+                        dt_copy,
+                        kind,
+                        data,
+                        True,
+                        include_group_specific,
+                        random_seed=chunk_seed,
+                    )
+                    posterior_predictive_list.append(dt_copy["posterior_predictive"])
+
+                if inplace:
+                    dt["posterior_predictive"] = xr.concat(  # pyrefly: ignore[no-matching-overload]
+                        posterior_predictive_list,  # type: ignore[arg-type]
+                        dim="draw",
+                    )
+                    # for inplace, we don't return anything
+                    return None
+                else:
+                    # Reassign original posterior to dt_copy
+                    dt_copy["posterior"] = dt["posterior"]
+                    # Add new posterior predictive group to dt_copy
+                    if "posterior_predictive" in dt_copy:
+                        del dt_copy["posterior_predictive"]
+                    dt_copy["posterior_predictive"] = xr.concat(  # pyrefly: ignore[no-matching-overload]
+                        posterior_predictive_list,  # type: ignore[arg-type]
+                        dim="draw",
+                    )
+                    return dt_copy
+            else:
+                if inplace:
+                    # If not safe-mode
+                    # We call .predict() directly without any
+                    # chunking of data.
+
+                    # .predict() is called on the copy of dt
+                    # since we still subsampled (or assigned) the draws
+                    self.model.predict(
+                        dt_copy,
+                        kind,
+                        data,
+                        True,
+                        include_group_specific,
+                        random_seed=random_seed,
+                    )
+
+                    # posterior predictive group added to dt
+                    dt["posterior_predictive"] = dt_copy["posterior_predictive"]
+                    # don't return anything if inplace
+                    return None
+                else:
+                    # Not safe mode and not inplace
+                    # Function acts as very thin wrapper around
+                    # .predict(). It just operates on the
+                    # dt_copy object
+                    return self.model.predict(
+                        dt_copy,
+                        kind,
+                        data,
+                        False,
+                        include_group_specific,
+                        random_seed=random_seed,
+                    )
+        elif kind == "response_params":
+            # If kind == 'response_params', we don't need to run the RV directly,
+            # there shouldn't really be any significant memory issues here,
+            # we can simply ignore settings, since the computational overhead
+            # should be very small --> nudges user towards good outputs.
+            _logger.warning(
+                "The kind argument is set to 'mean', but 'draws' argument "
+                + "is not None: The draws argument will be ignored!"
+            )
+            return self.model.predict(dt, kind, data, inplace, include_group_specific)
+        else:
+            raise ValueError("`kind` must be either 'response' or 'response_params'.")
+
+    def plot_predictive(
+        self, **kwargs
+    ) -> mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]:
+        """Produce a posterior predictive plot.
+
+        Equivalent to calling `hssm.plotting.plot_predictive()` with the
+        model. Please see that function for
+        [full documentation][hssm.plotting.plot_predictive].
+
+        Returns
+        -------
+        mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]
+            The matplotlib axis or seaborn FacetGrid object containing the plot.
+        """
+        return plotting.plot_predictive(self, **kwargs)
+
+    def plot_quantile_probability(
+        self, **kwargs
+    ) -> mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]:
+        """Produce a quantile probability plot.
+
+        Equivalent to calling `hssm.plotting.plot_quantile_probability()` with the
+        model. Please see that function for
+        [full documentation][hssm.plotting.plot_quantile_probability].
+
+        Returns
+        -------
+        mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]
+            The matplotlib axis or seaborn FacetGrid object containing the plot.
+        """
+        return plotting.plot_quantile_probability(self, **kwargs)
+
+    def plot_model_cartoon(
+        self, **kwargs
+    ) -> mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]:
+        """Produce a model cartoon plot.
+
+        Equivalent to calling `hssm.plotting.plot_model_cartoon()` with the
+        model. Please see that function for
+        [full documentation][hssm.plotting.plot_model_cartoon].
+
+        Returns
+        -------
+        mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]
+            The matplotlib axis or seaborn FacetGrid object containing the plot.
+        """
+        return plotting.plot_model_cartoon(self, **kwargs)
+
+    def predict(self, **kwargs) -> DataTree:
+        """Generate samples from the predictive distribution."""
+        return self.model.predict(**kwargs)
+
+    def sample_do(
+        self,
+        params: dict[str, Any],
+        draws: int = 100,
+        return_model=False,
+        strict: bool = False,
+        **kwargs,
+    ) -> DataTree | tuple[DataTree, pm.Model]:
+        """Simulate data with some or all parameters fixed, using the `do-operator`.
+
+        Fixes the model's free variables named in `params` with `pymc.do`, then
+        draws from the prior predictive of the resulting model.
+
+        Parameters
+        ----------
+        params
+            Values for the PyMC model's free variables, by name, as listed by
+            `{rv.name for rv in model.pymc_model.free_RVs}`: for example
+            `v_Intercept`, `v_x`, `v_1|participant_id_sigma`, and
+            `v_1|participant_id` (with `noncentered=False`) or
+            `v_1|participant_id_offset` (with `noncentered=True`). A term with
+            several columns takes one value per column, e.g. `"v_stim": [0.4, -0.1]`
+            for the non-reference levels of `stim`, and a group-specific term one
+            value per group. Intercepts are on the original scale of the
+            predictors, as the posterior reports them, even though the model
+            centers its predictors (bambi's `center_predictors=True`, the default).
+            Free variables not in `params` are drawn from their priors.
+        draws : optional
+            The number of draws. Defaults to 100.
+        return_model : optional
+            Whether to also return the intervened PyMC model. Defaults to False.
+        strict : optional
+            If True, raise an error when a free variable of the model is not in
+            `params`, instead of drawing it from its prior. Defaults to False.
+        kwargs
+            Passed to `pymc.sample_prior_predictive` (e.g. `random_seed`).
+
+        Returns
+        -------
+        DataTree | tuple[DataTree, pm.Model]
+            The simulated draws (the `prior` group holds the trial-wise parameters,
+            the `prior_predictive` group the responses), and the intervened model if
+            `return_model` is True.
+        """
+        if strict:
+            unfixed = sorted(
+                {rv.name for rv in self.pymc_model.free_RVs}.difference(params)
+            )
+            if unfixed:
+                raise ValueError(
+                    "`strict=True`, but these free variables are not in `params` "
+                    f"and would be drawn from their priors: {unfixed}"
+                )
+        params = self._center_do_intercepts(params)
+        do_model = do(
+            self.pymc_model, cast("Mapping[str | TensorVariable, Any]", params)
+        )
+        do_dt = pm.sample_prior_predictive(model=do_model, draws=draws, **kwargs)
+
+        # clean up `rt,response_mean` to `v`
+        do_dt = self._drop_parent_str_from_datatree(dt=do_dt)
+
+        # rename otherwise inconsistent dims and coords
+        if "rt,response_extra_dim_0" in do_dt["prior_predictive"].dims:
+            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_dims(
+                {"rt,response_extra_dim_0": "rt,response_dim"}
+            )
+        if "rt,response_extra_dim_0" in do_dt["prior_predictive"].coords:
+            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_vars(
+                {"rt,response_extra_dim_0": "rt,response_dim"}
+            )
+
+        if return_model:
+            return do_dt, do_model
+        return do_dt
+
+    def _center_do_intercepts(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Translate original-scale intercepts in `params` to the centered design.
+
+        With bambi's `center_predictors=True`, the PyMC intercept of a component with
+        common predictors belongs to the centered design, and bambi adds the
+        centering back only when it reports a posterior. Fixing that variable to an
+        original-scale value would therefore simulate a different intercept. This
+        adds `mean(X) @ slopes` to each fixed intercept, the inverse of bambi's
+        `Model._re_center_intercept`.
+        """
+        if not self.model.center_predictors or self.model.backend is None:
+            return params
+        params = dict(params)
+        for pymc_component in self.model.backend.distributional_components.values():
+            component = pymc_component.component
+            x = pymc_component.design_matrix_without_intercept
+            if not (component.intercept_term and component.common_terms):
+                continue
+            if x is None:
+                continue
+            intercept = get_aliased_name(component.intercept_term)
+            if intercept not in params:
+                continue
+            slopes = [get_aliased_name(t) for t in component.common_terms.values()]
+            unfixed = [s for s in slopes if s not in params]
+            if unfixed:
+                _logger.warning(
+                    "%s is fixed but %s are not, so %s is applied to the centered "
+                    "predictors and the simulated intercept depends on the drawn "
+                    "slopes. Fix all slopes, or build the model with "
+                    "`center_predictors=False`.",
+                    intercept,
+                    unfixed,
+                    intercept,
+                )
+                continue
+            coefs = np.concatenate(
+                [np.atleast_1d(np.asarray(params[s], dtype=float)) for s in slopes]
+            )
+            centered = np.asarray(params[intercept], dtype=float) + (
+                np.asarray(x).mean(0) @ coefs
+            )
+            params[intercept] = centered.astype(self.pymc_model[intercept].dtype)
+        return params
+
+    def sample_prior_predictive(
+        self,
+        draws: int = 500,
+        var_names: str | list[str] | None = None,
+        omit_offsets: bool = True,
+        random_seed: np.random.Generator | None = None,
+    ) -> DataTree:
+        """Generate samples from the prior predictive distribution.
+
+        Parameters
+        ----------
+        draws
+            Number of draws to sample from the prior predictive distribution. Defaults
+            to 500.
+        var_names
+            A list of names of variables for which to compute the prior predictive
+            distribution. Defaults to `None` which means both observed and unobserved
+            RVs.
+        omit_offsets
+            Whether to omit offset terms. Defaults to `True`.
+        random_seed
+            Seed for the random number generator.
+
+        Returns
+        -------
+        DataTree
+            `DataTree` object with the groups `prior`, `prior_predictive` and
+            `observed_data`.
+        """
+        prior_predictive = self.model.prior_predictive(
+            draws, var_names, omit_offsets, random_seed
+        )
+
+        # AF-COMMENT: Not sure if necessary to include the
+        # mean prior here (which adds deterministics that
+        # could be recomputed elsewhere)
+        prior_predictive["posterior"] = prior_predictive["prior"]
+        # Bambi >= 0.17 renamed kind="mean" to kind="response_params".
+        self.model.predict(prior_predictive, kind="response_params", inplace=True)
+
+        # clean
+        prior_predictive["prior"] = prior_predictive["posterior"]
+        del prior_predictive["posterior"]
+
+        if self._inference_obj is None:
+            self._inference_obj = prior_predictive
+        else:
+            for group_name in list(prior_predictive.groups):
+                if group_name == "/":
+                    continue
+                self._inference_obj[group_name] = prior_predictive[group_name]
+
+        # clean up `rt,response_mean` to `v`
+        dt = self._drop_parent_str_from_datatree(dt=self._inference_obj)
+
+        # rename otherwise inconsistent dims and coords
+        if "rt,response_extra_dim_0" in dt["prior_predictive"].dims:
+            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_dims(
+                {"rt,response_extra_dim_0": "rt,response_dim"}
+            )
+        if "rt,response_extra_dim_0" in dt["prior_predictive"].coords:
+            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_vars(
+                name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
+            )
+
+        # Update self._inference_obj to match the cleaned datatree
+        self._inference_obj = dt
+        return deepcopy(self._inference_obj)
+
+    @property
+    def pymc_model(self) -> pm.Model:
+        """Provide access to the PyMC model.
+
+        Returns
+        -------
+        pm.Model
+            The PyMC model built by bambi
+        """
+        return self.model.backend.model
+
+    def set_alias(self, aliases: dict[str, str | dict]):
+        """Set parameter aliases.
+
+        Sets the aliases according to the dictionary passed to it and rebuild the
+        model.
+
+        Parameters
+        ----------
+        aliases
+            A dict specifying the parameter names being aliased and the aliases.
+        """
+        self.model.set_alias(aliases)
+        self.model.build()
+
+    @property
+    def response_c(self) -> str:
+        """Return the response variable names in c() format."""
+        if self.response is None:
+            return "c()"
+        if len(self.response) == 1:
+            return self.response[0]
+        return f"c({', '.join(self.response)})"
+
+    @property
+    def response_str(self) -> str:
+        """Return the response variable names in string format."""
+        if self.response is None:
+            return ""
+        if len(self.response) == 1:
+            return self.response[0]
+        return ",".join(self.response)
+
+    # NOTE: can't annotate return type because the graphviz dependency is optional
+    def graph(self, formatting="plain", name=None, figsize=None, dpi=300, fmt="png"):
+        """Produce a graphviz Digraph from a built HSSM model.
+
+        Requires graphviz, which may be installed most easily with `conda install -c
+        conda-forge python-graphviz`. Alternatively, you may install the `graphviz`
+        binaries yourself, and then `pip install graphviz` to get the python bindings.
+        See http://graphviz.readthedocs.io/en/stable/manual.html for more information.
+
+        Parameters
+        ----------
+        formatting
+            One of `"plain"` or `"plain_with_params"`. Defaults to `"plain"`.
+        name
+            Name of the figure to save. Defaults to `None`, no figure is saved.
+        figsize
+            Maximum width and height of figure in inches. Defaults to `None`, the
+            figure size is set automatically. If defined and the drawing is larger than
+            the given size, the drawing is uniformly scaled down so that it fits within
+            the given size.  Only works if `name` is not `None`.
+        dpi
+            Point per inch of the figure to save.
+            Defaults to 300. Only works if `name` is not `None`.
+        fmt
+            Format of the figure to save.
+            Defaults to `"png"`. Only works if `name` is not `None`.
+
+        Returns
+        -------
+        graphviz.Graph
+            The graph
+        """
+        graph = self.model.graph(formatting, name, figsize, dpi, fmt)
+
+        parent_param = self._parent_param
+        if parent_param.is_regression:
+            return graph
+
+        # Modify the graph
+        # 1. Remove all nodes and edges related to `{parent}_mean`:
+        graph.body = [
+            item for item in graph.body if f"{parent_param.name}_mean" not in item
+        ]
+        # 2. Add a new edge from parent to response
+        graph.edge(parent_param.name, self.response_str)
+
+        return graph
+
+    def compile_logp(self, keep_transformed: bool = False, **kwargs):
+        """Compile the model's log probability: log-prior plus log-likelihood.
+
+        Any potentials passed to Bambi (``potentials=``) are included as well.
+
+        Parameters
+        ----------
+        keep_transformed : bool, optional
+            If True, keeps the transformed variables in the compiled function.
+            If False, removes value transforms before compilation.
+            Defaults to False.
+        **kwargs
+            Additional keyword arguments passed to PyMC's compile_logp:
+            - vars: List of variables. Defaults to None (all variables).
+            - jacobian: Whether to include log(|det(dP/dQ)|) term for
+            transformed variables. Defaults to True.
+            - sum: Whether to sum all terms instead of returning a vector.
+            Defaults to True.
+
+        Returns
+        -------
+        callable
+            A compiled function that computes the model log probability.
+        """
+        if keep_transformed:
+            return self.pymc_model.compile_logp(
+                vars=kwargs.get("vars", None),
+                jacobian=kwargs.get("jacobian", True),
+                sum=kwargs.get("sum", True),
+            )
+        else:
+            new_model = pm.model.transform.conditioning.remove_value_transforms(
+                self.pymc_model
+            )
+            return new_model.compile_logp(
+                vars=kwargs.get("vars", None),
+                jacobian=kwargs.get("jacobian", True),
+                sum=kwargs.get("sum", True),
+            )
+
+    def plot_trace(
+        self,
+        data: DataTree | None = None,
+        include_deterministic: bool = False,
+        tight_layout: bool = True,
+        **kwargs,
+    ) -> None:
+        """Deprecate the `plot_trace` method and remove its functionality.
+
+        This method has been deprecated and its functionality has been removed.
+        Please use `az.plot_trace_dist` from ArviZ instead. For more information,
+        see the
+        [arviz documentation](
+        https://python.arviz.org/projects/plots/en/latest/api/generated
+        /arviz_plots.plot_trace_dist.html#arviz_plots.plot_trace_dist).
+        """
+        raise NotImplementedError(
+            "HSSM.plot_trace has been deprecated. Please use az.plot_trace_dist from "
+            "ArviZ directly. For example: "
+            "`az.plot_trace_dist(model.traces, var_names=[...])`."
+        )
+
+    def summary(
+        self,
+        data: DataTree | None = None,
+        include_deterministic: bool = False,
+        **kwargs,
+    ) -> pd.DataFrame | xr.Dataset:
+        """Deprecate the `summary` method and remove its functionality.
+
+        This method has been deprecated and its functionality has been removed.
+        Please use `az.summary` from ArviZ instead. For more information, see the
+        [arviz documentation](
+        https://python.arviz.org/projects/stats/en/stable/api/generated
+        /arviz_stats.summary.html).
+        """
+        raise NotImplementedError(
+            "HSSM.summary has been deprecated. Please use az.summary from ArviZ "
+            "directly. For example: `az.summary(model.traces, var_names=[...])`."
+        )
+
+    def initial_point(self, transformed: bool = False) -> dict[str, np.ndarray]:
+        """Compute a fresh PyMC initial point for the model.
+
+        This is a slightly altered version of pm.initial_point.initial_point().
+
+        Parameters
+        ----------
+        transformed : bool, optional
+            If True, return the initial point in transformed space.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the initial point of the model parameters.
+
+        Notes
+        -----
+        HSSM clears PyMC's initial-value registry after model construction, so this
+        freshly computed point can differ from the default initial values HSSM passes
+        to sampling. Use ``model.initvals`` to inspect those values.
+        """
+        fn = pm.initial_point.make_initial_point_fn(
+            model=self.pymc_model, return_transformed=transformed
+        )
+        return pm.model.Point(fn(None), model=self.pymc_model)
+
+    def restore_traces(self, traces: DataTree | Approximation | str | PathLike) -> None:
+        """Restore traces from a DataTree object or a .netcdf file.
+
+        Parameters
+        ----------
+        traces
+            A DataTree object or a path to a file containing the traces.
+        """
+        if isinstance(traces, Approximation):
+            self._inference_obj_vi = traces
+            return
+
+        if isinstance(traces, (str, PathLike)):
+            traces = az.from_netcdf(traces)
+        self._inference_obj = traces
+
+    def restore_vi_traces(
+        self, traces: DataTree | Approximation | str | PathLike
+    ) -> None:
+        """Restore VI traces from a DataTree object or a .netcdf file.
+
+        Parameters
+        ----------
+        traces
+            A DataTree object or a path to a file containing the VI traces.
+        """
+        if isinstance(traces, Approximation):
+            self._inference_obj_vi = traces
+            return
+
+        if isinstance(traces, (str, PathLike)):
+            traces = az.from_netcdf(traces)
+        self._inference_obj_vi = traces
+
+    def save_model(
+        self,
+        model_name: str | None = None,
+        allow_absolute_base_path: bool = False,
+        base_path: str | Path = "hssm_models",
+        save_traces_only: bool = False,
+    ) -> None:
+        """Save a HSSM model instance and its inference results to disk.
+
+        Parameters
+        ----------
+        model_name : str | None
+            Name to use for the saved model files.
+            If None, will use model.model_name with timestamp
+        allow_absolute_base_path : bool
+            Whether to allow absolute paths for base_path.
+            Defaults to False for safety.
+        base_path : str | Path
+            Base directory to save model files in.
+            Must be relative path if allow_absolute_base_path=False.
+            Defaults to "hssm_models".
+        save_traces_only : bool
+            If True, only saves the traces, not the model pickle.
+            Defaults to False (saves both model and traces).
+
+        Raises
+        ------
+        ValueError
+            If base_path is absolute and allow_absolute_base_path=False
+        """
+        # Convert to Path object for cross-platform compatibility
+        base_path = Path(base_path)
+
+        # Check if base_path is absolute (works on all platforms)
+        if not allow_absolute_base_path and base_path.is_absolute():
+            raise ValueError(
+                "base_path must be a relative path if allow_absolute_base_path is False"
+            )
+
+        if model_name is None:
+            # Get date string format as suffix to model name
+            timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+            model_name = f"{self.model_name}_{timestamp}"
+
+        # Sanitize model_name and construct full path
+        model_name = model_name.replace(" ", "_")
+        model_path = Path(base_path).joinpath(model_name)
+        model_path.mkdir(parents=True, exist_ok=True)
+
+        # Save model to pickle file
+        if not save_traces_only:
+            with open(model_path.joinpath("model.pkl"), "wb") as f:
+                cpickle.dump(self, f)
+
+        # Save traces to netcdf file
+        if self._inference_obj is not None:
+            self._inference_obj.to_netcdf(model_path.joinpath("traces.nc"))
+
+        # Save vi_traces to netcdf file
+        if isinstance(self._inference_obj_vi, DataTree):
+            self._inference_obj_vi.to_netcdf(model_path.joinpath("vi_traces.nc"))
+
+        # Opt-in MLflow tracking: attach model.pkl when log_artifacts="all".
+        # A traces-only save writes no pickle, so any in the directory is older.
+        if not save_traces_only and (tracker := tracking.active()) is not None:
+            tracker.log_saved_model(model_path)
+
+    @classmethod
+    def load_model(cls, path: Union[str, Path]) -> Union["HSSMBase", DataTree]:
+        """Load a HSSM model instance and its inference results from disk.
+
+        Parameters
+        ----------
+        path : str | Path
+            Path to the model directory or model.pkl file. If a directory is provided,
+            will look for model.pkl, traces.nc and vi_traces.nc files within it.
+
+        Returns
+        -------
+        HSSMBase or dict[str, DataTree | None]
+            The loaded model instance (with inference results attached if available),
+            or a dictionary of traces-only DataTree objects when no model.pkl is
+            found.
+        """
+        # Convert path to Path object
+        path = Path(path)
+
+        # If path points to a file, assume it's model.pkl
+        if path.is_file():
+            model_dir = path.parent
+            model_path = path
+        else:
+            # Path points to directory
+            model_dir = path
+            model_path = model_dir.joinpath("model.pkl")
+
+        # check if model_dir exists
+        if not model_dir.exists():
+            raise FileNotFoundError(f"Model directory {model_dir} does not exist.")
+
+        # check if model.pkl exists raise logging information if not
+        if not model_path.exists():
+            _logger.info(
+                f"model.pkl file does not exist in {model_dir}. "
+                "Attempting to load traces only."
+            )
+            if (not model_dir.joinpath("traces.nc").exists()) and (
+                not model_dir.joinpath("vi_traces.nc").exists()
+            ):
+                raise FileNotFoundError(f"No traces found in {model_dir}.")
+            else:
+                dt_dict = cls.load_model_traces(model_dir)
+                return dt_dict
+        else:
+            # Load model from pickle file
+            with open(model_path, "rb") as f:
+                model = cpickle.load(f)
+
+            # Load traces if they exist
+            traces_path = model_dir.joinpath("traces.nc")
+            if traces_path.exists():
+                model.restore_traces(traces_path)
+
+            # Load VI traces if they exist
+            vi_traces_path = model_dir.joinpath("vi_traces.nc")
+            if vi_traces_path.exists():
+                model.restore_vi_traces(vi_traces_path)
+        return model
+
+    @classmethod
+    def load_model_traces(cls, path: str | Path) -> DataTree:
+        """Load the traces from a model directory.
+
+        Parameters
+        ----------
+        path : str | Path
+            Path to the model directory containing traces.nc and/or vi_traces.nc files.
+
+        Returns
+        -------
+        DataTree
+            A DataTree with groups "idata_mcmc" and "idata_vi" containing the traces
+            from the model directory. Groups are only present for traces that exist
+            on disk.
+        """
+        dt_dict: dict[str, DataTree | None] = {}
+        model_dir = Path(path)
+        # check if path exists
+        if not model_dir.exists():
+            raise FileNotFoundError(f"Model directory {model_dir} does not exist.")
+
+        # check if traces.nc exists
+        traces_path = model_dir.joinpath("traces.nc")
+        if not traces_path.exists():
+            _logger.warning(f"traces.nc file does not exist in {model_dir}.")
+            dt_dict["idata_mcmc"] = None
+        else:
+            dt_dict["idata_mcmc"] = az.from_netcdf(traces_path)
+
+        # check if vi_traces.nc exists
+        vi_traces_path = model_dir.joinpath("vi_traces.nc")
+        if not vi_traces_path.exists():
+            _logger.warning(f"vi_traces.nc file does not exist in {model_dir}.")
+            dt_dict["idata_vi"] = None
+        else:
+            dt_dict["idata_vi"] = az.from_netcdf(vi_traces_path)
+
+        return DataTree.from_dict(
+            {name: dt for name, dt in dt_dict.items() if dt is not None}
+        )
+
+    def __getstate__(self):
+        """Get the state of the model for pickling.
+
+        This method is called when pickling the model.
+        It returns a dictionary containing the constructor
+        arguments needed to recreate the model instance.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the constructor arguments
+            under the key 'constructor_args'.
+        """
+        # Provide a clear error when the initialization snapshot is missing or
+        # empty. This makes the contract explicit and avoids an AttributeError
+        # that is easy to miss for subclasses that forget to capture init args.
+        if not hasattr(self, "_init_args") or not self._init_args:
+            raise RuntimeError(
+                "Model state missing initialization snapshot; ensure subclasses "
+                "call _store_init_args(locals(), kwargs) early in __init__"
+            )
+
+        state = {"constructor_args": self._init_args}
+        return state
+
+    def __setstate__(self, state):
+        """Set the state of the model when unpickling.
+
+        This method is called when unpickling the model. It creates a new instance
+        using the constructor arguments stored in the state dictionary,
+        and copies its attributes to the current instance.
+
+        Parameters
+        ----------
+        state : dict
+            A dictionary containing the constructor arguments under the key
+            'constructor_args'.
+        """
+        new_instance = self.__class__(**state["constructor_args"])
+        self.__dict__ = new_instance.__dict__
+
+    def __repr__(self) -> str:
+        """Create a representation of the model."""
+        output = [
+            "Hierarchical Sequential Sampling Model",
+            f"Model: {self.model_name}\n",
+            f"Response variable: {self.response_str}",
+            f"Likelihood: {self.loglik_kind}",
+            f"Observations: {len(self.data)}\n",
+            "Parameters:\n",
+        ]
+
+        for param in self.params.values():
+            if param.name == "p_outlier":
+                continue
+            output.append(f"{param.name}:")
+
+            component = self.model.components[param.name]
+
+            # Regression case:
+            if param.is_regression:
+                assert isinstance(component, DistributionalComponent)
+                output.append(f"    Formula: {param.formula}")
+                output.append("    Priors:")
+                intercept_term = component.intercept_term
+                if intercept_term is not None:
+                    output.append(_print_prior(intercept_term))
+                for _, common_term in component.common_terms.items():
+                    output.append(_print_prior(common_term))
+                for _, group_specific_term in component.group_specific_terms.items():
+                    output.append(_print_prior(group_specific_term))
+                output.append(f"    Link: {param.link}")
+            # None regression case
+            else:
+                if param.prior is None:
+                    prior = (
+                        component.intercept_term.prior
+                        if param.is_parent
+                        else component.prior
+                    )
+                else:
+                    prior = param.prior
+                output.append(f"    Prior: {prior}")
+            output.append(f"    Explicit bounds: {param.bounds}")
+            output.append(
+                " (ignored due to link function)"
+                if self.link_settings is not None
+                else ""
+            )
+
+        # TODO: Handle p_outlier regression correctly here.
+        if self.p_outlier is not None:
+            output.append("")
+            output.append(f"Lapse probability: {self.p_outlier.prior}")
+            output.append(f"Lapse distribution: {self.lapse}")
+
+        return "\n".join(output)
+
+    def __str__(self) -> str:
+        """Create a string representation of the model."""
+        return self.__repr__()
+
+    @property
+    def traces(self) -> DataTree | Approximation:
+        """Return the trace of the model after sampling.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet.
+
+        Returns
+        -------
+        DataTree | Approximation
+            The trace of the model after the last call to `sample()`.
+        """
+        if not self._inference_obj:
+            raise ValueError("Please sample the model first.")
+
+        return self._inference_obj
+
+    @property
+    def vi_idata(self) -> DataTree:
+        """Return the variational inference approximation object.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet.
+
+        Returns
+        -------
+        DataTree
+            The variational inference approximation object.
+        """
+        if not self._inference_obj_vi:
+            raise ValueError(
+                "Please run variational inference first, "
+                "no variational posterior attached."
+            )
+
+        if not isinstance(self._inference_obj_vi, DataTree):
+            raise ValueError(
+                "The attached variational inference object is an `Approximation`, "
+                "not sampled traces. Use `vi_approx` to access it, or run "
+                "variational inference with `return_idata=True` to obtain a `DataTree`."
+            )
+
+        return self._inference_obj_vi
+
+    @property
+    def vi_approx(self) -> Approximation:
+        """Return the variational inference approximation object.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet.
+
+        Returns
+        -------
+        Approximation
+            The variational inference approximation object.
+        """
+        if not self._vi_approx:
+            raise ValueError(
+                "Please run variational inference first, "
+                "no variational approximation attached."
+            )
+
+        return self._vi_approx
+
+    @property
+    def map(self) -> dict:
+        """Return the MAP estimates of the model parameters.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the MAP estimates of the model parameters.
+        """
+        if not self._map_dict:
+            raise ValueError("Please compute map first.")
+
+        return self._map_dict
+
+    @property
+    def initvals(self) -> dict:
+        """Return the initial values of the model parameters for sampling.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the initial values of the model parameters.
+            This dict serves as the default for initial values, and can be passed
+            directly to the `.sample()` function.
+        """
+        if self._initvals == {}:
+            self._initvals = self.initial_point()
+        return self._initvals
+
+    def _check_lapse(self, lapse):
+        """Determine if p_outlier and lapse is specified correctly."""
+        # Basically, avoid situations where only one of them is specified.
+        if self.list_params[-1] != "p_outlier":
+            if "p_outlier" in self.list_params:
+                raise ValueError(
+                    "Please do not include 'p_outlier' in `list_params`. "
+                    + "We automatically append it to `list_params` when `p_outlier` "
+                    + "parameter is not None"
+                )
+        if self.has_lapse:
+            if self.is_choice_only:
+                # Choice-only lapses are simulated as uniform random choices, so
+                # the likelihood must use the same uniform probability.
+                uniform = 1 / self.n_choices
+                if lapse is not None and not (
+                    isinstance(lapse, int | float | np.floating)
+                    and np.isclose(lapse, uniform)
+                ):
+                    raise ValueError(
+                        "Choice-only models only support a uniform lapse over "
+                        f"choices (1 / n_choices = {uniform:g}), but got {lapse!r}. "
+                        "Omit `lapse` to use it."
+                    )
+                self.lapse = uniform
+            elif lapse is None:
+                self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
+            else:
+                self.lapse = lapse
+            self.list_params.append("p_outlier")
+            return
+
+        if lapse is not None:
+            _logger.warning(
+                "You have specified the `lapse` argument to include a lapse "
+                + "distribution, but `p_outlier` is set to either 0 or None. "
+                + "Your lapse distribution will be ignored."
+            )
+        self.lapse = None
+
+    def _get_deterministic_var_names(self, dt) -> list[str]:
+        """Filter out the deterministic variables in var_names."""
+        var_names = [
+            f"~{param_name}"
+            for param_name, param in self.params.items()
+            if (param.is_regression)
+        ]
+
+        if f"{self._parent}_mean" in dt["posterior"].data_vars:
+            var_names.append(f"~{self._parent}_mean")
+
+        # Parent parameters (always regression implicitly)
+        # which don't have a formula attached
+        # should be dropped from var_names, since the actual
+        # parent name shows up as a regression.
+        if f"{self._parent}" in dt["posterior"].data_vars:
+            if self.params[self._parent].formula is None:
+                # Drop from var_names
+                var_names = [var for var in var_names if var != f"~{self._parent}"]
+
+        return var_names
+
+    def _drop_parent_str_from_datatree(self, dt: DataTree | None) -> DataTree:
+        """Drop the parent_str variable from a DataTree object.
+
+        Parameters
+        ----------
+        dt
+            The DataTree object to be modified.
+
+        Returns
+        -------
+        xr.Dataset
+            The modified DataTree object.
+        """
+        if dt is None:
+            raise ValueError("Please provide a DataTree (traces) object.")
+        else:
+            for group in dt.groups:
+                if group == "/":
+                    continue
+                if ("rt,response_mean" in dt[group].data_vars) and (
+                    self._parent not in dt[group].data_vars
+                ):
+                    dt[group] = dt[group].ds.rename({"rt,response_mean": self._parent})
+            return dt
+
+    def _postprocess_initvals_deterministic(
+        self, initval_settings: dict = INITVAL_SETTINGS
+    ) -> None:
+        """Set initial values for subset of parameters."""
+        self._initvals = self.initial_point()
+        # Consider case where link functions are set to 'log_logit'
+        # or 'None'
+        if self.link_settings not in ["log_logit", None]:
+            _logger.info(
+                "Not preprocessing initial values, "
+                + "because none of the two standard link settings are chosen!"
+            )
+            return None
+
+        # Set initial values for particular parameters
+        for name_, starting_value in self.pymc_model.initial_point().items():
+            # strip name of `_log__` and `_interval__` suffixes
+            name_tmp = name_.replace("_log__", "").replace("_interval__", "")
+
+            # We need to check if the parameter is actually backed by
+            # a regression.
+
+            # If not, we don't actually apply a link function to it as per default.
+            # Therefore we need to apply the initial value strategy corresponding
+            # to 'None' link function.
+
+            # If the user actively supplies a link function, the user
+            # should also have supplied an initial value insofar it matters.
+
+            param = self.params[self._get_prefix(name_tmp)]
+            # A regression may override the model-wide link_settings with an
+            # identity link: its default is then natural-scale, where the
+            # declared bounds apply. Any other link keeps the model-wide
+            # setting.
+            link_name = getattr(param.link, "name", param.link)
+            if not param.is_regression or link_name == "identity":
+                param_link_setting = None
+            else:
+                param_link_setting = self.link_settings
+            if name_tmp in initval_settings[param_link_setting].keys():
+                if self._check_if_initval_user_supplied(name_tmp):
+                    _logger.info(
+                        "User supplied initial value detected for %s, \n"
+                        " skipping overwrite with default value.",
+                        name_tmp,
+                    )
+                    continue
+
+                # Apply specific settings from initval_settings dictionary,
+                # clamped into the parameter's declared bounds (natural-scale
+                # values only; under any other link the value is link-space,
+                # whichever table it came from, and any user-supplied value
+                # was already skipped above).
+                value = initval_settings[param_link_setting][name_tmp]
+                if not param.is_regression or link_name == "identity":
+                    value = _clamp_default_initval_to_bounds(
+                        value, name_tmp, param.bounds
+                    )
+                dtype = self._initvals[name_tmp].dtype
+                self._initvals[name_tmp] = np.array(value).astype(dtype)
+
+    def _get_prefix(self, name_str: str) -> str:
+        """Resolve parameter prefix, handling underscore-containing RL param names.
+
+        The base-class implementation splits ``name_str`` on the first ``_`` and
+        returns that single token (e.g. ``"rl_alpha_Intercept" → "rl"``), which
+        breaks for RL parameters whose names contain underscores.  It also uses a
+        substring check (``"p_outlier" in name_str``) for the lapse parameter,
+        which would misfire for any parameter whose name merely *contains* that
+        substring.
+
+        This override replaces both heuristics with a single longest-prefix-first
+        token search: split on ``_``, then try joining 1…N tokens (longest first)
+        until a candidate is found in ``self.params``.  This is both correct for
+        multi-token RL param names and collision-free for ``p_outlier``.
+        """
+        if "_" in name_str:
+            parts = name_str.split("_")
+            for i in range(len(parts), 0, -1):
+                candidate = "_".join(parts[:i])
+                if hasattr(self, "params") and candidate in self.params:
+                    return candidate
+        return name_str
+
+    def _check_if_initval_user_supplied(
+        self,
+        name_str: str,
+        return_value: bool = False,
+    ) -> bool | float | int | np.ndarray | dict[str, Any] | bmb.Prior | None:
+        """Check if initial value is user-supplied."""
+        # The function assumes that the name_str is either raw parameter name
+        # or `paramname_Intercept`, because we only really provide special default
+        # initial values for those types of parameters
+
+        # `p_outlier` is the only basic parameter floating around that has
+        # an underscore in it's name.
+        # We need to handle it separately. (Renaming might be better...)
+        if "_" in name_str:
+            if "p_outlier" not in name_str:
+                name_str_prefix = name_str.split("_")[0]
+                # name_str_suffix = "".join(name_str.split("_")[1:])
+                name_str_suffix = name_str[len(name_str_prefix + "_") :]
+            else:
+                name_str_prefix = "p_outlier"
+                if name_str == "p_outlier":
+                    name_str_suffix = ""
+                else:
+                    # name_str_suffix = "".join(name_str.split("_")[2:])
+                    name_str_suffix = name_str[len("p_outlier_") :]
+        else:
+            name_str_prefix = name_str
+            name_str_suffix = ""
+
+        tmp_param = name_str_prefix
+        if tmp_param == self._parent:
+            # If the parameter was parent it is automatically treated as a
+            # regression.
+            if not name_str_suffix:
+                # No suffix --> Intercept, unless the parent is not a regression
+                # and so keeps its plain prior.
+                prior_tmp = self.params[tmp_param].prior
+                if isinstance(prior_tmp, dict):
+                    prior_tmp = _get_regression_term_prior(prior_tmp, "Intercept")
+                args_tmp = _get_prior_args(prior_tmp)
+                if return_value:
+                    return args_tmp.get("initval", None)
+                else:
+                    return "initval" in args_tmp
+            else:
+                # If the parameter has a suffix --> use it
+                if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
+                    args_tmp = _get_prior_args(
+                        _get_regression_term_prior(prior_tmp, name_str_suffix)
+                    )
+                    if return_value:
+                        return args_tmp.get("initval", None)
+                    else:
+                        return "initval" in args_tmp
+                else:
+                    if return_value:
+                        return None
+                    else:
+                        return False
+        else:
+            # If the parameter is not a parent, it is treated as a regression
+            # only when actively specified as such.
+            if not name_str_suffix:
+                # If no suffix --> treat as basic parameter.
+                if isinstance(self.params[tmp_param].prior, float) or isinstance(
+                    self.params[tmp_param].prior, np.ndarray
+                ):
+                    if return_value:
+                        return self.params[tmp_param].prior
+                    else:
+                        return True
+                elif isinstance(prior_tmp := self.params[tmp_param].prior, bmb.Prior):
+                    args_tmp = _get_prior_args(prior_tmp)
+                    if "initval" in args_tmp:
+                        if return_value:
+                            return args_tmp["initval"]
+                        else:
+                            return True
+                    else:
+                        if return_value:
+                            return None
+                        else:
+                            return False
+                else:
+                    if return_value:
+                        return None
+                    else:
+                        return False
+            else:
+                # If suffix --> treat as regression and use suffix
+                if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
+                    args_tmp = _get_prior_args(
+                        _get_regression_term_prior(prior_tmp, name_str_suffix)
+                    )
+                    if return_value:
+                        return args_tmp.get("initval", None)
+                    else:
+                        return "initval" in args_tmp
+                else:
+                    if return_value:
+                        return None
+                    else:
+                        return False
+
+    def _jitter_initvals(
+        self, jitter_epsilon: float = 0.01, vector_only: bool = False
+    ) -> None:
+        """Apply controlled jitter to initial values.
+
+        The jitter comes from a fixed-seed generator, not the global numpy RNG,
+        so the jittered initvals (and so a seeded ``sample()``) are the same in
+        every process.
+        """
+        # ponytail: fixed seed; the jitter only breaks symmetry, and `initvals=`
+        # overrides it when a different start is wanted.
+        rng = np.random.default_rng(0)
+        if vector_only:
+            self.__jitter_initvals_vector_only(jitter_epsilon, rng)
+        else:
+            self.__jitter_initvals_all(jitter_epsilon, rng)
+
+    def __jitter_initvals_vector_only(
+        self, jitter_epsilon: float, rng: np.random.Generator
+    ) -> None:
+        # Note: Calling our initial point function here
+        # --> operate on untransformed variables
+        initial_point_dict = self.initvals
+        for name_, starting_value in initial_point_dict.items():
+            name_tmp = name_.replace("_log__", "").replace("_interval__", "")
+            if starting_value.ndim != 0 and starting_value.shape[0] != 1:
+                starting_value_tmp = starting_value + rng.uniform(
+                    -jitter_epsilon, jitter_epsilon, starting_value.shape
+                ).astype(np.float32)
+
+                # Note: self._initvals shouldn't be None when this is called
+                dtype = self._initvals[name_tmp].dtype
+                self._initvals[name_tmp] = np.array(starting_value_tmp).astype(dtype)
+
+    def __jitter_initvals_all(
+        self, jitter_epsilon: float, rng: np.random.Generator
+    ) -> None:
+        # Note: Calling our initial point function here
+        # --> operate on untransformed variables
+        initial_point_dict = self.initvals
+        # initial_point_dict = self.pymc_model.initial_point()
+        for name_, starting_value in initial_point_dict.items():
+            name_tmp = name_.replace("_log__", "").replace("_interval__", "")
+            starting_value_tmp = starting_value + rng.uniform(
+                -jitter_epsilon, jitter_epsilon, starting_value.shape
+            ).astype(np.float32)
+
+            dtype = self.initvals[name_tmp].dtype
+            self._initvals[name_tmp] = np.array(starting_value_tmp).astype(dtype)

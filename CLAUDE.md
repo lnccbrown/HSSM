@@ -1,0 +1,133 @@
+# HSSM — Project Context for Claude
+
+## What is HSSM?
+
+HSSM (Hierarchical Sequential Sampling Models) is a Python package for Bayesian inference on sequential sampling models (DDM, LBA, etc.) using PyMC and bambi. It provides a high-level API for defining, fitting, and analyzing these models. This is the user-facing package in the HSSM ecosystem. For ecosystem-wide context, see the HSSMSpine repo.
+
+## Project Structure
+
+```
+src/hssm/          # Main package source code
+  hssm.py          # Core HSSM class — the main user-facing API
+  config.py        # Model configuration
+  modelconfig/     # 20+ model config files (DDM, LBA, RDM, etc.)
+  likelihoods/     # Likelihood functions
+  distribution_utils/
+  param/           # Parameter handling
+  plotting/        # Plotting utilities
+  rl/              # Reinforcement learning SSM models
+tests/             # pytest test suite
+docs/              # MkDocs documentation source
+  tutorials/       # Jupyter notebook tutorials (30+ notebooks)
+  changelog.md     # Release changelog
+  overrides/       # MkDocs theme overrides (banner, etc.)
+.github/workflows/ # CI workflows
+.claude/skills/    # Claude Code skills (e.g. prepare-release)
+```
+
+## Build & Tooling
+
+- **Build system:** uv_build
+- **Package manager:** uv (fresh resolution; `uv.lock` is intentionally untracked)
+- **Python:** >=3.12, <3.15
+- **Linting/formatting:** ruff (via pre-commit)
+- **Type checking:** pyrefly (main; via pre-commit) + mypy (kept in CI)
+- **Pre-commit runner:** `prek` (not the `pre-commit` CLI). Run hooks with `uv run prek run --all-files` (or `uv run prek run <hook-id>`). The pyrefly hook uses `language: system`, so it relies on the pyrefly installed in the uv-managed environment — always invoke via `uv run prek`.
+- **Pre-commit hooks:** end-of-file-fixer, trailing-whitespace, ruff, ruff-format, pyrefly-check, mypy
+- **If `git commit` fails to run the hooks** (e.g. a hook binary "not found", or the config looks out of date), the installed git hook is stale — re-sync it with `uv run prek install -f`, then commit again. Do **not** work around it by manually putting the uv env on `PATH`.
+
+## Dependency Management
+
+HSSM uses PEP 735 dependency groups alongside traditional optional-dependencies:
+
+- **Core deps** (`[project.dependencies]`): pymc, bambi, numpyro, jax, arviz, etc.
+- **Optional extras** (`[project.optional-dependencies]`): `cuda12`, `cuda13` (GPU-enabled JAX; e.g. `pip install hssm[cuda13]` or `uv sync --extra cuda13`)
+- **Dependency groups** (`[dependency-groups]`):
+  - `dev` — pytest, ruff, mypy, pre-commit, coverage
+  - `notebook` — jupyterlab, nbconvert, graphviz, bayesflow `>=2.0.12`, keras
+  - `docs` — mkdocs-material, mkdocs-jupyter, mkdocstrings-python
+
+## Common Commands
+
+```bash
+# Install all dev dependencies
+uv sync --group dev --group notebook --group docs
+
+# Run tests (slow tests included — there is no --runslow flag)
+uv run pytest tests/
+
+# Skip slow tests (what CI's fast job runs)
+uv run pytest tests/ -m "not slow"
+
+# Coverage is opt-in (not in addopts); this is what CI's coverage.yml runs
+uv run pytest tests/ --cov=src/hssm --cov-report=term-missing
+
+# Build docs
+uv run --group notebook --group docs mkdocs build
+
+# Serve docs locally
+uv run --group notebook --group docs mkdocs serve
+
+# Execute a single notebook (for verification)
+uv run --group notebook jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook --execute docs/tutorials/<notebook>.ipynb
+
+# Lint & format
+uv run ruff check .
+uv run ruff format .
+```
+
+## Key Patterns
+
+### HSSM's `**kwargs` passthrough
+
+`HSSM.sample()` passes `**kwargs` through to `bambi.Model.fit()`, which in turn passes them to PyMC's `pm.sample()`. So parameters like `cores`, `chains`, `nuts_sampler`, `target_accept`, etc. are valid even though they don't appear in HSSM's own signature. Similarly, the HSSM constructor passes `**kwargs` to `bambi.Model()`, so bambi parameters like `noncentered` are valid.
+
+### ONNX likelihoods are single-trial + `jax.vmap`
+
+Every ONNX graph consumed by HSSM must be exported with a concrete single-trial input shape (no `dynamic_axes`). Per-trial batching happens at the HSSM layer via `jax.vmap` over trials — see [`src/hssm/distribution_utils/onnx.py:115-138`](src/hssm/distribution_utils/onnx.py#L115-L138), where `logp(*inputs)` builds one flat per-trial vector and `make_vmap_func` lifts it.
+
+Enforced at load time by `_check_single_trial_input_shape` in [`src/hssm/distribution_utils/onnx_utils/onnx2jax.py`](src/hssm/distribution_utils/onnx_utils/onnx2jax.py), which raises a `ValueError` on any symbolic input dim. The constraint exists because `jaxonnxruntime` traces against the construction-time dummy and bakes those shapes into the returned closure — calling that closure at a different batch size silently produces wrong outputs for graphs with batch-dependent intermediates (log-det accumulators, `Reshape` with `-1`).
+
+LANfactory's exporters (`transform_sbi_to_onnx`, BayesFlow LRE export) already follow this convention. A new ONNX source must do the same: trace with a rank-1 dummy, no `dynamic_axes`.
+
+Two more load-time details in `onnx2jax.py`: (1) `_check_int64_precision_safe` raises when JAX x64 is off (`hssm.set_floatX("float32")`) and the graph carries int64 constants outside the int32 range — flow exports encode open-ended slices with an `INT64_MAX` sentinel that would truncate to `-1` and silently corrupt the likelihood; the guard turns that into a clear error (x64 is on by default via the `float64` default). (2) The module sets `jaxonnxruntime`'s `jaxort_only_allow_initializers_as_static_args=False` at import — a **process-wide** config mutation (needed because `torch.onnx.export` emits Reshape shapes as Constant nodes), so it loosens jaxonnxruntime strictness for the whole process, not just HSSM's calls.
+
+### Notebook execution in CI
+
+Two separate skip mechanisms for notebooks:
+1. **mkdocs** `execute_ignore` in `mkdocs.yml` — skips execution during docs build
+2. **CI** `SKIP_NOTEBOOKS` in `.github/workflows/check_notebooks.yml` — skips during notebook CI checks
+
+### Versioning conventions
+
+- `pyproject.toml` version: no prefix (e.g., `0.3.0`)
+- Git tags: `v` prefix (e.g., `v0.3.0`)
+- Changelog headings: no prefix (e.g., `### 0.3.0`)
+
+## CI Workflows
+
+| Workflow | Purpose |
+|----------|---------|
+| `run_tests.yml` | Fast test suite |
+| `run_slow_tests.yml` | Slow tests (`@pytest.mark.slow`) |
+| `linting_and_type_checking.yml` | ruff + pyrefly + mypy |
+| `check_notebooks.yml` | Execute all non-skipped notebooks |
+| `coverage.yml` | Full suite + coverage on main pushes — the only per-push slow run (`run_slow_tests.yml` is opt-in via `[run slow]` or weekly from `drift.yml`) |
+| `docs.yml` | Build documentation |
+| `build_and_publish.yml` | Release to PyPI (triggered on release publish) |
+| `prepare-release.yml` | Release preparation automation |
+
+## Repo Etiquette for AI Agents
+
+- **PR messages must be succinct and use bullet points.** State what changed and why in a few bullets — no long prose, no restating the diff. Link the issue being addressed (e.g., `Closes #NNNN`).
+- Reference the relevant issue in commit messages and make small, incremental commits.
+- Do not commit directly to `main`; work on an issue-numbered branch (e.g., `1053-add-cuda13-support`).
+
+## Known Issues / Notes
+
+- **Multiprocessing in notebooks:** PyMC's NUTS sampler with `cores>1` can cause `EOFError` in notebook execution contexts. Fix by adding `cores=1, chains=1` to `sample()` calls.
+- **bayesflow:** Installed from PyPI (`>=2.0.12`) in the notebook group only;
+  the stable release includes `RatioApproximator`, and there is no uv source
+  override. It remains a documentation/notebook dependency rather than a
+  user-facing optional extra.
+- **Notebook kernels:** Some notebooks may have hardcoded kernel specs (e.g., `hssm-dev`). These should use `python3` instead.

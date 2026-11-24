@@ -1,0 +1,277 @@
+import numpy as np
+import pytest
+
+import hssm
+from hssm.likelihoods.analytical import lba4_bounds, logp_lba4
+from hssm.modelconfig import get_default_model_config
+from hssm.modelconfig._softmax_inv_temperature_config import (
+    softmax_inv_temperature_config,
+)
+
+
+def test_get_ddm_sdv_config():
+    ddm_sdv_model_config = get_default_model_config("ddm_sdv")
+    assert ddm_sdv_model_config["response"] == ["rt", "response"]
+    assert ddm_sdv_model_config["choices"] == [-1, 1]
+    assert ddm_sdv_model_config["list_params"] == ["v", "a", "z", "t", "sv"]
+
+    likelihoods = ddm_sdv_model_config["likelihoods"]
+    lk_analytical = likelihoods["analytical"]
+    assert lk_analytical["bounds"] == {
+        "v": (-float("inf"), float("inf")),
+        "a": (0.0, float("inf")),
+        "z": (0.0, 1.0),
+        "t": (0.0, float("inf")),
+        "sv": (0.0, float("inf")),
+    }
+
+    assert lk_analytical["default_priors"] == {
+        "t": {"name": "HalfNormal", "sigma": 2.0}
+    }
+
+
+def test_get_levy_config():
+    levy_model_config = get_default_model_config("levy")
+    assert levy_model_config["response"] == ["rt", "response"]
+    assert levy_model_config["choices"] == [-1, 1]
+    assert levy_model_config["list_params"] == ["v", "a", "z", "alpha", "t"]
+
+    likelihoods = levy_model_config["likelihoods"]
+    lk_approx_differentiable = likelihoods["approx_differentiable"]
+    assert lk_approx_differentiable["bounds"] == {
+        "v": (-3.0, 3.0),
+        "a": (0.3, 3.0),
+        "z": (0.1, 0.9),
+        "alpha": (1.0, 2.0),
+        "t": (1e-3, 2.0),
+    }
+
+
+def test_get_weibull_config():
+    weibull_model_config = get_default_model_config("weibull")
+    assert weibull_model_config["response"] == ["rt", "response"]
+    assert weibull_model_config["choices"] == [-1, 1]
+    assert weibull_model_config["list_params"] == ["v", "a", "z", "t", "alpha", "beta"]
+
+    likelihood = weibull_model_config["likelihoods"]["approx_differentiable"]
+    likelihood["loglik"] == "weibull.onnx"
+    assert likelihood["bounds"] == {
+        "v": (-2.5, 2.5),
+        "a": (0.3, 2.5),
+        "z": (0.2, 0.8),
+        "t": (1e-3, 2.0),
+        "alpha": (0.31, 4.99),
+        "beta": (0.31, 6.99),
+    }
+
+
+def test_get_ddm_seq2_no_bias_config():
+    ddm_seq2_no_bias_model_config = get_default_model_config("ddm_seq2_no_bias")
+    assert ddm_seq2_no_bias_model_config["response"] == ["rt", "response"]
+    assert ddm_seq2_no_bias_model_config["choices"] == [0, 1, 2, 3]
+    assert ddm_seq2_no_bias_model_config["list_params"] == [
+        "vh",
+        "vl1",
+        "vl2",
+        "a",
+        "t",
+    ]
+
+    likelihood = ddm_seq2_no_bias_model_config["likelihoods"]["approx_differentiable"]
+    assert likelihood["loglik"] == "ddm_seq2_no_bias.onnx"
+    assert likelihood["bounds"] == {
+        "vh": (-4.0, 4.0),
+        "vl1": (-4.0, 4.0),
+        "vl2": (-4.0, 4.0),
+        "a": (0.3, 2.5),
+        "t": (0.0, 2.0),
+    }
+
+
+def test_get_ornstein_config():
+    ornstein_model_config = get_default_model_config("ornstein")
+    assert ornstein_model_config["response"] == ["rt", "response"]
+    assert ornstein_model_config["choices"] == [-1, 1]
+    assert ornstein_model_config["list_params"] == ["v", "a", "z", "g", "t"]
+
+    likelihood = ornstein_model_config["likelihoods"]["approx_differentiable"]
+    likelihood["loglik"] == "ornstein.onnx"
+    assert likelihood["bounds"] == {
+        "v": (-2.0, 2.0),
+        "a": (0.3, 3.0),
+        "z": (0.1, 0.9),
+        "g": (-1.0, 1.0),
+        "t": (1e-3, 2.0),
+    }
+
+
+def test_get_lba4_config():
+    lba4_model_config = get_default_model_config("lba4")
+    assert lba4_model_config["response"] == ["rt", "response"]
+    assert lba4_model_config["choices"] == [0, 1, 2, 3]
+    assert lba4_model_config["list_params"] == ["A", "b", "v0", "v1", "v2", "v3"]
+    assert lba4_model_config["description"] == (
+        "Linear Ballistic Accumulator 4 Choices (LBA4)"
+    )
+
+    likelihood = lba4_model_config["likelihoods"]["analytical"]
+    assert likelihood["loglik"] is logp_lba4
+    assert likelihood["backend"] == "jax"
+    assert likelihood["default_priors"] == {
+        "A": {"name": "HalfNormal", "sigma": 2.0, "initval": 0.5}
+    }
+    assert likelihood["bounds"] == lba4_bounds
+    assert likelihood["extra_fields"] is None
+
+
+def test_get_gamma_drift_angle_config():
+    config = get_default_model_config("gamma_drift_angle")
+    assert config["response"] == ["rt", "response"]
+    assert config["choices"] == [-1, 1]
+    # `theta` sits at index 4, not appended after `c`. This is the ONNX input
+    # column order; getting it wrong evaluates the wrong likelihood silently.
+    assert config["list_params"] == [
+        "v",
+        "a",
+        "z",
+        "t",
+        "theta",
+        "shape",
+        "scale",
+        "c",
+    ]
+
+    likelihood = config["likelihoods"]["approx_differentiable"]
+    assert likelihood["loglik"] == "gamma_drift_angle.onnx"
+    assert likelihood["backend"] == "jax"
+    assert likelihood["bounds"] == {
+        "v": (-3.0, 3.0),
+        "a": (0.3, 3.0),
+        "z": (0.1, 0.9),
+        "t": (0.001, 2.0),
+        "theta": (-0.1, 1.3),
+        "shape": (2.0, 10.0),
+        "scale": (0.01, 1.0),
+        "c": (-3.0, 3.0),
+    }
+
+
+@pytest.mark.parametrize(
+    "model", ["gamma_drift", "gamma_drift_angle", "angle_extended"]
+)
+def test_config_matches_ssms_registry(model):
+    """The declared box must be the box the network was trained on.
+
+    HSSM feeds parameters to the ONNX in `list_params` order, so a wrong order
+    or a wrong bound does not raise -- it silently evaluates a different
+    likelihood. ssm-simulators is the authority for both, since the training
+    data was drawn from its registry.
+    """
+    import ssms
+
+    config = get_default_model_config(model)
+    ssms_config = ssms.config.model_config[model]
+
+    assert config["list_params"] == list(ssms_config["params"])
+    assert config["choices"] == list(ssms_config["choices"])
+
+    lower, upper = ssms_config["param_bounds"]
+    assert config["likelihoods"]["approx_differentiable"]["bounds"] == {
+        param: (low, high)
+        for param, low, high in zip(ssms_config["params"], lower, upper)
+    }
+
+
+@pytest.mark.parametrize("model", hssm.list_models())
+def test_load_all_supported_model_configs(model):
+    assert isinstance(get_default_model_config(model), dict)
+
+
+def test_hssm_list_models_matches_supported_models():
+    with pytest.deprecated_call(
+        match=r"HSSM\.supported_models is deprecated.*Use hssm\.list_models\(\) instead\."
+    ):
+        supported_models = hssm.HSSM.supported_models
+
+    assert hssm.list_models() == supported_models
+
+
+def test_get_default_model_config_invalid():
+    with pytest.raises(ValueError):
+        get_default_model_config("invalid_model")
+
+
+def test_softmax_inv_temperature_default():
+    """Test softmax_inv_temperature with default n_choices=2."""
+    config = softmax_inv_temperature_config()
+
+    assert config["response"] == ["response"]
+    assert config["choices"] == [-1, 1]
+    assert config["list_params"] == ["beta", "logit1"]
+    assert config["description"] == "The Softmax Inv. Temperature Model with 2 choices"
+
+    likelihoods = config["likelihoods"]
+    lk_analytical = likelihoods["analytical"]
+
+    assert lk_analytical["backend"] is None
+    assert lk_analytical["extra_fields"] is None
+
+    # Test bounds
+    assert lk_analytical["bounds"]["beta"] == (0.0, np.inf)
+    assert lk_analytical["bounds"]["logit1"] == (-np.inf, np.inf)
+
+    # Test default priors
+    assert lk_analytical["default_priors"]["beta"] == {
+        "name": "Gamma",
+        "alpha": 2.0,
+        "beta": 0.5,
+    }
+    assert lk_analytical["default_priors"]["logit1"] == {
+        "name": "Normal",
+        "mu": 0.0,
+        "sigma": 1.0,
+    }
+
+
+def test_softmax_inv_temperature_3_choices():
+    """Test softmax_inv_temperature with n_choices=3."""
+    config = softmax_inv_temperature_config(n_choices=3)
+
+    assert config["response"] == ["response"]
+    assert config["choices"] == [0, 1, 2]
+    assert config["list_params"] == ["beta", "logit1", "logit2"]
+    assert config["description"] == "The Softmax Inv. Temperature Model with 3 choices"
+
+    likelihoods = config["likelihoods"]
+    lk_analytical = likelihoods["analytical"]
+
+    # Test bounds
+    assert lk_analytical["bounds"]["beta"] == (0.0, np.inf)
+    assert lk_analytical["bounds"]["logit1"] == (-np.inf, np.inf)
+    assert lk_analytical["bounds"]["logit2"] == (-np.inf, np.inf)
+
+    # Test default priors
+    assert lk_analytical["default_priors"]["beta"] == {
+        "name": "Gamma",
+        "alpha": 2.0,
+        "beta": 0.5,
+    }
+    assert lk_analytical["default_priors"]["logit1"] == {
+        "name": "Normal",
+        "mu": 0.0,
+        "sigma": 1.0,
+    }
+    assert lk_analytical["default_priors"]["logit2"] == {
+        "name": "Normal",
+        "mu": 0.0,
+        "sigma": 1.0,
+    }
+
+
+def test_softmax_inv_temperature_4_is_registered():
+    """The 4-choice softmax model is available by name."""
+    config = get_default_model_config("softmax_inv_temperature_4")
+
+    assert config == softmax_inv_temperature_config(n_choices=4)
+    assert config["list_params"] == ["beta", "logit1", "logit2", "logit3"]
+    assert config["choices"] == [0, 1, 2, 3]

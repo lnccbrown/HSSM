@@ -1,3 +1,14 @@
+# Custom
+hssm_section_notebooks/
+hssm_paper/
+
+# marimo notebook session cache
+__marimo__/
+
+# CLAUDE
+.claude/worktrees/
+.claude/settings.json
+
 # Distribution / packaging
 .Python
 build/
@@ -37,6 +48,7 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 tests/__pycache__
+coverage.xml
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -52,7 +64,7 @@ env/
 venv/
 ENV/
 
-# Also ignore poetry.lock
+# Also ignore lock files
 poetry.lock
 
 # Editor cruft
@@ -70,5 +82,26 @@ site/
 
 # folders in the repository
 /notebooks
+/test_notebooks
+/test_workshop
+
+# hssm paper
+hssm_paper/
 
 *.so
+.python-version
+explorations/
+*.nbconvert.ipynb
+pypi-token
+pre-commit
+.github/copilot-instructions.md
+uv.lock
+mlruns/
+
+.claude/CLAUDE.local.md
+
+# Generated per-checkout by HSSMSpine's cross-editor sync
+# (scripts/sync_agent_config.py materializes these from .claude/).
+.cursor/
+.agents/
+mlflow.db

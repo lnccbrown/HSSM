@@ -1,0 +1,29 @@
+name: Run slow tests
+
+on:
+  workflow_dispatch:  # Manual trigger
+  workflow_call:  # Called by drift.yml (scheduled drift detection)
+  push: # Or push a commit whose message contains "[run slow]"
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - ".github/workflows/run_slow_tests.yml"
+      - ".github/workflows/run_tests.yml"
+
+jobs:
+  run_slow_tests:
+    name: Run slow tests only
+    # The commit-message opt-in applies to `push` only. Every other trigger
+    # (manual dispatch, and `workflow_call` from drift.yml -- where the
+    # `github` context is the *caller's*, so event_name is `schedule`) runs
+    # unconditionally. Gating on `event_name == 'workflow_dispatch'` instead
+    # silently skipped drift's weekly slow run.
+    if: >-
+      github.event_name != 'push' ||
+      contains(github.event.head_commit.message, '[run slow]')
+    uses: ./.github/workflows/run_tests.yml
+    with:
+      run_slow_tests: true

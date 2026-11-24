@@ -2,53 +2,61 @@ name: Run tests
 
 on:
   pull_request:
+  workflow_call:
+    inputs:
+      run_slow_tests:
+        description: "Whether to run only the slow tests instead of the fast suite"
+        required: false
+        default: false
+        type: boolean
+      test_args:
+        description: "Additional arguments or paths to pass to pytest"
+        required: false
+        default: ""
+        type: string
 
 jobs:
   run_tests:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash -el {0}
+    timeout-minutes: 90
+    env:
+      HSSM_TEST_ARGS: ${{ inputs.test_args }}
 
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11"]
-
+        python-version: ["3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
-      - name: Setup miniconda
-        uses: conda-incubator/setup-miniconda@v3
+      - name: Setup environment
+        uses: ./.github/setup-env
         with:
           python-version: ${{ matrix.python-version }}
-          miniforge-variant: Mambaforge
-          mamba-version: "*"
-          channels: conda-forge,defaults
-          channel-priority: true
 
-      - name: install pymc and poetry
-        run: |
-          mamba info
-          mamba install -c conda-forge pymc=5.12 poetry
+      # Reuse the ONNX networks that tests fetch from the Hugging Face Hub rather
+      # than downloading them on every run (#1061). The key follows the model
+      # configs, which name those files; when it changes, restore-keys starts
+      # from the previous cache.
+      - name: Cache Hugging Face Hub downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: ${{ runner.os }}-huggingface-hub-${{ hashFiles('src/hssm/modelconfig/**') }}
+          restore-keys: |
+            ${{ runner.os }}-huggingface-hub-
 
-      - name: install hssm
-        run: |
-          poetry export --with dev --output=requirements.txt
-          pip install -r requirements.txt
-          pip install -e .
+      - name: Run fast tests
+        if: ${{ !inputs.run_slow_tests }}
+        run: uv run pytest -m "not slow" $HSSM_TEST_ARGS
 
-      - name: Run mypy
-        run: mypy src
-
-      - name: Check styling
-        run: black . --check
-
-      - name: Linting
-        run: ruff check .
-
-      - name: Run tests
-        run: pytest -n auto -s
-
-      - name: build docs
-        run: mkdocs build
+      - name: Run slow tests
+        if: ${{ inputs.run_slow_tests }}
+        # --log-cli-level=INFO (the ini default is WARNING) so the RSS lines
+        # below actually show up in the log.
+        run: uv run pytest -m slow --log-cli-level=INFO $HSSM_TEST_ARGS
+        env:
+          # Log per-test RSS to diagnose slow-test memory leaks. This step only
+          # runs on the slow-test path (run_slow_tests.yml), so it stays scoped.
+          HSSM_TEST_RSS_LOG: "1"

@@ -1,12 +1,14 @@
 """Plotting utilities for HSSM."""
 
 import logging
-from typing import Any, Iterable, cast
+import numbers
+from typing import Any, Iterable, Literal, cast
 
-import arviz as az
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
 import xarray as xr
+from seaborn import FacetGrid
 
 from ..utils import _random_sample
 
@@ -17,13 +19,14 @@ def _xarray_to_df(
     posterior: xr.DataArray,
     n_samples: int | float | None,
     response_str: str = "rt,response",
+    rng: np.random.Generator | None = None,
 ) -> pd.DataFrame:
     """Extract samples from posterior and converts it to a DataFrame.
 
     We make the following assumptions:
     1. The inference data always has a posterior predictive group with a `rt,response`
        variable.
-    2. This variable always has four dimensions: `chain`, `draw`, `rt,response_obs`,
+    2. This variable always has four dimensions: `chain`, `draw`, `__obs__`,
         and `rt,response_dim`.
 
     Parameters
@@ -36,30 +39,37 @@ def _xarray_to_df(
         extracted from the draw dimension. When None, all samples are extracted.
     response_str
         The names of the response variable in the posterior.
+    rng
+        A seeded Generator for the draw selection; None keeps the legacy
+        global-RNG behavior.
 
     Returns
     -------
     pd.DataFrame
         A dataframe with the posterior samples.
     """
-    sampled_posterior = _random_sample(posterior, n_samples=n_samples)
+    sampled_posterior = _random_sample(posterior, n_samples=n_samples, rng=rng)
 
     # Convert the posterior samples to a dataframe
     stacked = (
-        sampled_posterior.stack({"obs": ["chain", "draw", f"{response_str}_obs"]})
+        sampled_posterior.stack({"obs": ["chain", "draw", "__obs__"]})
         .transpose()
         .to_pandas()
-        .rename_axis(index={f"{response_str}_obs": "obs_n"})
+        .rename_axis(index={"__obs__": "obs_n"})
         .sort_index(axis=0, level=["chain", "draw", "obs_n"])
     )
 
     # Rename the columns
     stacked.columns = response_str.split(",")
 
-    return stacked.loc[:, ["rt", "response"]]
+    # `.to_pandas()` above is typed DataFrame | Series; with a list selector
+    # `.loc` always yields a DataFrame here.
+    return cast("pd.DataFrame", stacked.loc[:, ["rt", "response"]])
 
 
-def _process_data(data: pd.DataFrame, extra_dims: list[str]) -> pd.DataFrame:
+def _process_data(
+    data: pd.DataFrame, extra_dims: list[str], quantile_by_dims: list[str] | None = None
+) -> pd.DataFrame:
     """Extract the relevant columns from the data and apply the right index.
 
     Parameters
@@ -68,6 +78,8 @@ def _process_data(data: pd.DataFrame, extra_dims: list[str]) -> pd.DataFrame:
         A dataframe with the original data.
     extra_dims
         Extra dimensions to be extracted from the dataframe.
+    quantile_by_dims
+        Extra dimensions to be used for quantiles.
 
     Returns
     -------
@@ -75,61 +87,190 @@ def _process_data(data: pd.DataFrame, extra_dims: list[str]) -> pd.DataFrame:
         The processed dataframe.
     """
     # reset the index of the data to ensure proper merging
-    data = data.reset_index(drop=True).loc[:, ["rt", "response"] + extra_dims]
+
+    if isinstance(quantile_by_dims, str):
+        quantile_by_dims = [quantile_by_dims]
+    elif isinstance(quantile_by_dims, list):
+        if len(quantile_by_dims) == 0:
+            raise ValueError("`quantile_by_dims` must be a non-empty list of strings.")
+        elif not all(isinstance(item, str) for item in quantile_by_dims):
+            raise ValueError("All elements in `quantile_by_dims` must be strings.")
+
+    if quantile_by_dims is not None:
+        data = data.reset_index(drop=True).loc[
+            :, ["rt", "response"] + extra_dims + quantile_by_dims
+        ]
+    else:
+        data = data.reset_index(drop=True).loc[:, ["rt", "response"] + extra_dims]
 
     # Makes sure that data has similar index to posterior
     data.index = pd.MultiIndex.from_product(
         [[-1], [-1], data.index], names=["chain", "draw", "obs_n"]
     )
-
     return data
 
 
+# The HSSM house palette for predictive plots, in [predicted, observed] order.
+# Validated for CVD safety (deutan dE 16.1, tritan 36.0, normal 31.9 on a white
+# surface). Shared with model_cartoon.py — change it here, nowhere else.
+DEFAULT_PREDICTIVE_COLORS: list[str] = ["#ec205b", "#338fb8"]
+
+
+def _curve_xy(
+    bin_edges: np.ndarray, values: np.ndarray | pd.Series, step: bool
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return x, y for one histogram curve.
+
+    `step=True` yields the edge-anchored histogram outline; `step=False` yields
+    a frequency polygon through the bin centers (not the left edges, which
+    would shift the curve by half a bin). Both return plain arrays, so the same
+    x works for `plot` and `fill_between` — which is what makes step outlines
+    bandable. Shared between the predictive and model-cartoon plot families.
+    """
+    values = np.asarray(values)
+    if step:
+        return np.repeat(bin_edges, 2)[1:-1], np.repeat(values, 2)
+    return (bin_edges[:-1] + bin_edges[1:]) / 2, values
+
+
+def _band_alphas(base_alpha: float, n_bands: int) -> np.ndarray:
+    """Opacity ladder for graded uncertainty bands, widest-band-first.
+
+    The narrowest band prints at `base_alpha`; wider bands fade toward 45% of
+    it. The reversed linspace makes a single band get the full base value.
+    Callers zip this against intervals sorted widest-first (the order
+    `_hdi_to_intervals` returns) and draw back-to-front.
+    """
+    return np.linspace(base_alpha, 0.45 * base_alpha, n_bands)[::-1]
+
+
+def _hdi_to_intervals(
+    hdi: str | float | tuple[float, float] | list,
+) -> list[tuple[float, float]]:
+    """Normalize one or many interval specs into quantile pairs.
+
+    A single spec — a float mass (0.94), a "94%" string, or a legacy
+    (lo, hi) *tuple* of quantiles — yields one interval. A *list* holds one
+    spec per band (each entry itself a mass, string, or quantile tuple).
+    Tuples always keep their legacy quantile-pair meaning; only lists fan
+    out into multiple bands. Returns intervals sorted widest-first so graded
+    bands can be drawn back-to-front.
+    """
+    specs = list(hdi) if isinstance(hdi, list) else [hdi]
+    if not specs:
+        raise ValueError("The `hdi` list must not be empty.")
+    intervals = [_hdi_to_interval(spec) for spec in specs]
+    return sorted(intervals, key=lambda iv: iv[1] - iv[0], reverse=True)
+
+
+def _hdi_to_interval(hdi: str | float | tuple[float, float]) -> tuple[float, float]:
+    """Convert an interval spec to a (lower, upper) quantile pair.
+
+    Note: despite the parameter name (kept for API compatibility), the result
+    is an equal-tailed percentile interval, not a highest-density interval.
+    """
+    if isinstance(hdi, tuple):
+        if len(hdi) != 2:
+            raise ValueError("The HDI must be a tuple of exactly two floats.")
+        if not all(isinstance(i, float) for i in hdi):
+            raise ValueError("The HDI must be a tuple of floats.")
+        elif not all(0 <= i <= 1 for i in hdi):
+            raise ValueError("The HDI must be between 0 and 1.")
+        elif hdi[0] > hdi[1]:
+            raise ValueError(
+                "The lower bound of the HDI must be less than the upper bound."
+            )
+        else:
+            return hdi
+    elif isinstance(hdi, str):
+        # check format of string (ends with %)
+        if not hdi.endswith("%"):
+            raise ValueError("HDI must be a percentage")
+        # check format of string (begins with two floats)
+        if not (hdi[0].isdigit() or hdi[1].isdigit()):
+            raise ValueError("HDI must begin with two floats")
+        # process
+        hdi = float(hdi.strip("%")) / 100
+    elif isinstance(hdi, float):
+        if not 0 <= hdi <= 1:
+            raise ValueError("HDI must be between 0 and 1")
+    else:
+        raise ValueError("HDI must be a float, a string, or a tuple of two floats")
+    return ((1 - hdi) / 2, 1 - ((1 - hdi) / 2))
+
+
 def _get_plotting_df(
-    idata: az.InferenceData | None = None,
+    dt: xr.DataTree | None = None,
     data: pd.DataFrame | None = None,
     extra_dims: list[str] | None = None,
+    quantile_by_dims: list[str] | str | None = None,
     n_samples: int | float | None = 20,
     response_str: str = "rt,response",
+    predictive_group: Literal[
+        "posterior_predictive", "prior_predictive"
+    ] = "posterior_predictive",
+    rng: np.random.Generator | None = None,
 ) -> pd.DataFrame:
     """Prepare a dataframe for plotting.
 
     Parameters
     ----------
-    idata : optional
-        An InferenceData object. If not provided, the function will only return the
+    dt : optional
+        A DataTree object. If not provided, the function will only return the
         processed original data.
     data: optional
         A dataframe with the original data. If not provided, the function will only
         return the posterior samples without appending the observed data.
     extra_dims, optional
-        Extra dimensions to be added to the dataframe from `idata`, by default None
+        Extra dimensions to be added to the dataframe from `dt`, by default None
+    quantile_by_dims, optional
+        Extra dimensions to be used for quantiles.
     n_samples, optional
         When an interger >= 1, the number of samples to be extracted from the draw
         dimension. When a float between 0 and 1, the proportion of samples to be
         extracted from the draw dimension. When None, all samples are extracted.
     response_str, optional
         The names of the response variable in the posterior, by default "rt,response"
+    rng, optional
+        A seeded Generator for the draw selection; None keeps the legacy
+        global-RNG behavior.
 
     Returns
     -------
     pd.DataFrame
         A dataframe with the original data and the extra dimensions.
     """
-    if idata is None and data is None:
-        raise ValueError("Either idata or data must be provided.")
+    if isinstance(quantile_by_dims, str):
+        quantile_by_dims = [quantile_by_dims]
+    elif isinstance(quantile_by_dims, list):
+        if len(quantile_by_dims) == 0:
+            raise ValueError("`quantile_by_dims` must be a non-empty list of strings.")
+        elif not all(isinstance(item, str) for item in quantile_by_dims):
+            raise ValueError("All elements in `quantile_by_dims` must be strings.")
+
+    if quantile_by_dims is not None:
+        if extra_dims is not None:
+            if set(quantile_by_dims).intersection(set(extra_dims)):
+                raise ValueError(
+                    "`quantile_by_dims` and `extra_dims` must not have any overlap."
+                )
+
+    if dt is None and data is None:
+        raise ValueError("Either dt or data must be provided.")
 
     extra_dims = [] if extra_dims is None else extra_dims
 
-    if idata is None:
-        data = _process_data(data, extra_dims)
+    if dt is None:
+        if data is None:
+            raise ValueError("`data` must be provided when `dt` is not provided.")
+        data = _process_data(data, extra_dims, quantile_by_dims)
 
         data.insert(0, "observed", "observed")
         return data
 
     # get the posterior samples
-    idata_posterior = idata["posterior_predictive"][response_str]
-    posterior = _xarray_to_df(idata_posterior, n_samples=n_samples)
+    idata_predictive = cast("xr.DataArray", dt[predictive_group][response_str])
+    predictive = _xarray_to_df(idata_predictive, n_samples=n_samples, rng=rng)
 
     if data is None:
         if extra_dims:
@@ -138,32 +279,39 @@ def _get_plotting_df(
                 + " HSSM requires a dataset to determine the values of the covariates"
                 + " to plot these additional dimensions."
             )
-        posterior.insert(0, "observed", "predicted")
-        return posterior
+        predictive.insert(0, "observed", "predicted")
+        return predictive
 
-    if extra_dims and idata_posterior[f"{response_str}_obs"].size != data.shape[0]:
+    if (
+        extra_dims and idata_predictive["__obs__"].size != data.shape[0]
+    ):  # pragma: no cover
         raise ValueError(
             "The number of observations in the data and the number of posterior "
             + "samples are not equal."
         )
-
-    data = _process_data(data, extra_dims)
+    # AD-TODO: Seems like depending on which branch is executed here
+    # we are running _process_data twice.
+    data = _process_data(data, extra_dims, quantile_by_dims)
 
     # merge the posterior samples with the data
     if extra_dims:
-        posterior_merged = posterior.merge(
-            data.loc[:, extra_dims],
-            left_on="obs_n",
-            right_on="obs_n",
-            how="left",
-            sort=True,
+        predictive = (
+            predictive.reset_index()
+            .merge(
+                data.loc[
+                    :,
+                    extra_dims
+                    + (quantile_by_dims if quantile_by_dims is not None else []),
+                ],
+                on="obs_n",
+                how="left",
+            )
+            .set_index(["chain", "draw", "obs_n"])
         )
-        posterior_merged.index = posterior.sort_index().index
-        posterior = posterior_merged
 
     # concatenate the posterior samples with the data
     plotting_df = pd.concat(
-        {"predicted": posterior, "observed": data},
+        {"predicted": predictive, "observed": data},
         names=["observed", "chain", "draw", "obs_n"],
     ).reset_index("observed")
 
@@ -216,12 +364,15 @@ def _subset_df(
     pd.DataFrame
         A subset dataframe.
     """
-    row_mask = np.column_stack(
-        [
-            _row_mask_with_error(df, col, col_value)
-            for col, col_value in zip(cols, col_values)
-        ]
-    ).all(axis=1)
+    row_mask = cast(
+        "np.ndarray",
+        np.column_stack(
+            [
+                _row_mask_with_error(df, col, col_value)
+                for col, col_value in zip(cols, col_values)
+            ]
+        ).all(axis=1),
+    )
 
     return df.loc[row_mask, :]
 
@@ -248,8 +399,33 @@ def _get_title(cols: Iterable["str"], col_values: Iterable[Any]) -> str:
     return title
 
 
+def _set_facet_suptitle(g: FacetGrid, title: str) -> None:
+    """Put a figure title above the facet titles of a FacetGrid.
+
+    `tight_layout` reserves the height of the figure title plus two pads above
+    the facet titles, so the title goes one pad below the top edge. That distance
+    is set in inches: at a fixed fraction of the figure height the title lands on
+    the facet titles of a short figure and on the panels of a tall one.
+
+    Parameters
+    ----------
+    g
+        The grid to title.
+    title
+        The figure title.
+    """
+    fig = g.figure
+    pad = 1.08 * mpl.rcParams["font.size"] / 72  # tight_layout's default pad
+    fig.suptitle(title, y=1 - pad / fig.get_figheight())
+    g.tight_layout()
+
+
 def _process_df_for_qp_plot(
-    df: pd.DataFrame, q: int | Iterable[float], cond: str, correct: str | None = None
+    df: pd.DataFrame,
+    q: int | Iterable[float],
+    cond: str,
+    correct: str | None = None,
+    quantile_by: list[str] | str | None = None,
 ) -> pd.DataFrame:
     """Process the data frame fo the quantile probability plot.
 
@@ -265,6 +441,11 @@ def _process_df_for_qp_plot(
         The variable for the conditions.
     correct
         The column for whether the answer is correct.
+    quantile_by
+        Extra grouping variable(s) for computing quantiles. If provided, quantiles
+        are first computed for each group defined by these variables, then averaged
+        across groups. Can be a string (single variable) or list of strings (multiple
+        variables). If None, quantiles are computed directly without extra grouping.
 
     Returns
     -------
@@ -275,14 +456,20 @@ def _process_df_for_qp_plot(
         if any(q_elem < 0 or q_elem > 1 for q_elem in q):
             raise ValueError("All elements in `q` must be between 0 and 1.")
 
-    if isinstance(q, int):
-        if q >= 10:
+    if isinstance(q, numbers.Integral):
+        q_int = int(q)
+        if q_int >= 10:
             _logger.warning(
                 "The number of quantiles (%d) is high. Generally 4-5 quantiles are"
                 + " ideal for visualizing the data.",
-                q,
+                q_int,
             )
-        q = np.linspace(0, 1, q)[1:-1]
+        q_arr = np.linspace(0, 1, q_int)[1:-1]
+    else:
+        q_arr = np.asarray(list(cast("Iterable[float]", q)), dtype=float)
+
+    if not isinstance(cond, str):
+        raise ValueError("`cond` must be a string.")
 
     # flip the rts
     df.loc[:, "rt"] = np.where(df["response"] > 0, df["rt"], -df["rt"])
@@ -291,12 +478,55 @@ def _process_df_for_qp_plot(
 
     df["is_correct"] = df["response"] > 0 if correct is None else df[correct]
 
-    quantiles = (
-        df.groupby(["observed", "chain", "draw", cond, "is_correct"])["rt"]
-        .quantile(q=q)
-        .reset_index()
-        .rename(columns={"level_5": "quantile"})
-    )
+    # Handle quantile_by parameter
+    if quantile_by is not None:
+        # Ensure it's a list
+        if isinstance(quantile_by, str):
+            quantile_by = [quantile_by]
+        elif isinstance(quantile_by, list):
+            if len(quantile_by) == 0:
+                raise ValueError("`quantile_by` must be a non-empty list of strings.")
+            elif not all(isinstance(item, str) for item in quantile_by):
+                raise ValueError("All elements in `quantile_by` must be strings.")
+        else:
+            raise ValueError("`quantile_by` must be a string or a list of strings.")
+
+        # Base grouping variables
+        base_groups = ["observed", "chain", "draw", cond, "is_correct"]
+
+        # Compute quantiles with the extra grouping variables
+        quantiles = (
+            df.groupby(base_groups + quantile_by)["rt"].quantile(q=q_arr).reset_index()
+        )
+
+        # Find and rename the level_* column
+        level_cols = [col for col in quantiles.columns if col.startswith("level_")]
+        if level_cols:
+            quantiles = quantiles.rename(columns={level_cols[0]: "quantile"})
+        else:  # pragma: no cover
+            raise ValueError("Could not find quantile column in result")
+
+        # Average quantiles across the extra grouping variables
+        quantiles = (
+            quantiles.groupby(base_groups + ["quantile"], as_index=False, sort=False)[
+                "rt"
+            ]
+            .mean()
+            .reset_index()
+        )
+    else:
+        # Original behavior: compute quantiles directly
+        quantiles = (
+            df.groupby(["observed", "chain", "draw", cond, "is_correct"])["rt"]
+            .quantile(q=q_arr)
+            .reset_index()
+        )
+
+        level_cols = [col for col in quantiles.columns if col.startswith("level_")]
+        if level_cols:
+            quantiles = quantiles.rename(columns={level_cols[0]: "quantile"})
+        else:  # pragma: no cover
+            raise ValueError("Could not find quantile column in result")
 
     pcts = (
         df.groupby(["observed", "chain", "draw", cond])["is_correct"]
@@ -316,7 +546,7 @@ def _check_groups_and_groups_order(
     groups_order: Iterable[str] | dict[str, Iterable[str]] | None,
     row: str | None,
     col: str | None,
-) -> tuple[Iterable[str], dict[str, Iterable[str]]]:
+) -> tuple[Iterable[str] | None, dict[str, Iterable[str]]]:
     """Check the validity of `groups` and `groups_order`."""
     if groups is None:
         if groups_order is not None:
@@ -346,8 +576,8 @@ def _check_groups_and_groups_order(
             groups = [groups]
 
     # Cast to the right types to satisfy mypy
-    groups = cast(Iterable, groups)
-    groups_order = cast(dict, groups_order)
+    groups = cast("Iterable", groups)
+    groups_order = cast("dict", groups_order)
 
     return groups, groups_order
 
@@ -355,43 +585,68 @@ def _check_groups_and_groups_order(
 def _use_traces_or_sample(
     model,
     data: pd.DataFrame | None,
-    idata: az.InferenceData | None,
+    dt: xr.DataTree | None,
     n_samples: int | float | None,
-) -> tuple[az.InferenceData, bool]:
-    """Check if idata is provided, otherwise use traces.
+    predictive_group: Literal[
+        "posterior_predictive", "prior_predictive"
+    ] = "posterior_predictive",
+    rng: np.random.Generator | None = None,
+) -> tuple[xr.DataTree, bool]:
+    """Check if dt is provided, otherwise use traces.
 
     Also, if posterior predictive samples are not contained in traces, sample from
-    the model.
+    the model. When ``rng`` is given and posterior-predictive sampling is
+    triggered with an integer ``n_samples``, the draws are a seeded random
+    subset of the posterior instead of the legacy first-``n`` (which is
+    deterministic but biased toward early, warm-up-adjacent draws). ``rng`` also
+    seeds the simulated responses, so the samples are reproducible.
     """
     # First, determine whether posterior predictive samples are available
     # If not, we need to sample from the posterior
-    if idata is None:
+    if dt is None:
         if model.traces is None:
             raise ValueError(
-                "No InferenceData object provided. Please provide an InferenceData "
+                "No DataTree object provided. Please provide a DataTree "
                 + "object or sample the model first using model.sample()."
             )
-        idata = model.traces
+        dt = model.traces
 
     sampled = False
 
-    if "posterior_predictive" not in idata:
+    if predictive_group not in dt:
         _logger.info(
-            "No posterior predictive samples found. Generating posterior predictive "
-            + "samples using the provided InferenceData object and the original data. "
-            + "This will modify the provided InferenceData object, or if not provided, "
-            + "the traces object stored inside the model."
+            "No %s samples found. Generating %s samples using the provided "
+            "DataTree object and the original data. "
+            "This will modify the provided DataTree object, "
+            "or if not provided, the traces object stored inside the model.",
+            predictive_group,
+            predictive_group,
         )
-        model.sample_posterior_predictive(
-            idata=idata,
-            data=data,
-            inplace=True,
-            n_samples=n_samples,
-        )
-        idata = model.traces
+        if predictive_group == "posterior_predictive":
+            draws: int | float | np.ndarray | None = n_samples
+            if rng is not None and isinstance(n_samples, int):
+                n_draws = int(dt["posterior"].draw.size)
+                if n_samples <= n_draws:
+                    draws = np.sort(rng.choice(n_draws, size=n_samples, replace=False))
+            model.sample_posterior_predictive(
+                dt=dt,
+                data=data,
+                inplace=True,
+                draws=draws,
+                random_seed=rng,
+            )
+        elif predictive_group == "prior_predictive":
+            dt = model.sample_prior_predictive(
+                draws=n_samples,
+                omit_offsets=False,
+                random_seed=rng,
+            )
+        else:  # pragma: no cover
+            raise ValueError(f"Invalid predictive group: {predictive_group}")
+        # AF-TODO: 'sampled' logic needs to be re-examined
         sampled = True
 
-    return cast(az.InferenceData, idata), sampled
+    return cast("xr.DataTree", dt), sampled
 
 
 def _check_sample_size(plotting_df):
@@ -407,3 +662,9 @@ def _check_sample_size(plotting_df):
             "The number of posterior predictive samples is less than 50. "
             + "The uncertainty interval may not be accurate."
         )
+
+
+def _to_dt_group(
+    predictive_group: Literal["posterior_predictive", "prior_predictive"],
+) -> Literal["posterior", "prior"]:
+    return "posterior" if predictive_group == "posterior_predictive" else "prior"

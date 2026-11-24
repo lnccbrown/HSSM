@@ -1,112 +1,175 @@
 # Installation
 
-**Update**: From HSSM 0.2.1 on, we recommend `conda` as the virtual environment manager for HSSM. We will also gradually make HSSM available directly through `conda-forge` in the near future. For now, please follow the instruction below to install HSSM:
+**Important Update:** From HSSM 0.4.0, HSSM supports installation directly through `pip` or `uv` on all platforms. You can still install HSSM into conda environments via `pip`, but `conda install hssm` no longer installs the latest version of HSSM.
 
-## Recommended: install HSSM in a conda environment
+Please follow the instructions below to install HSSM.
 
-### Step 1: Create a conda environment
+## Option 1: Installation with uv
 
-If you haven't already, please follow the [Anaconda official website](https://www.anaconda.com/download) to install anaconda. We assume that you already have one of [Anaconda](https://www.anaconda.com/download), [Miniconda](https://docs.anaconda.com/free/miniconda/index.html), [miniforge](https://github.com/conda-forge/miniforge/releases), or [mambaforge](https://github.com/conda-forge/miniforge/releases) installed on your system and have access to either `conda` or `mamba` available on your command line.
+We highly recommend that the installation of HSSM is done through `uv`, a package manager that simplifies the installation of Python packages and their dependencies. You can install `uv` by following the instructions on the [uv official website](https://docs.astral.sh/uv/getting-started/installation/).
 
-To create a conda environment, use the following command. Substitute `mamba` for `conda` if `mamba` is available:
-
-```bash
-conda create -n <your-env-name> python=3.11
-conda activate <your-env-name>
-```
-
-Substitute `<your-env-name>` with the name of the virtual environment that you choose. HSSM 0.2.0 and above support Python versions 3.10 and 3.11.
-
-### Step 2: Install PyMC through conda-forge
-
-Installation through `conda-forge` is the official way of installing PyMC. This will also install other libraries such as `libblas` that PyMC requires to run properly.
+Once `uv` is installed, you can install uv in one of the following ways:
 
 ```bash
-conda install -c conda-forge pymc
+uv venv ## creates a new virtual environment
+uv pip install hssm
 ```
 
-As of HSSM 0.2.1, HSSM supports PyMC 5.10.4. If a future newer version of PyMC causes compatibility issues, please specify the version of PyMC:
+You can also add hssm to an existing Python project by:
 
 ```bash
-conda install -c conda-forge pymc=5.10
+uv add hssm
 ```
 
-### Step 3: Install `hssm` through `pip`
+## Option 2: Installation with pip
 
-In the same environment, install `hssm` through `pip`.
+HSSM can also be installed directly through `pip`. You can install HSSM into any virtual environment via:
 
 ```bash
 pip install hssm
 ```
 
-## Advanced: install via `pip` from PyPI or GitHub
+### Install HSSM (with GPU Support)
 
-`hssm` is also available through PyPI. You can directly install it with pip into any virtual environment via:
+To sample on an NVIDIA GPU, install HSSM with the CUDA extra matching your CUDA
+version. This pulls in the GPU-enabled build of JAX for you:
 
 ```bash
-pip install hssm
+pip install hssm[cuda12]  # CUDA 12
+pip install hssm[cuda13]  # CUDA 13
 ```
 
-You can also install the bleeding-edge version of `hssm` directly from this repo:
+GPUs are fastest in single precision: call `hssm.set_floatX("float32")` before
+building the model. This also keeps JAX's matrix multiplications at full float32
+precision. JAX would otherwise run them as TF32 on NVIDIA GPUs from Ampere on,
+which can stall the sampler on LAN likelihoods. If you have already chosen a
+precision, through `JAX_DEFAULT_MATMUL_PRECISION` or `jax.config.update`,
+`set_floatX` leaves it as it is. Full float32 costs speed: on one RTX A5000, a
+LAN log-likelihood and its gradient on 10,000 or more trials took about 1.3x as
+long as under TF32, and data-center GPUs (A100, H100) can lose more. If you want
+TF32's speed, set `JAX_DEFAULT_MATMUL_PRECISION=tensorfloat32` before importing
+JAX.
 
+### Install HSSM (with run tracking)
+
+To keep a record of each fit — the model, the sampler settings, the diagnostics
+and the traces — install the `tracking` extra, which adds MLflow:
+
+```bash
+uv add "hssm[tracking]"       # or: uv pip install "hssm[tracking]"
+pip install "hssm[tracking]"  # with pip
 ```
+
+See [Track fits with MLflow](../how_to/track_with_mlflow.md).
+
+## Optional: a faster simulator backend (GSL + OpenMP)
+
+HSSM simulates through [`ssm-simulators`](https://github.com/lnccbrown/ssm-simulators),
+whose prebuilt wheels ship a portable, single-threaded build. If the package is
+instead compiled on your machine with the GNU Scientific Library present, it
+gains a multithreaded (OpenMP) backend with a validated parallel random-number
+generator — useful when simulation is the bottleneck, for example in
+posterior-predictive sampling.
+
+First install the system libraries (a one-time step):
+
+```bash
+# macOS
+brew install gsl libomp
+
+# Debian / Ubuntu
+sudo apt-get install libgsl-dev build-essential
+```
+
+Then tell your installer to build `ssm-simulators` from source while keeping
+wheels for everything else. With `uv`, add one line to your project and every
+`uv sync` does the right thing from then on:
+
+```toml
+[tool.uv]
+no-binary-package = ["ssm-simulators"]
+```
+
+Or as a one-off install (the flag names the dependency to compile; `hssm` is
+what you are installing):
+
+```bash
+uv pip install --no-binary ssm-simulators hssm
+```
+
+```bash
+pip install hssm --no-binary ssm-simulators
+```
+
+**Verify it worked.** If GSL is not found at build time, the build still
+succeeds and silently produces the same single-threaded backend as the wheel —
+so check:
+
+```bash
+python -c "from cssm._openmp_status import is_gsl_available, is_openmp_available; print('GSL:', is_gsl_available(), '| OpenMP:', is_openmp_available())"
+```
+
+Both should print `True`. If not, confirm the system libraries above are
+installed and reinstall with the same flag.
+
+!!! note
+
+    JAX's CUDA wheels are Linux-only and require a compatible NVIDIA driver
+    (>= 525 for CUDA 12, >= 580 for CUDA 13).
+
+### Support for Apple Silicon, AMD, and other GPUs
+
+JAX also has support other GPUs. Please follow the
+[Official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html)
+to install the correct version of JAX before installing HSSM.
+
+### Install the dev version of HSSM
+
+You can install the dev version of `hssm` directly from this repo:
+
+```bash
 pip install git+https://github.com/lnccbrown/HSSM.git
 ```
 
-Because HSSM depends on very specific versions of PyMC, JAX and Bambi, we recommend that
-you install HSSM into a dedicated virtual environment to avoid dependency conflicts.
+### Install HSSM on Google Colab
 
-## Advanced: install optional dependencies
+Google Colab comes with PyMC and JAX pre-configured. That holds true even if you
+are using the GPU and TPU backend, so you simply need to install HSSM via pip on
+Colab regardless of the backend you are using:
 
-Whether you have installed HSSM via `conda`, `pip`, or GitHub, you might still need additional
+```bash
+!pip install hssm
+```
+
+## Install optional dependencies
+
+Whether you have installed HSSM via `pip`, `uv`, or GitHub, you might still need additional
 packages installed for additional features such as sampling with `blackjax` or GPU support
 for `JAX`. Please follow the instructions below if you need any of these additional
 features:
 
-### 1. Sampling with JAX through `numpyro` or `blackjax`
+### 1. Sampling with JAX through `numpyro`, `nutpie` or `blackjax`
 
-JAX-based sampling is done through `numpyro` and `blackjax`. `numpyro` is installed as
+JAX-based sampling is done through `numpyro`, `nutpie`, or `blackjax`. `numpyro` is installed as
 a dependency by default. You need to have `blackjax` installed if you want to use the
-`nuts_blackjax` sampler.
+`blackjax` sampler.
 
 ```bash
-pip install blackjax
+pip install blackjax nutpie
 ```
 
-### 2. Sampling with JAX support for GPU
+### 2. Visualizing the model with `graphviz`
 
-The `nuts_numpyro` sampler uses JAX as the backend and thus can support sampling on nvidia
-GPUs. The only thing you need to do to take advantage of this is to install JAX with CUDA
-support before installing HSSM. This works whether `conda` is used or not. Here's one example:
+Model graphs are created with `model.graph()` through `graphviz`. You need to have
+the Graphviz binaries available on your `PATH` (the `dot` command) and then install
+its Python binding:
 
-```bash
-pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-pip install hssm
-```
+#### Install the Graphviz binaries
 
-The example above shows how to install JAX with CUDA 11 support. Please refer to the
-[JAX Installation](https://jax.readthedocs.io/en/latest/installation.html) page for more
-details on installing JAX on different platforms with GPU or TPU support.
-
-Note that on Google Colab, JAX support for GPU is enabled by default if the Colab backend
-has GPU enabled. You simply need only install HSSM.
-
-### Visualizing the model with `graphviz`
-
-Model graphs are created with `model.graph()` through `graphviz`. If you have installed
-hssm in a conda environment, you can simply install `graphviz` in conda:
-
-```bash
-conda install -c conda-forge graphviz
-```
-
-If you have installed hssm in a non-conda environment, you need to have `graphviz` installed system-wide and then install its Python binding:
-
-#### Install graphviz system-wide
-
-Please follow the instructions on the
-[graphviz official site](https://graphviz.org/download/) to install graphviz for your
-specific platform.
+Install Graphviz through your package manager (e.g. conda or Homebrew) or by
+following the instructions on the
+[graphviz official site](https://graphviz.org/download/) for your specific platform.
+Make sure the `dot` command is on your `PATH`.
 
 #### Install graphviz python binding
 
@@ -124,11 +187,10 @@ pip install graphviz
 WARNING (pytensor.tensor.blas): Using NumPy C-API based implementation for BLAS functions.
 ```
 
-   This is because `pytensor`, the compute backend of PyMC, cannot find a BLAS library on your
-   system to optimize its computation. This can be resolved by following the recommended
-   steps to install HSSM into a conda environment. If conda cannot be used, you can follow
-   [this discussion](https://github.com/pymc-devs/pytensor/issues/524) to link a BLAS library
-   with `pytensor`.
+This is because `pytensor`, the compute backend of PyMC, cannot find a BLAS library on your
+system to optimize its computation. You can follow
+[this discussion](https://github.com/pymc-devs/pytensor/issues/524) to link a BLAS library
+with `pytensor`.
 
 2. `pip` installation fails with missing dependencies:
 
@@ -142,6 +204,14 @@ WARNING (pytensor.tensor.blas): Using NumPy C-API based implementation for BLAS 
    HSSM has very specific requirements for the versions of `jax`, `pymc`, and `bambi`.
    This problem can usually be resolved by installing HSSM into a dedicated virtual
    environment.
+
+!!! note
+
+    Possible solutions to any issues with installations with hssm can be located [here](https://github.com/lnccbrown/HSSM/discussions). Also feel free to start a new
+    discussion thread if you don't find answers there. We recommend installing HSSM into
+    a fresh virtual environment to prevent any problems with dependencies
+    during the installation process. Please note that HSSM is only tested for Python 3.12
+    through 3.14. Use unsupported Python versions with caution.
 
 ## Questions?
 

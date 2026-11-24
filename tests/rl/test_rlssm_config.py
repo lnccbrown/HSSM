@@ -1,0 +1,1093 @@
+"""Tests for RLSSMConfig construction, validation, defaults, and ssms bridges."""
+
+import sys
+import types
+
+import jax.numpy as jnp
+import pytest
+
+import hssm
+from hssm.config import (
+    DEFAULT_SSM_CHOICES,
+    DEFAULT_SSM_OBSERVED_DATA,
+    ModelConfig,
+)
+from hssm.rl import RLSSMConfig
+from hssm.utils import annotate_function
+
+# Define constants for repeated data structures
+DEFAULT_RESPONSE = ("rt", "response")
+DEFAULT_CHOICES = (0, 1)
+DEFAULT_BOUNDS = {
+    "alpha": (0.0, 1.0),
+    "beta": (0.0, 1.0),
+    "gamma": (0.0, 1.0),
+    "v": (-3.0, 3.0),
+    "a": (0.3, 2.5),
+}
+
+
+# Module-level annotated dummy used wherever from_rlssm_dict needs a valid
+# ssm_logp_func but the test is not about ssm_logp_func itself.
+@annotate_function(inputs=["v", "rt", "response"], outputs=["logp"], computed={})
+def _module_dummy_ssm_logp(x):
+    return x
+
+
+# Helper function to create a config dictionary
+def create_config_dict(
+    model_name,
+    list_params,
+    params_default,
+    bounds=DEFAULT_BOUNDS,
+    response=DEFAULT_RESPONSE,
+    choices=DEFAULT_CHOICES,
+    extra_fields=[],
+    learning_process={},
+    decision_process="ddm",
+    decision_process_loglik_kind="analytical",
+    learning_process_kind="blackbox",
+    ssm_logp_func=_module_dummy_ssm_logp,
+):
+    """Create an RLSSM config dictionary for tests."""
+    return dict(
+        model_name=model_name,
+        name=model_name,
+        description=f"{model_name} model",
+        list_params=list_params,
+        params_default=params_default,
+        bounds=bounds,
+        response=response,
+        choices=choices,
+        extra_fields=extra_fields,
+        learning_process=learning_process,
+        decision_process=decision_process,
+        decision_process_loglik_kind=decision_process_loglik_kind,
+        learning_process_kind=learning_process_kind,
+        ssm_logp_func=ssm_logp_func,
+        data={},
+    )
+
+
+# region fixtures and helpers
+@pytest.fixture
+def valid_rlssmconfig_kwargs():
+    """Return a valid RLSSMConfig kwargs dictionary."""
+
+    @annotate_function(inputs=["v", "rt", "response"], outputs=["logp"], computed={})
+    def _dummy_ssm_logp_func(x):
+        return x
+
+    return dict(
+        model_name="test_model",
+        list_params=["alpha", "beta"],
+        params_default=[0.5, 0.3],
+        bounds={"alpha": (0.0, 1.0), "beta": (0.0, 1.0)},
+        decision_process="ddm",
+        response=["rt", "response"],
+        choices=[0, 1],
+        extra_fields=["feedback"],
+        decision_process_loglik_kind="analytical",
+        learning_process_kind="blackbox",
+        learning_process={},
+        ssm_logp_func=_dummy_ssm_logp_func,
+    )
+
+
+hssm.set_floatX("float32")
+
+
+def v_func(x):
+    """Return a doubled learning-process value."""
+    return x * 2
+
+
+def a_func(x):
+    """Return an incremented learning-process value."""
+    return x + 1
+
+
+# endregion
+
+
+class TestRLSSMConfigCreation:
+    """Tests for RLSSMConfig construction from dictionaries."""
+
+    rlwm_config = create_config_dict(
+        model_name="rlwm",
+        list_params=["alpha", "beta", "gamma", "v", "a"],
+        params_default=[0.5, 0.3, 0.2, 1.0, 1.5],
+        bounds=DEFAULT_BOUNDS,
+        response=DEFAULT_RESPONSE,
+        choices=DEFAULT_CHOICES,
+        extra_fields=["feedback", "trial_id", "block"],
+        learning_process={"v": "subject_wise_function"},
+    )
+
+    minimal_rlssm_config = create_config_dict(
+        model_name="minimal_rlssm",
+        list_params=["alpha", "beta"],
+        params_default=[],
+        bounds={},
+        response=DEFAULT_RESPONSE,
+        choices=DEFAULT_CHOICES,
+        extra_fields=[],
+        learning_process={},
+    )
+
+    testcase1 = (
+        "rlwm",
+        rlwm_config,
+        "rlwm",
+        [0.5, 0.3, 0.2, 1.0, 1.5],
+        DEFAULT_BOUNDS,
+        DEFAULT_RESPONSE,
+        DEFAULT_CHOICES,
+        {"v": "subject_wise_function"},
+    )
+
+    testcase2: tuple = (
+        "minimal_rlssm",
+        minimal_rlssm_config,
+        "minimal_rlssm",
+        [],
+        {},
+        DEFAULT_RESPONSE,
+        DEFAULT_CHOICES,
+        {},
+    )
+    testcase_params = (
+        "model_name, config_dict, expected_model_name,"
+        " expected_params_default, expected_bounds, expected_response, "
+        "expected_choices, expected_learning_process"
+    )
+
+    @pytest.mark.parametrize(
+        testcase_params,
+        [
+            # Test case for RLWM model
+            testcase1,
+            # Test case for minimal RLSSM model
+            testcase2,
+        ],
+    )
+    def test_from_rlssm_dict_cases(
+        self,
+        model_name,
+        config_dict,
+        expected_model_name,
+        expected_params_default,
+        expected_bounds,
+        expected_response,
+        expected_choices,
+        expected_learning_process,
+    ):
+        """Check that dictionary configs map to expected RLSSMConfig fields."""
+        config = RLSSMConfig.from_rlssm_dict(config_dict)
+        assert config.model_name == expected_model_name
+        assert config.params_default == expected_params_default
+        assert config.bounds == expected_bounds
+        assert config.response == expected_response
+        assert config.choices == expected_choices
+        assert config.learning_process == expected_learning_process
+
+    def test_from_rlssm_dict_round_trips_ndt_edge_shift(self):
+        """The optional ndt_edge_shift key lands on the config as given."""
+        config_dict = create_config_dict(
+            model_name="ndt_rlssm",
+            list_params=["alpha", "t", "st"],
+            params_default=[0.5, 0.3, 0.1],
+            bounds={"alpha": (0.0, 1.0), "t": (0.0, 2.0), "st": (0.0, 1.0)},
+        )
+        config_dict["ndt_edge_shift"] = {"param": "st", "scale": 1.0}
+
+        config = RLSSMConfig.from_rlssm_dict(config_dict)
+
+        assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}
+
+
+class TestRLSSMConfigValidation:
+    """Tests for RLSSMConfig validation behavior."""
+
+    @pytest.mark.parametrize(
+        "field, value, error_msg",
+        [
+            ("response", None, "Please provide `response` columns"),
+            ("list_params", None, "Please provide `list_params"),
+            ("choices", None, "Please provide `choices`"),
+            ("decision_process", None, "Please specify a `decision_process`"),
+            ("ssm_logp_func", None, "Please provide `ssm_logp_func`"),
+        ],
+    )
+    def test_validate_missing_fields(
+        self, field, value, error_msg, valid_rlssmconfig_kwargs
+    ):
+        """Check that missing required validation fields raise clear errors."""
+        # All required fields provided, then set one to None
+        config = RLSSMConfig(**valid_rlssmconfig_kwargs)
+        setattr(config, field, value)
+        with pytest.raises(ValueError, match=error_msg):
+            config.validate()
+
+    @pytest.mark.parametrize(
+        "missing_field",
+        [
+            "model_name",
+            "params_default",
+            "decision_process",
+            "decision_process_loglik_kind",
+            "learning_process_kind",
+            "learning_process",
+        ],
+    )
+    def test_constructor_missing_required_field(
+        self, missing_field, valid_rlssmconfig_kwargs
+    ):
+        """Check constructor errors for omitted dataclass-required fields."""
+        # Provide all required fields, then remove one
+        kwargs = valid_rlssmconfig_kwargs
+        kwargs.pop(missing_field)
+        with pytest.raises(TypeError):
+            RLSSMConfig(**kwargs)
+
+    def test_validate_success(self, valid_rlssmconfig_kwargs):
+        """Check that a complete configuration validates successfully."""
+        config = RLSSMConfig(**valid_rlssmconfig_kwargs)
+        config.validate()
+
+    def test_validate_params_default_mismatch(self, valid_rlssmconfig_kwargs):
+        """Check validation rejects mismatched default-parameter lengths."""
+        config = RLSSMConfig(
+            **{
+                **valid_rlssmconfig_kwargs,
+                "params_default": [0.5],  # length 1, but list_params has 2 entries
+            }
+        )
+        with pytest.raises(
+            ValueError,
+            match=r"params_default length \(1\) doesn't match list_params length \(2\)",
+        ):
+            config.validate()
+
+    def test_validate_ssm_logp_func_not_callable(self, valid_rlssmconfig_kwargs):
+        """Check validation rejects non-callable SSM logp functions."""
+        config = RLSSMConfig(**valid_rlssmconfig_kwargs)
+        config.ssm_logp_func = "not_a_callable"
+        with pytest.raises(ValueError, match="must be a callable"):
+            config.validate()
+
+    def test_validate_ssm_logp_func_missing_annotations(self, valid_rlssmconfig_kwargs):
+        """Check validation rejects undecorated SSM logp functions."""
+        config = RLSSMConfig(**valid_rlssmconfig_kwargs)
+        # Replace with a plain callable that lacks @annotate_function attributes
+        config.ssm_logp_func = lambda x: x
+        with pytest.raises(
+            ValueError, match="must be decorated with `@annotate_function`"
+        ):
+            config.validate()
+
+    def test_validate_ssm_logp_func_computed_not_callable(
+        self, valid_rlssmconfig_kwargs
+    ):
+        """`computed` exists but contains non-callable values -> error."""
+        config = RLSSMConfig(**valid_rlssmconfig_kwargs)
+        # Inject a computed mapping with a non-callable value to trigger the
+        # specific validation branch.
+        config.ssm_logp_func.computed = {"x": "not_callable"}
+        with pytest.raises(
+            ValueError,
+            match=r"`ssm_logp_func.computed` must be a dictionary with callable values\.",
+        ):
+            config.validate()
+
+    def test_validate_missing_bounds_for_param(self, valid_rlssmconfig_kwargs):
+        """validate() should raise early when a param has no bounds entry."""
+        kwargs = {**valid_rlssmconfig_kwargs, "bounds": {}}  # strip all bounds
+        config = RLSSMConfig(**kwargs)
+        with pytest.raises(ValueError, match="Missing bounds for parameter"):
+            config.validate()
+
+    @pytest.mark.parametrize(
+        ("list_params", "ndt_edge_shift", "match"),
+        [
+            (["alpha", "t"], {"param": "st", "scale": 1.0}, "names the parameter"),
+            (["alpha", "st"], {"param": "st", "scale": 1.0}, "`t` is not in"),
+            (["alpha", "t", "st"], {"param": "st", "scale": float("nan")}, "scale"),
+            (["alpha", "t", "st"], {"scale": 1.0}, "keys 'param' and 'scale'"),
+        ],
+        ids=["param_not_in_list_params", "no_t", "nan_scale", "no_param"],
+    )
+    def test_validate_rejects_bad_ndt_edge_shift(
+        self, valid_rlssmconfig_kwargs, list_params, ndt_edge_shift, match
+    ):
+        """The shared declaration rules apply to the sampled parameters."""
+        config = RLSSMConfig(
+            **{
+                **valid_rlssmconfig_kwargs,
+                "list_params": list_params,
+                "params_default": [0.5] * len(list_params),
+                "bounds": {p: (0.0, 1.0) for p in list_params},
+                "ndt_edge_shift": ndt_edge_shift,
+            }
+        )
+        with pytest.raises(ValueError, match=match):
+            config.validate()
+
+    def test_validate_accepts_ndt_edge_shift(self, valid_rlssmconfig_kwargs):
+        """A declaration that names sampled parameters validates."""
+        config = RLSSMConfig(
+            **{
+                **valid_rlssmconfig_kwargs,
+                "list_params": ["alpha", "t", "st"],
+                "params_default": [0.5, 0.3, 0.1],
+                "bounds": {"alpha": (0.0, 1.0), "t": (0.0, 2.0), "st": (0.0, 1.0)},
+                "ndt_edge_shift": {"param": "st", "scale": 1.0},
+            }
+        )
+        config.validate()
+
+    def test_from_defaults_raises(self):
+        """RLSSMConfig.from_defaults() must raise NotImplementedError."""
+        with pytest.raises(NotImplementedError, match="from_defaults"):
+            RLSSMConfig.from_defaults("ddm", None)
+
+
+class TestRLSSMConfigDefaults:
+    """Tests for RLSSMConfig default and bounds lookup."""
+
+    @pytest.mark.parametrize(
+        "list_params, params_default, bounds, param, expected_default, expected_bounds",
+        [
+            # params_default stores initialisation values, NOT priors.
+            # get_defaults always returns None for the prior so that
+            # prior_settings="safe" can assign priors from bounds.
+            #
+            # Case 1: queried param is present in bounds → bound returned.
+            (
+                ["alpha", "beta", "gamma"],
+                [0.5, 0.3, 0.2],
+                {"alpha": (0.0, 1.0), "beta": (0.0, 1.0), "gamma": (0.0, 1.0)},
+                "beta",
+                None,
+                (0.0, 1.0),
+            ),
+            # Case 2: queried param is NOT in list_params and NOT in bounds
+            # (e.g. a typo or an extra lookup) → both None.
+            (
+                ["alpha", "beta"],
+                [0.5, 0.3],
+                {"alpha": (0.0, 1.0), "beta": (0.0, 1.0)},
+                "gamma",
+                None,
+                None,
+            ),
+            # Case 3: params_default may be empty; param in bounds → bound returned.
+            (
+                ["alpha", "beta"],
+                [],
+                {"alpha": (0.0, 1.0), "beta": (0.0, 1.0)},
+                "alpha",
+                None,
+                (0.0, 1.0),
+            ),
+        ],
+    )
+    def test_get_defaults_cases(
+        self,
+        list_params,
+        params_default,
+        bounds,
+        param,
+        expected_default,
+        expected_bounds,
+    ):
+        """Check get_defaults returns the expected prior placeholder and bounds."""
+        config = RLSSMConfig(
+            model_name="test_model",
+            list_params=list_params,
+            params_default=params_default,
+            bounds=bounds,
+            decision_process="ddm",
+            response=["rt", "response"],
+            choices=[0, 1],
+            decision_process_loglik_kind="analytical",
+            learning_process_kind="blackbox",
+            learning_process={},
+        )
+        default_val, bounds_val = config.get_defaults(param)
+        assert default_val == expected_default
+        assert bounds_val == expected_bounds
+
+
+class TestRLSSMConfigLearningProcess:
+    """Tests for learning-process mapping behavior."""
+
+    def test_learning_process(self):
+        """Check learning-process functions are stored by parameter name."""
+        config = RLSSMConfig(
+            model_name="test_model",
+            list_params=["alpha"],
+            params_default=[0.0],
+            decision_process="ddm",
+            response=["rt", "response"],
+            choices=[0, 1],
+            learning_process={"v": v_func, "a": a_func},
+            decision_process_loglik_kind="analytical",
+            learning_process_kind="blackbox",
+        )
+        assert "v" in config.learning_process
+        assert "a" in config.learning_process
+        assert config.learning_process["v"] is v_func
+        assert config.learning_process["a"] is a_func
+
+    def test_immutable_defaults(self):
+        """Check separate configs do not share mutable learning-process defaults."""
+        config1 = RLSSMConfig(
+            model_name="model1",
+            list_params=["alpha"],
+            params_default=[0.0],
+            decision_process="ddm",
+            response=["rt", "response"],
+            choices=[0, 1],
+            learning_process={"v": v_func},
+            decision_process_loglik_kind="analytical",
+            learning_process_kind="blackbox",
+        )
+        config2 = RLSSMConfig(
+            model_name="model2",
+            list_params=["beta"],
+            params_default=[0.0],
+            decision_process="ddm",
+            response=["rt", "response"],
+            choices=[0, 1],
+            learning_process={"a": a_func},
+            decision_process_loglik_kind="analytical",
+            learning_process_kind="blackbox",
+        )
+        config1.learning_process["v"] = "function1"
+        assert "v" not in config2.learning_process
+        assert config1.learning_process != config2.learning_process
+
+
+class TestRLSSMConfigEdgeCases:
+    """Tests for edge-case construction and dictionary conversion errors."""
+
+    def test_from_rlssm_dict_missing_required(self):
+        """Check dictionary conversion rejects missing log-likelihood kind."""
+        # Should raise ValueError if decision_process_loglik_kind is missing
+        config_dict = {
+            "model_name": "test_model",
+            "name": "test_model",
+            "list_params": ["alpha"],
+            "params_default": [0.0],
+            "decision_process": "ddm",
+            "learning_process": {},
+            "learning_process_kind": "blackbox",
+            "response": ["rt", "response"],
+            "choices": [0, 1],
+            "description": "desc",
+            "bounds": {},
+            "data": {},
+            "extra_fields": [],
+            "ssm_logp_func": _module_dummy_ssm_logp,
+        }
+        with pytest.raises(
+            ValueError, match="decision_process_loglik_kind must be provided"
+        ):
+            RLSSMConfig.from_rlssm_dict(config_dict)
+
+    def test_from_rlssm_dict_missing_ssm_logp_func(self):
+        """Check dictionary conversion rejects missing SSM logp functions."""
+        # Should raise ValueError at construction time if ssm_logp_func is missing
+        config_dict = {
+            "model_name": "test_model",
+            "name": "test_model",
+            "list_params": ["alpha"],
+            "params_default": [0.0],
+            "decision_process": "ddm",
+            "learning_process": {},
+            "learning_process_kind": "blackbox",
+            "decision_process_loglik_kind": "analytical",
+            "response": ["rt", "response"],
+            "choices": [0, 1],
+            "description": "desc",
+            "bounds": {},
+            "data": {},
+            "extra_fields": [],
+        }
+        with pytest.raises(ValueError, match="ssm_logp_func must be provided"):
+            RLSSMConfig.from_rlssm_dict(config_dict)
+
+    def test_missing_decision_process_loglik_kind(self):
+        """Check constructor and dictionary errors for missing log-likelihood kind."""
+        with pytest.raises(TypeError):
+            RLSSMConfig(
+                model_name="test_model",
+                list_params=["alpha"],
+                decision_process="ddm",
+                response=["rt", "response"],
+                choices=[0, 1],
+            )
+        config_dict = {
+            "model_name": "test_model",
+            "description": "desc",
+            "list_params": ["alpha"],
+            "params_default": [0.0],
+            "bounds": {},
+            "data": {},
+            "decision_process": "ddm",
+            "learning_process": {},
+            "learning_process_kind": "blackbox",
+            "response": ["rt", "response"],
+            "choices": [0, 1],
+            "extra_fields": [],
+            "ssm_logp_func": _module_dummy_ssm_logp,
+        }
+        with pytest.raises(
+            ValueError, match="decision_process_loglik_kind must be provided"
+        ):
+            RLSSMConfig.from_rlssm_dict(config_dict)
+
+    def test_with_modelconfig_decision_process(self):
+        """Check ModelConfig instances are accepted as decision processes."""
+        decision_config = ModelConfig(
+            response=["rt", "response"],
+            list_params=["v", "a", "z", "t"],
+            choices=[0, 1],
+        )
+        RLSSMConfig(
+            model_name="test_model",
+            list_params=["alpha"],
+            params_default=[0.0],
+            decision_process=decision_config,
+            response=["rt", "response"],
+            choices=[0, 1],
+            decision_process_loglik_kind="analytical",
+            learning_process_kind="blackbox",
+            learning_process={},
+        )
+
+    def test_modelconfig_decision_process_brings_its_ndt_edge_shift(self):
+        """A ModelConfig decision process hands its declaration to the RLSSM config."""
+        decision_config = ModelConfig(
+            response=["rt", "response"],
+            list_params=["v", "a", "z", "t", "st"],
+            choices=[0, 1],
+            ndt_edge_shift={"param": "st", "scale": 1.0},
+        )
+        config = RLSSMConfig(
+            model_name="test_model",
+            list_params=["alpha", "t", "st"],
+            params_default=[0.0, 0.5, 0.1],
+            decision_process=decision_config,
+            response=["rt", "response"],
+            choices=[0, 1],
+            decision_process_loglik_kind="analytical",
+            learning_process_kind="blackbox",
+            learning_process={},
+        )
+        assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}
+        assert config.ndt_edge_shift is not decision_config.ndt_edge_shift
+        # An explicit declaration on the RLSSM config wins.
+        explicit = RLSSMConfig(
+            model_name="test_model",
+            list_params=["alpha", "t", "st"],
+            params_default=[0.0, 0.5, 0.1],
+            decision_process=decision_config,
+            response=["rt", "response"],
+            choices=[0, 1],
+            decision_process_loglik_kind="analytical",
+            learning_process_kind="blackbox",
+            learning_process={},
+            ndt_edge_shift={"param": "st", "scale": 2.0},
+        )
+        assert explicit.ndt_edge_shift == {"param": "st", "scale": 2.0}
+
+
+class TestRLSSMConfigDefaultWarnings:
+    """Warnings are emitted when 'response' or 'choices' are missing from config_dict."""
+
+    @pytest.fixture
+    def _base_config_dict(self):
+        return {
+            "model_name": "test_model",
+            "list_params": ["alpha"],
+            "params_default": [0.0],
+            "bounds": {"alpha": (0.0, 1.0)},
+            "decision_process": "ddm",
+            "learning_process": {},
+            "learning_process_kind": "blackbox",
+            "decision_process_loglik_kind": "analytical",
+            "extra_fields": [],
+            "ssm_logp_func": _module_dummy_ssm_logp,
+        }
+
+    def test_warns_when_response_missing(self, _base_config_dict, caplog):
+        """Check default response warning and fallback."""
+        _base_config_dict["choices"] = (0, 1)
+        # 'response' deliberately omitted
+        with caplog.at_level("WARNING", logger="hssm"):
+            config = RLSSMConfig.from_rlssm_dict(_base_config_dict)
+        assert any("'response' not specified" in m for m in caplog.messages)
+        assert config.response == list(DEFAULT_SSM_OBSERVED_DATA)
+
+    def test_warns_when_choices_missing(self, _base_config_dict, caplog):
+        """Check default choices warning and fallback."""
+        _base_config_dict["response"] = ["rt", "response"]
+        # 'choices' deliberately omitted
+        with caplog.at_level("WARNING", logger="hssm"):
+            config = RLSSMConfig.from_rlssm_dict(_base_config_dict)
+        assert any("'choices' not specified" in m for m in caplog.messages)
+        assert config.choices == DEFAULT_SSM_CHOICES
+
+    def test_warns_when_both_missing(self, _base_config_dict, caplog):
+        """Check both default warnings and fallbacks."""
+        # Both 'response' and 'choices' omitted
+        with caplog.at_level("WARNING", logger="hssm"):
+            config = RLSSMConfig.from_rlssm_dict(_base_config_dict)
+        assert any("'response' not specified" in m for m in caplog.messages)
+        assert any("'choices' not specified" in m for m in caplog.messages)
+        assert config.response == list(DEFAULT_SSM_OBSERVED_DATA)
+        assert config.choices == DEFAULT_SSM_CHOICES
+
+    def test_no_warning_when_both_provided(self, _base_config_dict, caplog):
+        """Check no default warning is emitted when both fields are provided."""
+        _base_config_dict["response"] = ["rt", "response"]
+        _base_config_dict["choices"] = (0, 1)
+        with caplog.at_level("WARNING", logger="hssm"):
+            RLSSMConfig.from_rlssm_dict(_base_config_dict)
+        assert not any("not specified" in m for m in caplog.messages)
+
+    def test_no_warning_when_ndt_edge_shift_missing(self, _base_config_dict, caplog):
+        """A config dict without ndt_edge_shift gets None, silently."""
+        _base_config_dict["response"] = ["rt", "response"]
+        _base_config_dict["choices"] = (0, 1)
+        with caplog.at_level("WARNING", logger="hssm"):
+            config = RLSSMConfig.from_rlssm_dict(_base_config_dict)
+        assert config.ndt_edge_shift is None
+        assert not caplog.messages
+
+
+# region ssms.rl bridge (from_ssms_model)
+
+
+class _FakeSSMSModelConfig:
+    """Stand-in for an ``ssms.rl.ModelConfig`` (assembled API)."""
+
+    def __init__(self, *, gradient="available"):
+        self.gradient = gradient
+        self.validated_data = None
+
+    def validate(self):
+        return None
+
+    def assemble(self, backend="auto"):
+        return _FakeSSMSAssembledModel(self, backend=backend, gradient=self.gradient)
+
+    def participant_contract(self):
+        return {"context_fields": ["feedback"]}
+
+    def validate_data(self, data):
+        self.validated_data = data
+
+        class _Report:
+            def raise_for_errors(self):
+                return None
+
+        return _Report()
+
+
+class _FakeSSMSAssembledModel:
+    """Stand-in for an ``ssms.rl.AssembledModel``."""
+
+    def __init__(self, config, *, backend, gradient):
+        self.config = config
+        self.learning_backend = backend
+        self.gradient = gradient
+        self.model_name = "2AB_RW_Angle"
+        self.decision_process = "angle"
+        self.list_params = ["rl_alpha", "scaler", "a", "z", "t", "theta"]
+        self.bounds = {
+            "rl_alpha": (0.0, 1.0),
+            "scaler": (0.001, 10.0),
+            "a": (0.3, 3.0),
+            "z": (0.1, 0.9),
+            "t": (0.001, 2.0),
+            "theta": (-0.1, 1.3),
+        }
+        self.params_default = [0.2, 2.0, 1.5, 0.5, 0.3, 0.2]
+        self.response = ["rt", "response"]
+        self.choices = (-1, 1)
+        self.context_fields = ["feedback"]
+        self.computed_params = ["v"]
+        self.response_to_choice = {-1: 0, 1: 1}
+
+    def participant_input_fields(self):
+        return ["rl_alpha", "scaler", "response", "feedback"]
+
+    def assemble_participant_fn(self, output="array"):
+        assert output == "dict"
+
+        def compute(subject_trials):
+            responses = subject_trials[:, 2]
+            actions = jnp.where(responses == -1, 0.0, 1.0)
+            return {"v": subject_trials[:, 1] * actions}
+
+        return compute
+
+
+class _FakeChoiceOnlySSMSAssembledModel:
+    """Stand-in for ssms choice-only inverse-temperature softmax presets."""
+
+    def __init__(self, config, *, backend, gradient, n_choices):
+        self.config = config
+        self.learning_backend = backend
+        self.gradient = gradient
+        self.n_choices = n_choices
+        self.model_name = f"{n_choices}AB_RW_InvTempSoftmax"
+        self.decision_process = f"inv_temp_softmax_{n_choices}"
+        self.list_params = ["rl_alpha", "beta"]
+        self.bounds = {"rl_alpha": (0.0, 1.0), "beta": (0.001, 20.0)}
+        self.params_default = [0.2, 2.0]
+        self.response = ["response"]
+        self.choices = tuple(range(n_choices))
+        self.context_fields = ["feedback"]
+        self.computed_params = [f"q{i}" for i in range(n_choices)]
+        self.response_to_choice = {i: i for i in range(n_choices)}
+
+    def participant_input_fields(self):
+        return ["rl_alpha", "response", "feedback"]
+
+    def assemble_participant_fn(self, output="array"):
+        assert output == "dict"
+
+        def compute(subject_trials):
+            rl_alpha = subject_trials[:, 0]
+            feedback = subject_trials[:, 2]
+            return {
+                f"q{i}": rl_alpha + feedback + float(i) for i in range(self.n_choices)
+            }
+
+        return compute
+
+
+class _FakeChoiceOnlySSMSModelConfig(_FakeSSMSModelConfig):
+    def __init__(self, *, gradient="available", n_choices=2):
+        super().__init__(gradient=gradient)
+        self.n_choices = n_choices
+
+    def assemble(self, backend="auto"):
+        return _FakeChoiceOnlySSMSAssembledModel(
+            self, backend=backend, gradient=self.gradient, n_choices=self.n_choices
+        )
+
+
+def _install_fake_ssms_rl(monkeypatch, *, gradient="available"):
+    config = _FakeSSMSModelConfig(gradient=gradient)
+    fake_rl = types.SimpleNamespace(
+        ModelConfig=_FakeSSMSModelConfig,
+        resolve_model=lambda model: config,
+    )
+    monkeypatch.setitem(sys.modules, "ssms.rl", fake_rl)
+    return config
+
+
+def _install_fake_decision_logp(monkeypatch):
+    """Replace the registry decision-logp builder with a lightweight stub.
+
+    The real ``_get_ssm_logp`` would download/build the angle ONNX network; the
+    fast unit tests only care about the ssms bridge wiring, so we stub a base
+    annotated SSM logp with the same ``.inputs``/``.outputs`` shape.
+    """
+
+    @annotate_function(
+        inputs=["v", "a", "z", "t", "theta", "rt", "response"], outputs=["logp"]
+    )
+    def _fake_base(lan_matrix):
+        return jnp.sum(lan_matrix, axis=1)
+
+    monkeypatch.setattr(
+        "hssm.rl.registry._get_ssm_logp",
+        lambda name, kind="approx_differentiable": _fake_base,
+        raising=False,
+    )
+
+
+def _install_fake_choice_only_decision_logp(monkeypatch, n_choices):
+    inputs = ["beta", *(f"q{i}" for i in range(n_choices)), "response"]
+
+    @annotate_function(inputs=inputs, outputs=["logp"])
+    def _fake_base(lan_matrix):
+        return jnp.sum(lan_matrix, axis=1)
+
+    monkeypatch.setattr(
+        "hssm.rl.registry._get_ssm_logp",
+        lambda name, kind="approx_differentiable": _fake_base,
+        raising=False,
+    )
+
+
+class TestRLSSMConfigFromSSMSModel:
+    """Tests for fake ssms.rl model bridging into RLSSMConfig."""
+
+    def test_from_ssms_model_builds_hssm_config_from_assembled_metadata(
+        self, monkeypatch
+    ):
+        """Check assembled ssms metadata is translated into HSSM config fields."""
+        _install_fake_ssms_rl(monkeypatch)
+        _install_fake_decision_logp(monkeypatch)
+
+        config = RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+
+        assert config.model_name == "2AB_RW_Angle"
+        assert config.decision_process == "angle"
+        assert config.decision_process_loglik_kind == "approx_differentiable"
+        assert config.learning_process_kind == "approx_differentiable"
+        assert config.list_params == ["rl_alpha", "scaler", "a", "z", "t", "theta"]
+        assert config.response == ["rt", "response"]
+        assert config.choices == (-1, 1)
+        # ssms context_fields surface through HSSM extra_fields plumbing.
+        assert config.extra_fields == ["feedback"]
+        assert set(config.ssm_logp_func.computed) == {"v"}
+        assert config.ssm_logp_func.inputs == [
+            "v",
+            "a",
+            "z",
+            "t",
+            "theta",
+            "rt",
+            "response",
+        ]
+        assert config.ssm_logp_func.computed["v"].inputs == [
+            "rl_alpha",
+            "scaler",
+            "response",
+            "feedback",
+        ]
+        assert config._ssms_response_to_choice == {-1: 0, 1: 1}
+        assert config._ssms_assembled_model is not None
+
+    def test_from_ssms_model_carries_decision_process_ndt_edge_shift(self, monkeypatch):
+        """The backbone's declaration reaches the config through the spec lookup.
+
+        The learning kernel (ssms) knows nothing of the support edge; it comes
+        from HSSM's decision-process spec, here a fake ``angle`` modelconfig
+        entry with non-decision-time variability that declares its edge.
+        """
+        import hssm.modelconfig as mc_module
+
+        class _NdtAssembled(_FakeSSMSAssembledModel):
+            def __init__(self, config, *, backend, gradient):
+                super().__init__(config, backend=backend, gradient=gradient)
+                self.list_params = [*self.list_params, "st"]
+                self.bounds = {**self.bounds, "st": (0.0, 1.0)}
+                self.params_default = [*self.params_default, 0.1]
+
+        class _NdtConfig(_FakeSSMSModelConfig):
+            def assemble(self, backend="auto"):
+                return _NdtAssembled(self, backend=backend, gradient=self.gradient)
+
+        def _fake_get(name):
+            return {
+                "list_params": ["v", "a", "z", "t", "theta", "st"],
+                "response": ["rt", "response"],
+                "likelihoods": {
+                    "approx_differentiable": {
+                        "loglik": "angle_st.onnx",
+                        "bounds": {},
+                        "backend": "jax",
+                        "ndt_edge_shift": {"param": "st", "scale": 1.0},
+                    },
+                },
+            }
+
+        fake_rl = types.SimpleNamespace(
+            ModelConfig=_NdtConfig, resolve_model=lambda model: _NdtConfig()
+        )
+        monkeypatch.setitem(sys.modules, "ssms.rl", fake_rl)
+        monkeypatch.setattr(mc_module, "get_default_model_config", _fake_get)
+        _install_fake_decision_logp(monkeypatch)
+
+        config = RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+
+        assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}
+        config.validate()
+
+    def test_computed_function_uses_ssms_response_to_choice(self, monkeypatch):
+        """Check computed functions map raw SSM responses to ssms choices."""
+        _install_fake_ssms_rl(monkeypatch)
+        _install_fake_decision_logp(monkeypatch)
+        config = RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+
+        compute_v = config.ssm_logp_func.computed["v"]
+        subject_trials = jnp.asarray(
+            [
+                [0.2, 2.0, -1.0, 1.0],
+                [0.2, 2.0, 1.0, 0.0],
+            ]
+        )
+
+        # response == -1 -> choice 0 -> v == 0; response == 1 -> choice 1 -> v == 2.
+        assert jnp.allclose(compute_v(subject_trials), jnp.asarray([0.0, 2.0]))
+
+    def test_from_ssms_model_rejects_unavailable_gradient(self, monkeypatch):
+        """Check unavailable ssms gradients are rejected."""
+        _install_fake_ssms_rl(monkeypatch, gradient="unavailable")
+        _install_fake_decision_logp(monkeypatch)
+
+        with pytest.raises(ValueError, match="gradient support"):
+            RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+
+    def test_from_ssms_model_requires_ssms_rl(self, monkeypatch):
+        """Check from_ssms_model requires the optional ssms.rl module."""
+        monkeypatch.setitem(sys.modules, "ssms.rl", None)
+        with pytest.raises(ImportError, match="ssms.rl"):
+            RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+
+    def test_from_ssms_model_supports_multiple_computed_params(self, monkeypatch):
+        """The bridge must wire every assembled computed decision parameter.
+
+        Generic models can compute more than a single drift parameter (e.g.
+        ``drift -> v`` and ``threshold -> a``) and may carry context fields
+        beyond ``feedback`` (e.g. ``condition``). The bridge must not assume
+        Rescorla-Wagner, a single computed ``v``, or a privileged outcome
+        column.
+        """
+
+        class _MultiParamAssembled(_FakeSSMSAssembledModel):
+            def __init__(self, config, *, backend, gradient):
+                super().__init__(config, backend=backend, gradient=gradient)
+                self.computed_params = ["v", "a"]
+                self.context_fields = ["feedback", "condition"]
+
+            def participant_input_fields(self):
+                return ["rl_alpha", "scaler", "response", "feedback", "condition"]
+
+            def assemble_participant_fn(self, output="array"):
+                assert output == "dict"
+
+                def compute(subject_trials):
+                    return {
+                        "v": subject_trials[:, 1],
+                        "a": subject_trials[:, 0],
+                    }
+
+                return compute
+
+        class _MultiParamConfig(_FakeSSMSModelConfig):
+            def assemble(self, backend="auto"):
+                return _MultiParamAssembled(
+                    self, backend=backend, gradient=self.gradient
+                )
+
+        fake_rl = types.SimpleNamespace(
+            ModelConfig=_MultiParamConfig,
+            resolve_model=lambda model: _MultiParamConfig(),
+        )
+        monkeypatch.setitem(sys.modules, "ssms.rl", fake_rl)
+        _install_fake_decision_logp(monkeypatch)
+
+        config = RLSSMConfig.from_ssms_model("multi_param_model")
+
+        # Both computed decision parameters are exposed to the annotated path.
+        assert set(config.ssm_logp_func.computed) == {"v", "a"}
+        assert config.ssm_logp_func.computed["v"] is config.ssm_logp_func.computed["a"]
+        assert config.ssm_logp_func.computed["v"].outputs == ["v", "a"]
+        # Context fields flow through HSSM's extra_fields plumbing, untouched —
+        # `condition` is not treated specially and `trial_id` is not injected.
+        assert config.extra_fields == ["feedback", "condition"]
+        for computed_fn in config.ssm_logp_func.computed.values():
+            assert computed_fn.inputs == [
+                "rl_alpha",
+                "scaler",
+                "response",
+                "feedback",
+                "condition",
+            ]
+
+        subject_trials = jnp.asarray(
+            [
+                [0.2, 2.0, -1.0, 1.0, 0.0],
+                [0.4, 3.0, 1.0, 0.0, 1.0],
+            ]
+        )
+        result = config.ssm_logp_func.computed["v"](subject_trials)
+
+        assert set(result) == {"v", "a"}
+        assert jnp.allclose(result["v"], jnp.asarray([2.0, 3.0]))
+        assert jnp.allclose(result["a"], jnp.asarray([0.2, 0.4]))
+
+    @pytest.mark.parametrize("n_choices", [2, 3])
+    def test_from_ssms_model_choice_only_inv_temp_softmax_metadata(
+        self, monkeypatch, n_choices
+    ):
+        """Check choice-only inverse-temperature softmax metadata conversion."""
+        config_obj = _FakeChoiceOnlySSMSModelConfig(n_choices=n_choices)
+        fake_rl = types.SimpleNamespace(
+            ModelConfig=_FakeChoiceOnlySSMSModelConfig,
+            resolve_model=lambda model: config_obj,
+        )
+        monkeypatch.setitem(sys.modules, "ssms.rl", fake_rl)
+        _install_fake_choice_only_decision_logp(monkeypatch, n_choices)
+
+        config = RLSSMConfig.from_ssms_model(f"{n_choices}AB_RW_InvTempSoftmax")
+
+        expected_qs = {f"q{i}" for i in range(n_choices)}
+        assert config.response == ["response"]
+        assert config.decision_process == f"inv_temp_softmax_{n_choices}"
+        assert config.list_params == ["rl_alpha", "beta"]
+        assert set(config.ssm_logp_func.computed) == expected_qs
+        assert set(config.learning_process) == expected_qs
+        assert config.ssm_logp_func.inputs == [
+            "beta",
+            *(f"q{i}" for i in range(n_choices)),
+            "response",
+        ]
+        first_compute = config.ssm_logp_func.computed["q0"]
+        assert first_compute.outputs == [f"q{i}" for i in range(n_choices)]
+        assert all(
+            compute_func is first_compute
+            for compute_func in config.ssm_logp_func.computed.values()
+        )
+
+
+class TestRLSSMConfigFromRealSSMS:
+    """Integration tests against a real, rl-capable ``ssm-simulators``.
+
+    These exercise the live ``ssms.rl`` handshake (not a stub), guarding against
+    silent contract drift (e.g. the assembled rename or the Milestone-4 rename
+    of ``extra_fields``/``response_to_action`` to ``context_fields``/
+    ``response_to_choice``). They skip automatically when the installed
+    ``ssm-simulators`` does not ship the RLSSM/JAX module.
+    """
+
+    @staticmethod
+    def _require_ssms_rl():
+        ssms_rl = pytest.importorskip(
+            "ssms.rl", reason="installed ssm-simulators has no ssms.rl module"
+        )
+        if not hasattr(ssms_rl, "resolve_model"):
+            pytest.skip("ssms.rl does not expose resolve_model")
+        return ssms_rl
+
+    @pytest.mark.slow
+    def test_from_ssms_model_real_2ab_rw_angle(self):
+        """Check the live ssms.rl 2AB RW angle bridge contract."""
+        self._require_ssms_rl()
+
+        config = RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+        config.validate()
+
+        assert config.model_name == "2AB_RW_Angle"
+        assert config.decision_process == "angle"
+        # Canonical ssms parameter / response vocabulary.
+        assert "rl_alpha" in config.list_params
+        assert config.response == ["rt", "response"]
+        # context_fields surface through HSSM extra_fields, response mapping is
+        # keyed on raw SSM response labels.
+        assert config.extra_fields == ["feedback"]
+        assert config._ssms_response_to_choice == {-1: 0, 1: 1}
+        assert set(config.ssm_logp_func.computed) == {"v"}
+
+
+# endregion

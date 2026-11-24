@@ -9,9 +9,10 @@ bmb.Prior but adds the following:
 3. The ability to shorten the output of bmb.Prior.
 """
 
+from collections.abc import Callable
 from copy import deepcopy
 from statistics import mean
-from typing import Any, Callable
+from typing import Any
 
 import bambi as bmb
 import numpy as np
@@ -23,7 +24,7 @@ pymc_dist_args = ["rng", "initval", "dims", "observed", "total_size", "transform
 
 
 # mypy: disable-error-code="has-type"
-class Prior(bmb.Prior):
+class Prior(bmb.Prior):  # noqa: PLW1641
     """Abstract specification of a prior.
 
     Parameters
@@ -41,7 +42,17 @@ class Prior(bmb.Prior):
         ``name``, ``dims``, and ``shape``, as well as its own keyworded arguments.
     bounds : optional
         A tuple of two floats indicating the lower and upper bounds of the prior.
+    noncentered : optional
+        For a group-specific (hierarchical) ``Normal`` prior, whether to use the
+        non-centered parameterization. ``None`` (default) inherits the model-level
+        ``noncentered`` setting; ``True``/``False`` overrides it for this term.
     """
+
+    is_truncated: bool
+    bounds: tuple[float, float] | None
+    args: dict[str, Any]
+    _args: dict[str, Any]
+    dist: Callable | None
 
     def __init__(
         self,
@@ -49,17 +60,23 @@ class Prior(bmb.Prior):
         auto_scale: bool = True,
         dist: Callable | None = None,
         bounds: tuple[float, float] | None = None,
+        noncentered: bool | None = None,
         **kwargs,
     ):
+        # Forward the per-term non-centered override (bambi >= 0.19, PR #983) to
+        # bambi only when set, so the default path is unchanged.
+        if noncentered is not None:
+            kwargs["noncentered"] = noncentered
         bmb.Prior.__init__(self, name, auto_scale, dist, **kwargs)
         self.is_truncated = False
         self.bounds = bounds
 
         if self.bounds is not None:
-            assert self.dist is None, (
-                "We cannot bound a prior defined with the `dist` argument. The "
-                + "`dist` and `bounds` arguments cannot both be supplied."
-            )
+            if dist is not None:
+                raise ValueError(
+                    "We cannot bound a prior defined with the `dist` argument. The "
+                    "`dist` and `bounds` arguments cannot both be supplied."
+                )
             lower, upper = self.bounds
             if np.isinf(lower) and np.isinf(upper):
                 return
@@ -67,7 +84,7 @@ class Prior(bmb.Prior):
             self.is_truncated = True
             self.dist = _make_truncated_dist(self.name, lower, upper, **self.args)
             self._args = self.args.copy()
-            self.args: dict = {}
+            self.args: dict[str, Any] = {}
 
     def __str__(self) -> str:
         """Create the printout of the object."""
@@ -90,23 +107,38 @@ class Prior(bmb.Prior):
 
     def __eq__(self, other) -> bool:
         """Test equality."""
+        # `noncentered` lives outside `.args` (it changes the group-term
+        # parameterization), so it must be part of equality in every path.
         if isinstance(other, Prior):
             if self.is_truncated and other.is_truncated:
                 return (
                     self.name == other.name
                     and self._args == other._args
                     and self.bounds == other.bounds
+                    and self.noncentered == other.noncentered
                 )
             if not self.is_truncated and not other.is_truncated:
-                return self.name == other.name and self.args == other.args
+                return (
+                    self.name == other.name
+                    and self.args == other.args
+                    and self.noncentered == other.noncentered
+                )
             return False
 
         if isinstance(other, bmb.Prior):
             if self.is_truncated:
                 return False
             if self.dist is not None:
-                return self.name == other.name and self.dist == other.dist
-            return self.name == other.name and self.args == other.args
+                return (
+                    self.name == other.name
+                    and self.dist == other.dist
+                    and self.noncentered == other.noncentered
+                )
+            return (
+                self.name == other.name
+                and self.args == other.args
+                and self.noncentered == other.noncentered
+            )
 
         return False
 
@@ -210,6 +242,20 @@ def generate_prior(
     return prior
 
 
+def _is_identity_link(link: str | bmb.Link | None) -> bool:
+    """Return whether a link leaves coefficients on the response scale.
+
+    A missing link is semantically identity because ``RegressionParam.validate``
+    normalizes it to ``"identity"`` after safe-prior generation.
+    """
+    if link is None:
+        return True
+    if isinstance(link, str):
+        return link == "identity"
+    return link.name == "identity"
+
+
+# AF-TODO: Docstring could benefit from some more details here.
 def get_default_prior(
     term_type: str,
     param: str | None,
@@ -220,10 +266,12 @@ def get_default_prior(
 
     The following summarizes default priors for each type of term:
 
-    * common_intercept: Bounded Normal prior (N(mean(bounds), 0.25)).
+    * common_intercept: Bounded Normal prior (N(mean(bounds), width(bounds) / 4)).
     * common: Normal prior (N(0, 0.25)).
-    * group_intercept: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3). It's supposed to
-    be bounded but Bambi does not fully support it yet.
+    * group_intercept: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3)). Under a
+      transformed link this correctly lives on an unbounded predictor scale. Safe
+      generation fails closed for a finitely bounded, identity-linked group-only
+      intercept because this generic hierarchy does not respect response support.
     * group_specific: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3).
 
     This function is taken from bambi.priors.prior.py and modified to handle hssm-
@@ -249,24 +297,31 @@ def get_default_prior(
     if term_type == "common":
         prior = generate_prior("Normal", bounds=None)
     elif term_type == "common_intercept":
-        # We ignore bounds if link is used, since boundaries loose their meaning.
+        # Bounds are response-scale constraints, so they only apply under identity.
         # TODO: This is a temporary solution, this can prob benefit form a bit of a
         # refactoring, to define settings in a more general way.
-        if (link is not None) or (bounds is None):
+        if not _is_identity_link(link) or bounds is None:
             prior = generate_prior("Normal")
         elif bounds is not None:
             if any(np.isinf(b) for b in bounds):
                 # TODO: Make it more specific.
                 prior = generate_prior("Normal", bounds=bounds)
             else:
+                # A quarter of the width puts the bounds 2 SD from the mean, so the
+                # prior is weakly informative across the whole range. For LAN
+                # models the bounds are the training range, and a fixed SD of 0.25
+                # pulled typical values (t near 0.3, v near 1) toward the middle.
                 prior = generate_prior(
-                    "Normal", mu=mean(bounds), sigma=0.25, bounds=bounds
+                    "Normal",
+                    mu=mean(bounds),
+                    sigma=(bounds[1] - bounds[0]) / 4,
+                    bounds=bounds,
                 )
     elif term_type == "group_intercept":
         prior = generate_prior("Normal", mu="Normal", sigma="Weibull")
     elif term_type == "group_specific":
         prior = generate_prior("Normal", mu="Normal", sigma="Weibull")
-    elif term_type == "group_intercept_with_common":
+    elif term_type in ["group_intercept_with_common", "group_specific_with_common"]:
         prior = generate_prior("Normal", mu=0.0, sigma="Weibull")
     else:
         raise ValueError("Unrecognized term type.")
@@ -279,27 +334,22 @@ def get_hddm_default_prior(
     bounds: tuple[float, float] | None,
     link: str | bmb.Link | None,
 ):
-    # print(link)
-    # print(term_type)
     """Generate a Prior based on the default settings - the HDDM case."""
     if term_type == "common":
         prior = generate_prior("Normal", bounds=None)
     elif term_type == "common_intercept":
         # TODO: This is a temporary solution, this can prob benefit form a bit of a
         # refactoring, to define settings in a more general way.
-        # print(param)
-        # print(link)
-        if link is not None:
-            print("passed")
+        if not _is_identity_link(link):
             prior = generate_prior("Normal")
         else:
             prior = generate_prior(HDDM_MU[param], bounds=bounds)
     elif term_type == "group_intercept":
-        if link is not None:
+        if not _is_identity_link(link):
             prior = generate_prior("Normal", mu="Normal", sigma="Weibull", bounds=None)
         else:
             prior = generate_prior(HDDM_SETTINGS_GROUP[param], bounds=None)
-    elif term_type == "group_intercept_with_common":
+    elif term_type in ["group_intercept_with_common", "group_specific_with_common"]:
         prior = generate_prior("Normal", mu=0.0, sigma="Weibull", bounds=None)
     elif term_type == "group_specific":
         prior = generate_prior("Normal", mu="Normal", sigma="Weibull", bounds=None)
@@ -326,16 +376,18 @@ HDDM_MU: dict[Any, Any] = {
     "sv": {"dist": "HalfNormal", "sigma": 2.0},
     "st": {"dist": "HalfNormal", "sigma": 0.3},
     "sz": {"dist": "HalfNormal", "sigma": 0.5},
+    "p_outlier": {"dist": "Beta", "alpha": 5, "beta": 100},
 }
 
 HDDM_SIGMA: dict[Any, Any] = {
     "v": {"dist": "HalfNormal", "sigma": 2.0},
     "a": {"dist": "HalfNormal", "sigma": 0.1},
-    "z": {"dist": "Weibull", "alpha": 1.2, "beta": "0.25"},
+    "z": {"dist": "Weibull", "alpha": 1.2, "beta": 0.25},
     "t": {"dist": "HalfNormal", "sigma": 0.2},
-    "sv": {"dist": "Weibull", "alpha": 1.5, "beta": "0.3"},
-    "sz": {"dist": "Weibull", "alpha": 1.5, "beta": "0.3"},
-    "st": {"dist": "Weibull", "alpha": 1.5, "beta": "0.3"},
+    "sv": {"dist": "Weibull", "alpha": 1.5, "beta": 0.3},
+    "sz": {"dist": "Weibull", "alpha": 1.5, "beta": 0.3},
+    "st": {"dist": "Weibull", "alpha": 1.5, "beta": 0.3},
+    "p_outlier": {"dist": "Weibull", "alpha": 1.5, "beta": 0.3},
 }
 
 HDDM_SETTINGS_GROUP: dict[Any, Any] = {
@@ -350,12 +402,9 @@ HDDM_SETTINGS_GROUP: dict[Any, Any] = {
     "sv": {"dist": "Gamma", "mu": HDDM_MU["sv"], "sigma": HDDM_SIGMA["sv"]},
     "sz": {"dist": "Gamma", "mu": HDDM_MU["sz"], "sigma": HDDM_SIGMA["sz"]},
     "st": {"dist": "Gamma", "mu": HDDM_MU["st"], "sigma": HDDM_SIGMA["st"]},
+    "p_outlier": {
+        "dist": "Beta",
+        "alpha": HDDM_MU["p_outlier"],
+        "beta": HDDM_SIGMA["p_outlier"],
+    },
 }
-
-# INITVAL_SETTINGS_LOGIT: dict[Any, Any] = {
-#     "t" : {"initval": -4.0},
-# }
-
-# INITVAL_SETTINGS_NOLINK: dict[Any, Any] = {
-#     "t" : {"initval": 0.05},
-# }

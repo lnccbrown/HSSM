@@ -9,49 +9,27 @@ these representations in Bambi-compatible formats through convenience function
 _parse_bambi().
 """
 
+import contextlib
+import functools
+import itertools
 import logging
-from typing import Any, Iterable, Literal, NewType
+import os
+from typing import Any, Callable, Literal
 
 import bambi as bmb
+import jax
 import numpy as np
 import pandas as pd
+import pymc as pm
 import pytensor
+import pytensor.tensor as pt
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
-from huggingface_hub import hf_hub_download
-from jax import config
-from pymc.model_graph import ModelGraph
-from pytensor import function
+from bambi.utils import get_aliased_name, response_evaluate_new_data
 
-from .param import Param
+from .param.param import Param
 
 _logger = logging.getLogger("hssm")
-
-REPO_ID = "franklab/HSSM"
-
-
-def download_hf(path: str):
-    """
-    Download a file from a HuggingFace repository.
-
-    Parameters
-    ----------
-    path : str
-        The path of the file to download in the repository.
-
-    Returns
-    -------
-    str
-        The local path where the file is downloaded.
-
-    Notes
-    -----
-    The repository is specified by the REPO_ID constant,
-    which should be a valid HuggingFace.co repository ID.
-    The file is downloaded using the HuggingFace Hub's
-     hf_hub_download function.
-    """
-    return hf_hub_download(repo_id=REPO_ID, filename=path)
 
 
 def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
@@ -114,151 +92,264 @@ def _get_alias_dict(
         A dict that indicates how Bambi should alias its parameters.
     """
     parent_name = parent.name
+    alias_dict: dict[str, Any] = {response_c: response_str}
 
     if len(model.distributional_components) == 1:
-        alias_dict: dict[str, Any] = {response_c: response_str}
-        if not parent.is_regression:
-            alias_dict |= {"Intercept": parent_name}
+        if not parent.is_regression or (
+            parent.is_regression and parent.formula is None
+        ):
+            alias_dict[parent_name] = f"{parent_name}_mean"
+            alias_dict["Intercept"] = parent_name
         else:
-            for name, term in model.response_component.terms.items():
+            for name, term in model.components[parent_name].terms.items():
                 if isinstance(
                     term, (CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm)
                 ):
-                    alias_dict |= {name: f"{parent_name}_{name}"}
-    else:
-        alias_dict = {response_c: {response_c: response_str}}
-        for component_name, component in model.distributional_components.items():
-            if component.response_kind == "data":
-                if not parent.is_regression:
-                    alias_dict[response_c] |= {"Intercept": parent_name}
-                else:
-                    for name, term in model.response_component.terms.items():
-                        if isinstance(
-                            term, (CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm)
-                        ):
-                            alias_dict[response_c] |= {name: f"{parent_name}_{name}"}
-            else:
-                alias_dict[component_name] = {component_name: component_name}
+                    alias_dict[name] = f"{parent_name}_{name}"
 
-    for name in model.constant_components.keys():
-        alias_dict |= {name: name}
+        return alias_dict
+
+    for component_name, component in model.distributional_components.items():
+        if component_name == parent_name:
+            alias_dict[component_name] = {}
+            if not parent.is_regression:
+                # Most likely this branch will not be reached
+                alias_dict[component_name]["Intercept"] = f"{parent_name}_Intercept"
+            else:
+                for name, term in component.terms.items():
+                    if isinstance(
+                        term, (CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm)
+                    ):
+                        alias_dict[component_name] |= {name: f"{parent_name}_{name}"}
+            break
 
     return alias_dict
 
 
-def fast_eval(var):
-    """Fast evaluation of a variable.
+def _compute_log_likelihood(
+    model: bmb.Model,
+    dt: xr.DataTree,
+    data: pd.DataFrame | None,
+    inplace: bool = True,
+    compile_mode: str | None = None,
+) -> xr.DataTree | None:
+    """Compute the model's log-likelihood.
 
-    Notes
-    -----
-    This is a helper function required for one of the functions below.
+    Parameters
+    ----------
+    model : bmb.Model
+        The fitted Bambi model for which the log-likelihood is to be computed.
+    dt : xr.DataTree
+        The `DataTree` instance returned by `.fit()`.
+    data : pandas.DataFrame or None
+        An optional data frame with values for the predictors and the response on which
+        the model's log-likelihood function is evaluated.
+        If omitted, the original dataset is used.
+    inplace : bool
+        If True` it will modify `dt` in-place. Otherwise, it will return a copy of
+        `dt` with the `log_likelihood` group added.
+    compile_mode : str, optional
+        PyTensor compilation mode for the response log-probability graph. JAX-backed
+        HSSM models pass ``"JAX"`` so their custom likelihood Ops use their
+        ``jax_funcify`` registrations instead of PyMC's default Numba linker.
+
+    Returns
+    -------
+    xr.DataTree | None
     """
-    return function([], var, mode="FAST_COMPILE")()
+    # These are not formal parameters because it does not make sense to...
+    #   1. compute the log-likelihood omitting
+    #      the group-specific components of the model.
+    #   2. compute the log-likelihood on unseen groups.
+    include_group_specific = True
+    sample_new_groups = False
+
+    # Get the aliased response name
+    response_aliased_name = get_aliased_name(model.response_component.term)
+
+    if not inplace:
+        dt = dt.copy(deep=True)
+
+    # # Populate the posterior in the DataTree object
+    # with the likelihood parameters
+    dt = model._compute_likelihood_params(  # pylint: disable=protected-access
+        dt, data, include_group_specific, sample_new_groups
+    )
+
+    required_kwargs = {
+        "model": model,
+        # `.children[...]` is typed as DataTree; `dt[...]` is DataTree | DataArray
+        "posterior": dt.children["posterior"],
+        "data": data,
+        "compile_mode": compile_mode,
+    }
+
+    if not model.family:
+        raise ValueError("Model family is not defined. Cannot compute log-likelihood.")
+    # bambi annotates `posterior` as a DataArray, but a DataTree's "posterior"
+    # child is itself a DataTree, which is what it is handed and handles.
+    # pyrefly: ignore[bad-argument-type]
+    log_likelihood_out = log_likelihood(model.family, **required_kwargs).to_dataset(
+        name=response_aliased_name
+    )
+
+    # Drop the existing log_likelihood group if it exists
+    if "log_likelihood" in dt:
+        _logger.warning("Replacing existing log_likelihood group in dt.")
+        del dt["log_likelihood"]
+
+    log_likelihood_out = log_likelihood_out.assign_attrs(
+        modeling_interface="bambi", modeling_interface_version=bmb.__version__
+    )
+
+    # Assign the log-likelihood group to the DataTree object
+    dt["log_likelihood"] = log_likelihood_out
+    return dt
 
 
-VarName = NewType("VarName", str)
+def log_likelihood(
+    family: bmb.Family,
+    model: bmb.Model,
+    posterior: xr.Dataset | xr.DataTree,
+    data: pd.DataFrame | None = None,
+    compile_mode: str | None = None,
+    **kwargs,
+) -> xr.DataArray:
+    """Evaluate the model log-likelihood.
 
+    This is a variation on the `bambi.utils.log_likelihood` function that
+    loops over the chains and draws to evaluate the log-likelihood for each
+    instead of attempting to batch the computation as is done in the orignal.
 
-class HSSMModelGraph(ModelGraph):
-    """Customize PyMC's ModelGraph class to inject the missing parent parameter.
+    Parameters
+    ----------
+    model : bambi.Model
+        The model
+    posterior : xr.Dataset | xr.DataTree
+        The xarray dataset (or the `posterior` group of a DataTree) that
+        contains the draws for all the parameters in the posterior.
+        It must contain the parameters that are needed
+        in the distribution of the response, or
+        the parameters that allow to derive them.
+    compile_mode : str, optional
+        PyTensor compilation mode for the response log-probability graph.
+    kwargs :
+        Parameters that are used to get draws but do
+        not appear in the posterior object or
+        other configuration parameters.
+        For instance, the 'n' in binomial models and multinomial models.
 
-    Notes
-    -----
-    This is really a hack. There might be better ways to get around the
-    parent parameter issue.
+    Returns
+    -------
+    xr.DataArray
+        A data array with the value of the log-likelihood
+        for each chain, draw, and value of the response variable.
     """
+    # Child classes pass "y_values" through the "y" kwarg
+    y_values = kwargs.pop("y", None)
 
-    def __init__(self, model, parent):
-        self.parent = parent
-        super().__init__(model)
+    # Get the values of the outcome variable
+    if y_values is None:  # when it's not handled by the specific family
+        if data is None:
+            y_values = np.squeeze(model.response_component.term.data)
+        else:
+            y_values = response_evaluate_new_data(model, data)
 
-    def make_graph(
-        self,
-        var_names: Iterable[VarName] | None = None,
-        formatting: str = "plain",
-        response_str: str = "rt,response",
-    ):
-        """Make graphviz Digraph of PyMC model.
+    response_dist = get_response_dist(model.family)
+    response_term = model.response_component.term
+    kwargs, coords = family._make_dist_kwargs_and_coords(model, posterior, **kwargs)
 
-        Returns
-        -------
-            graphviz.Digraph
+    # If it's multivariate, it's going to have a fourth coord,
+    # but we actually don't need it. We just need "chain", "draw", "__obs__"
+    coords = dict(list(coords.items())[:3])
 
-        Notes
-        -----
-            This is a slightly modified version of the code in:
-            https://github.com/pymc-devs/pymc/blob/main/pymc/model_graph.py
+    n_chains = len(coords["chain"])
+    n_draws = len(coords["draw"])
+    output_array = np.zeros((n_chains, n_draws, len(y_values)))
+    kwargs_prep = {key_: val[0][0] for key_, val in kwargs.items()}
+    shape_dict = {key_: val.shape for key_, val in kwargs_prep.items()}
+    pt_dict = {
+        key_: (pt.vector(key_, shape=((1,) if val[0] == 1 else (None,))))
+        for key_, val in shape_dict.items()
+    }
 
-            Credit for this code goes to PyMC developers.
-        """
-        try:
-            import graphviz  # pylint: disable=C0415
-        except ImportError as e:
-            e.msg = (
-                "This function requires the python library graphviz, "
-                + "along with binaries. "
-                + "The easiest way to install all of this is by running\n\n"
-                + "\tconda install -c conda-forge python-graphviz"
+    # Compile likelihood function.
+    # on_unused_input="ignore" is needed because fixed-vector parameters
+    # are substituted with constants inside HSSMDistribution.logp(), making
+    # the corresponding input variable unused in the compiled graph.
+    if not response_term.is_constrained:
+        # pyrefly: ignore[no-matching-overload]
+        rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
+        logp_compiled = pm.compile(
+            [val for key_, val in pt_dict.items()],
+            rv_logp,
+            mode=compile_mode,
+            allow_input_downcast=True,
+            on_unused_input="ignore",
+        )
+    else:
+        # Bounds are scalars, we can safely pick them from the first row
+        lower, upper = response_term.data[0, 1:]
+        lower = lower if lower != -np.inf else None
+        upper = upper if upper != np.inf else None
+
+        # Finally evaluate logp
+        rv_logp = pm.logp(
+            pm.Truncated.dist(
+                response_dist.dist(**kwargs_prep), lower=lower, upper=upper
+            ),
+            y_values,
+        )
+        logp_compiled = pm.compile(
+            [val for key_, val in pt_dict.items()],
+            rv_logp,
+            mode=compile_mode,
+            allow_input_downcast=True,
+            on_unused_input="ignore",
+        )
+
+    # Loop through chain and draws
+    for ids in itertools.product(coords["chain"].values, coords["draw"].values):
+        kwargs_tmp = {
+            key_: (
+                val[ids[0], ids[1], ...]
+                if (val.shape[0] == n_chains and val.shape[1] == n_draws)
+                else val[0, 0, ...]
             )
-            raise e
-        graph = graphviz.Digraph(self.model.name)
-        for plate_label, all_var_names in self.get_plates(var_names).items():
-            if plate_label:
-                # must be preceded by 'cluster' to get a box around it
-                with graph.subgraph(name="cluster" + plate_label) as sub:
-                    for var_name in all_var_names:
-                        self._make_node(var_name, sub, formatting=formatting)
-                    # plate label goes bottom right
-                    sub.attr(
-                        label=plate_label,
-                        labeljust="r",
-                        labelloc="b",
-                        style="rounded",
-                    )
+            for key_, val in kwargs.items()
+        }
 
-            else:
-                for var_name in all_var_names:
-                    self._make_node(var_name, graph, formatting=formatting)
+        output_array[ids[0], ids[1], :] = logp_compiled(**kwargs_tmp)
 
-        if self.parent.is_regression:
-            # Insert the parent parameter that's not included in the graph
-            with graph.subgraph(name="cluster" + self.parent.name) as sub:
-                sub.node(
-                    self.parent.name,
-                    label=f"{self.parent.name}\n~\nDeterministic",
-                    shape="box",
-                )
-                shape = fast_eval(self.model[response_str].shape)
-                plate_label = f"{response_str}_obs({shape[0]})"
-
-                sub.attr(
-                    label=plate_label,
-                    labeljust="r",
-                    labelloc="b",
-                    style="rounded",
-                )
-
-        for child, parents in self.make_compute_graph(var_names=var_names).items():
-            # parents is a set of rv names that precede child rv nodes
-            for parent in parents:
-                if (
-                    self.parent.is_regression
-                    and parent.startswith(f"{self.parent.name}_")
-                    and child == self.get_parent_names
-                ):
-                    # Modify the edges so that they point to the
-                    # parent parameter
-                    graph.edge(parent.replace(":", "&"), self.parent.name)
-                else:
-                    graph.edge(parent.replace(":", "&"), child.replace(":", "&"))
-
-        if self.parent.is_regression:
-            graph.edge(self.parent.name, response_str)
-
-        return graph
+    # output_array
+    return xr.DataArray(output_array, coords=coords)
 
 
-def set_floatX(dtype: Literal["float32", "float64"], jax: bool = True):
+def get_response_dist(family: bmb.Family) -> type[pm.Distribution]:
+    """Get the PyMC distribution for the response.
+
+    Parameters
+    ----------
+    family : bambi.Family
+        The family for which the response distribution is wanted
+
+    Returns
+    -------
+    type[pm.Distribution]
+        The response distribution class
+    """
+    mapping = {"Cumulative": pm.Categorical, "StoppingRatio": pm.Categorical}
+
+    if family.likelihood.dist:
+        dist = family.likelihood.dist
+    elif family.likelihood.name in mapping:
+        dist = mapping[family.likelihood.name]
+    else:
+        dist = getattr(pm, family.likelihood.name)
+    return dist
+
+
+def set_floatX(dtype: Literal["float32", "float64"], update_jax: bool = True):
     """Set float types for pytensor and Jax.
 
     Often we wish to work with a specific type of float in both PyTensor and JAX.
@@ -268,25 +359,74 @@ def set_floatX(dtype: Literal["float32", "float64"], jax: bool = True):
     ----------
     dtype
         Either `float32` or `float64`. Float type for pytensor (and jax if `jax=True`).
-    jax : optional
+    update_jax : optional
         Whether this function also sets float type for JAX by changing the
         `jax_enable_x64` setting in JAX config. Defaults to True.
+
+    Notes
+    -----
+    With `dtype="float32"` and `update_jax=True`, JAX's
+    `jax_default_matmul_precision` is also set to `"highest"`, unless you have
+    already chosen a precision (through the `JAX_DEFAULT_MATMUL_PRECISION`
+    environment variable or `jax.config.update`). JAX's default runs float32
+    matrix multiplications on NVIDIA GPUs from Ampere on as TF32, whose 10-bit
+    mantissa can stall NUTS on LAN likelihoods. On TPUs, `"highest"` likewise
+    replaces JAX's default of bfloat16 matrix multiplications. On CPUs the
+    setting changes nothing. Full float32 costs speed: on one RTX A5000, a LAN
+    log-likelihood and its gradient on 10,000 or more trials took about 1.3x as
+    long as under TF32, and data-center GPUs (A100, H100), whose TF32
+    throughput is much higher than their float32 throughput, can lose more. To
+    trade precision for speed, set `JAX_DEFAULT_MATMUL_PRECISION=tensorfloat32`
+    before importing JAX. Calling
+    `jax.config.update("jax_default_matmul_precision", "tensorfloat32")` after
+    this function works too, but only in the current process (see below).
+
+    The precision is also written to the environment (`floatX` into
+    `PYTENSOR_FLAGS`, and JAX's matmul precision into
+    `JAX_DEFAULT_MATMUL_PRECISION`). Processes started afterwards, such as
+    PyMC's chains under the `"spawn"` or `"forkserver"` start method, are fresh
+    interpreters that read these settings from the environment. A forkserver that
+    is already running keeps the environment it started with, so call this
+    function before the first multi-process PyMC fit. A `jax.config.update`
+    after this function does not reach the environment, so the workers keep the
+    precision written here; the environment variable set before importing JAX
+    covers both. With `update_jax=False`, `PYTENSOR_FLAGS` still carries
+    `floatX`, and PyTensor's JAX dispatch sets `jax_enable_x64` from it in the
+    workers, so float32 turns x64 off there.
     """
     if dtype not in ["float32", "float64"]:
         raise ValueError('`dtype` must be either "float32" or "float64".')
 
     pytensor.config.floatX = dtype
     _logger.info("Setting PyTensor floatX type to %s.", dtype)
+    # A fresh interpreter imports PyTensor with floatX from PYTENSOR_FLAGS, and
+    # PyTensor's JAX dispatch then sets jax_enable_x64 from it.
+    flags = [
+        flag
+        for flag in os.environ.get("PYTENSOR_FLAGS", "").split(",")
+        if flag.strip() and flag.split("=")[0].strip() != "floatX"
+    ]
+    os.environ["PYTENSOR_FLAGS"] = ",".join([*flags, f"floatX={dtype}"])
 
-    if jax:
+    if update_jax:
         jax_enable_x64 = dtype == "float64"
-        config.update("jax_enable_x64", jax_enable_x64)
+        jax.config.update("jax_enable_x64", jax_enable_x64)
 
         _logger.info(
             'Setting "jax_enable_x64" to %s. '
             + "If this is not intended, please set `jax` to False.",
             jax_enable_x64,
         )
+
+        # None: nobody has chosen a precision, so JAX would use TF32 on GPUs.
+        if dtype == "float32" and jax.config.jax_default_matmul_precision is None:
+            jax.config.update("jax_default_matmul_precision", "highest")
+            _logger.info(
+                'Setting "jax_default_matmul_precision" to "highest" '
+                "(full float32 matrix multiplications, no TF32 on GPUs)."
+            )
+        if precision := jax.config.jax_default_matmul_precision:
+            os.environ["JAX_DEFAULT_MATMUL_PRECISION"] = precision
 
 
 def _print_prior(term: CommonTerm | GroupSpecificTerm) -> str:
@@ -312,47 +452,10 @@ def _print_prior(term: CommonTerm | GroupSpecificTerm) -> str:
     return f"        {term_name} ~ {prior}"
 
 
-def _process_param_in_kwargs(
-    name, prior: float | dict | bmb.Prior | Param
-) -> dict | Param:
-    """Process parameters specified in kwargs.
-
-    Parameters
-    ----------
-    name
-        The name of the parameters.
-    prior
-        The prior specified.
-
-    Returns
-    -------
-    dict
-        A `dict` that complies with ways to specify parameters in `include`.
-
-    Raises
-    ------
-    ValueError
-        When `prior` is not a `float`, a `dict`, or a `bmb.Prior` object.
-    """
-    if isinstance(prior, (int, float, bmb.Prior)):
-        return {"name": name, "prior": prior}
-    elif isinstance(prior, dict):
-        if ("prior" in prior) or ("bounds" in prior):
-            return prior | {"name": name}
-        else:
-            return {"name": name, "prior": prior}
-    elif isinstance(prior, Param):
-        prior["name"] = name
-        return prior
-    else:
-        raise ValueError(
-            f"Parameter {name} must be a float, a dict, a bmb.Prior, "
-            + "or a hssm.Param object."
-        )
-
-
 def _generate_random_indices(
-    n_samples: int | float | None, n_draws: int
+    n_samples: int | float | None,
+    n_draws: int,
+    rng: np.random.Generator | None = None,
 ) -> np.ndarray | None:
     """Generate random indices for sampling an InferenceData object.
 
@@ -366,6 +469,9 @@ def _generate_random_indices(
         small, at least one sample will be drawn. When None, returns None.
     n_draws
         The number of total draws in the InferenceData object.
+    rng
+        A seeded Generator to draw the indices from. When None (default), the
+        global NumPy RNG is used, preserving the legacy unseeded behavior.
 
     Returns
     -------
@@ -391,13 +497,16 @@ def _generate_random_indices(
     if n_samples < 1:
         raise ValueError("When an int, n_samples must be >= 1.")
 
-    sampling_indices = np.random.choice(n_draws, size=n_samples, replace=False)
+    choice = rng.choice if rng is not None else np.random.choice
+    sampling_indices = choice(n_draws, size=n_samples, replace=False)
 
     return sampling_indices
 
 
 def _random_sample(
-    data: xr.DataArray | xr.Dataset, n_samples: int | float | None
+    data: xr.DataArray | xr.Dataset,
+    n_samples: int | float | None,
+    rng: np.random.Generator | None = None,
 ) -> xr.DataArray | xr.Dataset:
     """Randomly sample a DataArray or Dataset.
 
@@ -411,6 +520,9 @@ def _random_sample(
         all samples are extracted. When a float between 0 and 1, the proportion of
         samples to be extracted from the draw dimension. If this proportion is very
         small, at least one sample will be drawn. When None, returns None.
+    rng
+        A seeded Generator for the draw selection; None keeps the legacy
+        global-RNG behavior.
 
     Returns
     -------
@@ -418,7 +530,7 @@ def _random_sample(
         The sampled InferenceData object.
     """
     n_draws = data.draw.size
-    sampling_indices = _generate_random_indices(n_samples, n_draws)
+    sampling_indices = _generate_random_indices(n_samples, n_draws, rng=rng)
 
     if sampling_indices is None:
         return data
@@ -452,3 +564,148 @@ def _rearrange_data(data: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarra
     split_not_missing = data[~missing_indices, :]
 
     return np.concatenate([split_missing, split_not_missing])
+
+
+def _split_array(data: np.ndarray | list[int], divisor: int) -> list[np.ndarray]:
+    num_splits = len(data) // divisor + (1 if len(data) % divisor != 0 else 0)
+    return [tmp.astype(int) for tmp in np.array_split(data, num_splits)]
+
+
+def check_data_for_rl(
+    data: pd.DataFrame,
+    participant_id_col: str = "participant_id",
+    trial_id_col: str = "trial_id",
+) -> tuple[pd.DataFrame, int, int]:
+    """Check if the data is suitable for Reinforcement Learning (RL) models.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        The data to check.
+    participant_id_col : str
+        The name of the column containing participant IDs.
+    trial_id_col : str
+        The name of the column containing trial IDs.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, int, int]
+        A tuple containing the cleaned data, number of participants,
+        and number of trials.
+    """
+    if participant_id_col not in data.columns:
+        raise ValueError(f"Column '{participant_id_col}' not found in data.")
+    if trial_id_col not in data.columns:
+        raise ValueError(f"Column '{trial_id_col}' not found in data.")
+
+    sorted_data = data.sort_values(
+        by=[participant_id_col, trial_id_col], ignore_index=True
+    )
+
+    n_participants = data[participant_id_col].nunique()
+    trials_by_participant = sorted_data.groupby(participant_id_col)[trial_id_col].size()
+
+    if not np.all(trials_by_participant == trials_by_participant.iloc[0]):
+        raise ValueError("All participants must have the same number of trials.")
+
+    n_trials = trials_by_participant.iloc[0]
+
+    return sorted_data, n_participants, n_trials
+
+
+def predictive_dt_to_dataframe(
+    dt: xr.DataTree,
+    predictive_group: Literal[
+        "posterior_predictive", "prior_predictive"
+    ] = "posterior_predictive",
+    response_str: str = "rt,response",
+    response_dim: str = "rt,response_dim",
+) -> pd.DataFrame:
+    """Convert a predictive DataTree object to a dataframe.
+
+    Parameters
+    ----------
+    dt : xr.DataTree
+        The DataTree object to convert.
+    predictive_group : Literal["posterior_predictive", "prior_predictive"]
+        The predictive group to convert.
+
+    Returns
+    -------
+    pd.DataFrame:
+        A dataframe with the predictive samples.
+    """
+    df = dt[predictive_group].ds.to_dataframe().reset_index(drop=False)
+    df_wide = df.pivot_table(
+        index=["chain", "draw", "__obs__"], columns=response_dim, values=response_str
+    ).reset_index()
+
+    df_wide.columns.name = None
+    df_wide = df_wide.rename(columns={0: "rt", 1: "response"})
+    return df_wide
+
+
+class SuppressOutput:
+    """Context manager for suppressing output.
+
+    This context manager redirects both stdout and stderr to `os.devnull`,
+    effectively silencing all output during the execution of the block.
+    It also disables logging by setting the logging level to `CRITICAL`.
+
+    Examples
+    --------
+    >>> with SuppressOutput():
+    ...     grad_func = pytensor.function(
+    ...         [v, a, z, t],
+    ...         grad,
+    ...         mode=nan_guard_mode,
+    ...     )
+
+    Methods
+    -------
+    __enter__()
+        Redirects stdout and stderr, and disables logging.
+
+    __exit__(exc_type, exc_value, traceback)
+        Restores stdout, stderr, and logging upon exit.
+    """
+
+    def __enter__(self):  # noqa: D105
+        self._null_file = open(os.devnull, "w")
+        self._stdout_context = contextlib.redirect_stdout(self._null_file)
+        self._stderr_context = contextlib.redirect_stderr(self._null_file)
+        self._stdout_context.__enter__()
+        self._stderr_context.__enter__()
+        logging.disable(logging.CRITICAL)  # Disable logging
+
+    def __exit__(self, exc_type, exc_value, traceback):  # noqa: D105
+        self._stdout_context.__exit__(exc_type, exc_value, traceback)
+        self._stderr_context.__exit__(exc_type, exc_value, traceback)
+        self._null_file.close()
+        logging.disable(logging.NOTSET)  # Re-enable logging
+
+
+def annotate_function(**kwargs):
+    """Attach arbitrary metadata as attributes to a function.
+
+    Parameters
+    ----------
+    **kwargs
+        Arbitrary keyword arguments to attach as attributes.
+
+    Returns
+    -------
+    Callable
+        Decorator that adds metadata attributes to the wrapped function.
+    """
+
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args, **inner_kwargs):
+            return func(*args, **inner_kwargs)
+
+        for key, value in kwargs.items():
+            setattr(wrapper, key, value)
+        return wrapper
+
+    return decorator

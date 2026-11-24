@@ -1,6 +1,300 @@
 # Changelog
 
-## 0.2.x
+### 0.5.1
+
+This version includes the following changes:
+
+1. **`full_ddm` no longer discards the response times between `t - st/2` and `t`** (#1292; by @EItanm1999). The blackbox likelihood behind `full_ddm` (`hddm_wfpt`) reads `st` as the full width of the non-decision-time distribution, so its support starts at `t - st/2`, yet on 0.5.0 and earlier the log-likelihood was floored for every response in `(t - st/2, t]`, biasing `t` downward (profile maximum 0.36 against a true 0.40 in a 2000-trial example). Refit any `full_ddm` model whose fastest response times fall within `st/2` below `t`.
+
+2. **A likelihood can declare where its response-time support starts** (#1292; the configurable edge was proposed by @EItanm1999 in #1344, which this supersedes). The optional `"ndt_edge_shift": {"param": "<name>", "scale": s}` entry (the `hssm._types.NDTEdgeShift` `TypedDict`) places the floor at `t - s * param`; it is accepted in a `register_model` likelihood dict, as a `model_config` override on `HSSM(...)`, and as `make_distribution(ndt_edge_shift=...)`. `full_ddm` declares `{"param": "st", "scale": 0.5}`; a likelihood without the key keeps the floor at `t`, and a model without `t` has no floor. See [Declaring where the response-time support starts](explanations/likelihoods.md#declaring-where-the-response-time-support-starts).
+
+3. **RLSSM decision processes carry the same declaration** (#1358). `register_ssm(..., ndt_edge_shift=...)` stores it with the decision-process spec, `RLSSMConfig.ndt_edge_shift` picks it up from there (as well as from a `ModelConfig` decision process, and, when the config is built from an `ssm-simulators` preset, from the spec of the decision process the preset names), and `RLSSM` forwards it to the RL likelihood.
+
+4. **Default initial values that fall outside a parameter's bounds are clamped into them** (#1293; by @EItanm1999). A default start outside the declared `bounds` previously gave a `NaN` starting point (100% divergences under `numpyro`, "Bad initial energy" under PyMC) for bounded `Uniform` priors, bounded safe `Intercept` priors on identity-link regressions, and models whose `t` bounds start above 0.025; such defaults are now moved just inside the bounds, logged at `INFO` with a pointer to `sample(initvals=...)`. Initial values you supply yourself are used as given, and a regression with a `log` or `gen_logit` link keeps its link-scale default.
+
+5. **Documentation: how bounds act on an identity-link regression** (#1343; by @EItanm1999). The `link_settings` docstrings, `RegressionParam.validate` and the priors how-to now say that a bounded parameter used in a regression with the identity link does not have its bounds built into the parameterization: a draw that puts any observation's value outside them is penalised by the likelihood (`apply_param_bounds_to_loglik`) rather than mapped back inside, which is usually harmless when the parameter sits well inside its bounds, and that `"log_logit"` composes the regression on the link scale instead. The runtime warning proposed in that PR was not adopted.
+
+6. **The `p_outlier` regression and random-slope tutorials execute again** (#1366, closes #1363). Both had failed at model construction since the 0.5.0 safe-prior guards. `tutorial_p_outlier_regression` now gives `v` the `gen_logit` link through `link_settings="log_logit"`, since the guard refuses an unbounded identity-scale default for a group-only intercept on a bounded parameter; `random_slope_safe_priors` now shows HSSM rejecting the legacy free-mean group priors under `noncentered=True` instead of building that graph, and keeps every other comparison.
+
+7. **A JAX version of the analytical DDM likelihood** (#1421, towards #1420). `hssm.likelihoods.logp_ddm_jax` ports `logp_ddm` (Navarro & Fuss, 2009) to JAX with the same parameterization, response coding, series switch and lower bound. Tests pin it to `logp_ddm` (per-trial difference at most 1e-10 in float64, including the floor and response times below `t`) and keep its float32 gradients finite. The DDM's `analytical` entry declares it as its `jax_loglik`, which is how RLSSM uses the analytical DDM (next item).
+
+8. **RLSSM can use the analytical DDM** (#1422, towards #1420). `hssm.rl.RLSSM(data, model="2AB_RW_DDM", decision_process_loglik_kind="analytical")` fits the `ssm-simulators` Rescorla–Wagner preset with the exact DDM likelihood (`logp_ddm_jax`, #1421) instead of its LAN, and does not load the network. `get_rlssm_model_config`, `RLSSMConfig.from_ssms_model` and `register_rlssm_model` take the same argument, and the LAN stays the default. A likelihood entry declares its JAX implementation under the new optional `jax_loglik` key, as the DDM's `analytical` entry now does; plain `hssm.HSSM` still evaluates `loglik`. Behaviour change: `decision_process_loglik_kind` used to be a label only. `"analytical"` now switches the likelihood, a decision process without a JAX implementation of the requested kind (e.g. `angle` with `"analytical"`) raises, `RLSSM(model_config=..., decision_process_loglik_kind=...)` raises when the two disagree, and any kind other than `"analytical"`, `"approx_differentiable"` or `"blackbox"` is rejected (`register_rlssm_model` used to store any string).
+
+9. **Documentation: using the analytical DDM in an RLSSM** (#1423, towards #1420). A new how-to fits a simulated two-armed bandit with `decision_process_loglik_kind="analytical"`, compares the fit with the LAN, and checks `logp_ddm_jax` against `logp_ddm`. See [Use the analytical DDM in an RLSSM](how_to/rlssm_analytical_ddm.ipynb).
+
+10. **The HSSM-side two-armed-bandit learner handles `-1`/`1` responses** (#1419, closes #1418). `hssm.rl.likelihoods.two_armed_bandit.compute_v_subject_wise` and its copy in `hssm.likelihoods.rldm_optimized` used the response as the arm index, so with `-1`/`1` responses JAX wrapped `-1` to arm 1 and every trial updated arm 1, silently giving wrong drifts. The response now maps to arm `response > 0`. Data coded 0/1 and the `ssms.rl` presets (`2AB_RW_DDM`, ...) were not affected; refit any custom RLSSM that used this learner with `-1`/`1` responses.
+
+11. **`lba2`, `lba3` and `lba4` start sampling at a valid point** (closes #1426). Their default start was `A = 2.0`, `b = 1.2`, where the likelihood's `b > A` check fails, so with `p_outlier=None` or `0` the PyMC sampler stopped with "Bad initial energy" and numpyro chains froze in place (r̂ above 3 on simulated `lba4` data); under the default lapse the LBA term contributed no gradient at the start. Each config now declares `A`'s default prior, unchanged at `HalfNormal(sigma=2)`, with `initval=0.5`. Priors you supply for `A` replace this default as before.
+
+12. **Opt-in MLflow tracking of fits: `hssm.track()`** (new module `hssm.tracking`, optional extra `hssm[tracking]`). Wrapping a workflow in `with hssm.track(experiment=..., run_name=...):` records `HSSM(...)`, `sample()`/`vi()` and `save_model()` as one MLflow run following the HSSM-ecosystem run schema (`phase=infer`): model, likelihood kind, network file and its HuggingFace commit (and the missing-data network's, under `missing_data_network_file`/`missing_data_hf_revision`), sampler settings, `n_trials`/`n_subjects`, a `spec_sha256` of the model specification and a `data_sha256` of the data; metrics `sampling_seconds`, `divergences`, `r_hat_max`, `ess_bulk_min`, `ess_tail_min`; artifacts `model_spec.json`, `summary.csv`, `traces.nc`, `data.parquet` — the fitted data, covariates included (and `model.pkl` with `log_artifacts="all"`). Record your own variables with `params=` or `run.log_param(...)` so runs can be compared on the dimensions you are varying. `dataset_name=` registers the observed data as an MLflow dataset, filling the run's Datasets panel with its schema and row count. Variational fits add `method`, `niter`, `backend`, `vi_seconds`, `elbo_final`/`elbo_max` and `vi_traces.nc`. With nothing configured, runs go to a local `mlflow.db`. The `lineage_id` that ssm-simulators and LANfactory attach to training data and published networks is read from the repository's `manifest.json`, so one query lists every fit built on a dataset. Off by default; nothing changes for users who do not call `track()`. Failures while recording a fit are logged, never raised; an unreachable tracking server raises when the block opens, before the fit starts. See the "Track fits with MLflow" how-to.
+
+13. **Rebuild a tracked fit: `hssm.load_run(run_id)`.** Reconstructs an `HSSM` model from a run's `model_spec.json` and `data.parquet` and restores its `traces.nc` / `vi_traces.nc`. Hugging Face networks, including a missing-data network, are fetched at the revision the run recorded, even when the working directory holds a file of the same name. Runs now carry `model_class`, `spec_restorable` and `rebuild_artifacts` tags (the last set once `data.parquet` and `model_spec.json` are stored, so `hssm.list_runs` needs no extra request per run); `spec_restorable=false` marks runs whose spec holds arguments recorded as text (`bmb.Prior` or `Link` objects, custom functions), which `load_run` refuses with a clear error.
+
+14. **List tracked fits: `hssm.list_runs()`.** Returns a DataFrame of the runs recorded by `hssm.track`, newest first, with `run_id`, `run_name`, `experiment`, `start_time`, `status`, `user`, `model`, `loglik_kind`, `dataset_name` (from a new `dataset_name` tag, so inputs you log yourself are not mistaken for it), `n_trials` and `restorable` (whether `hssm.load_run` can rebuild the run). Runs logged by other tools on the same server are left out.
+
+15. **RLSSM can use the LBA** (towards #1420). `lba2`, `lba3` and `lba4` declare a JAX likelihood (`jax_loglik`): `hssm.likelihoods.analytical.logp_lba_jax`, the `lba4` JAX code generalised to any number of accumulators. An `ssms.rl.ModelConfig` with `decision_process="lba3"` and the `RescorlaWagnerRaceDrifts` learner then fits through `RLSSMConfig.from_ssms_model(..., decision_process_loglik_kind="analytical")`; `ssm-simulators` has no Rescorla–Wagner + LBA preset yet (see [Use the analytical DDM in an RLSSM](how_to/rlssm_analytical_ddm.ipynb)). RLSSM now starts each non-regression parameter at the config's `params_default` (for `ssm-simulators` presets, the simulator's defaults) instead of its prior's midpoint, unless you specify its prior or HSSM's shared defaults set its start (`a`, `t`, `v`, `p_outlier`). The midpoint start put `A` and `b` both at 0.5, where the LBA's `b > A` check fails; for the existing presets it moves `rl_alpha`, `scaler`, `theta` and the softmax `beta` to the `ssm-simulators` defaults. The PyTensor `lba2` and `lba3` likelihoods computed their normal CDF with a float32 `sqrt(2)` even under float64, an error of up to about 3e-7 in log p; they now agree with `logp_lba_jax` to 1e-10, which the `jax_loglik` parity test checks. New tests check the model's log-likelihood against a NumPy learner for 2, 3 and 4 choices, and parameter recovery for 3 choices.
+
+16. **`plot_quantile_probability` with ellipses no longer fails on other legend entries or cuts off ellipses** (closes #1430, closes #1431). With `predictive_style="ellipse"` or `"both"`, the ellipse colours were read from every legend entry in the axes, so drawing into axes that already held, for example, the bands of `plot_predictive` (which `plt.gca()` returns right after a `plot_predictive` call in a script or marimo) failed with `AttributeError: 'FillBetweenPolyCollection' object has no attribute 'get_color'`; only lines are read now. The ellipses were also added without rescaling the view, which stayed fitted to the observed quantiles and cut off ellipses reaching beyond them; the view now includes them, and axis limits you set before the call are kept.
+
+17. **The lapse mixture no longer drops the lapse mass on missing-RT and omission rows** (closes #1322). The lapse mixture evaluated the lapse RT density at the `-999.0` placeholder of every missing-RT and deadline row, so the default `Uniform(0, 20)` lapse contributed `-inf` (no lapse mass at all) and other lapse priors contributed a meaningless finite value, biasing `p_outlier` and the SSM parameters whenever such rows were present. The lapse term is now marginalised like the SSM term: observed rows keep the lapse density at `rt`, missing-RT rows (choice observed, no deadline) use `1 / n_choices`, and omission rows use the lapse survival probability at the deadline, `1 - CDF_lapse(deadline)`. Lapse priors without a PyMC `logcdf` now raise a clear error on deadline data. The missing `1 / n_choices` factor on observed rows is tracked separately in #1323. Refit any model with a lapse (`p_outlier`, 0.05 by default) whose data has missing-RT or deadline rows.
+
+18. **Documentation: `compile_logp()` returns the log-posterior; `distribution_utils` API page fixed** (closes #1436). `HSSM.compile_logp()` compiles the model's log-prior plus log-likelihood, plus any Bambi `potentials` (the unnormalized log-posterior), as a function of natural-scale parameter values, not the log-likelihood alone; the tutorial, renamed "Compile a log-posterior function", and the method's docstring now say so. It also gives `pip install zeus-mcmc` for `zeus`: `hssm[notebook]` installs no `zeus`, since `notebook` is a dependency group, not an extra. The `distribution_utils` API page now lists `make_hssm_rv` in place of the nonexistent `make_ssm_rv`, and adds `make_distribution_for_supported_model`.
+
+19. **Choice-only softmax models simulate, and their lapse likelihood is fixed** (#1416, closes #925, refs #1323; by @digicosmos86). `softmax_inv_temperature_2`, `_3` and the new `softmax_inv_temperature_4` now support `simulate_data`, `sample_prior_predictive` and `sample_posterior_predictive` through the `ssm-simulators` models of the same name (`ssm-simulators>=0.16.0`). Predictive draws contain the response only. On 0.3.0–0.5.0, choice-only `HSSM` models with `p_outlier` (on by default, 0.05) used `exp(1 / n_choices)` instead of `1 / n_choices` as the lapse likelihood, which overstated `beta * logit` (by about 17% for a 0.8/0.2 choice split); refit such models. `RLSSM` was not affected.
+
+20. **Posterior predictive sampling works when `p_outlier` is the only trial-wise parameter** (#1416). With a `p_outlier` regression and every other parameter intercept-only, `sample_posterior_predictive` failed for every model (`cannot reshape array of size ... into shape (1, 5, 1)`); the other parameters are now broadcast to `p_outlier`'s shape before simulating. A regression on any other parameter avoided the error.
+
+21. **Documentation: the choice-only tutorial simulates with `simulate_data` and checks predictions** (#1491, closes #1490). The tutorial now simulates its data with `hssm.simulate_data` instead of a hand-written simulator, explains the placeholder `rt` column (`-1.0`) that choice-only simulations return, and adds a prior and posterior predictive check of choice frequencies. It has been migrated to marimo (`docs/tutorials/choice_only_models.py`), and its outputs no longer show the old dummy-simulator warning.
+
+22. **The `ddm` and `ddm_sdv` LAN bounds no longer reach outside the networks' training ranges** (closes #1440). A LAN is valid only inside the parameter range it was trained on; outside it, it returns a finite but wrong density. The `approx_differentiable` `ddm` config allowed `z` in `(0.0, 1.0)`, while `ddm.onnx` was trained on `[0.1, 0.9]`, and `ddm_sdv` let `t` and `sv` start at 0.0, while its network was trained from 0.001. The bounds are now `z` `(0.1, 0.9)` for `ddm`, and `t` `(0.001, 2.0)` and `sv` `(0.001, 2.5)` for `ddm_sdv`. With these likelihoods, the default `z` prior becomes `Uniform(0.1, 0.9)` and the default `sv` prior `Uniform(0.001, 2.5)`; parameter values outside the bounds hit the likelihood floor; `link_settings="log_logit"` maps `z` into `(0.1, 0.9)`; and RLSSM decision processes that HSSM builds from these model configs inherit the new bounds. `RLSSMConfig.from_ssms_model()` takes its bounds from the ssms preset instead, so this change does not affect it; ssms' `2AB_RW_DDM` already declares `z` `(0.1, 0.9)`. Fixing `sv=0.0` (or `t=0.0`) with the `ddm_sdv` LAN now raises a `ValueError`; for zero drift variability use `model="ddm"`. The analytical and blackbox likelihoods are unchanged. An audit of every other built-in LAN config found its bounds equal to the training range; `test_lan_bounds_match_training` now enforces this with no exceptions and no rounding of the lower edge. Refit any `ddm` LAN model whose `z` posterior had mass below 0.1 or above 0.9.
+
+23. **Documentation: the site uses the shared HSSM design-system theme** (#1501, closes #1500). The docs now match the HSSM website: an indigo header, a navy dark mode, IBM Plex Sans and Mono (self-hosted, so pages no longer request Google Fonts), the design system's code colours in code blocks and notebook cells, and plots on a white card in dark mode. The theme is vendored from HSSMSpine's `docs-brand/` bundle; `mkdocs.yml` now starts from its shared base (`INHERIT: docs/overrides/.mkdocs-brand.yml`), which owns the palette, fonts, logo and stylesheets. The home page shows the on-dark HSSM logo in dark mode.
+
+24. **`set_floatX("float32")` keeps JAX matrix multiplications at full float32 on GPUs** (closes #1463). JAX's default runs float32 matrix multiplications as TF32 (a 10-bit mantissa) on NVIDIA GPUs from Ampere on, so a LAN likelihood was computed below float32 precision: for `angle` with 10,000 trials, the log-likelihood at the initial point was off by about 1.3e-3 per trial, and 3 of 4 NumPyro fits failed to converge (R-hat 1.6–9.7). `set_floatX("float32")` now also sets `jax_default_matmul_precision` to `"highest"`, unless you have already chosen a precision (`JAX_DEFAULT_MATMUL_PRECISION` or `jax.config.update`). Full float32 costs speed: on one RTX A5000, a LAN log-likelihood and its gradient on 10,000 or more trials took about 1.3x as long as under TF32, and data-center GPUs (A100, H100) can lose more. Set `JAX_DEFAULT_MATMUL_PRECISION=tensorfloat32` before importing JAX to keep TF32. CPUs and older GPUs are not affected.
+
+25. **`set_floatX` reaches every graph and PyMC's worker processes** (closes #1464). Three things kept a float32 model partly in float64, and a fourth broke the DDM's gradient once the graph really was float32. (1) Constants HSSM created at import upcast the `ddm`, `ddm_sdv`, `angle` and `lba2` graphs built after `set_floatX("float32")`: `LOGP_LB` and the DDM's π and τ terms were typed with the `floatX` of import time (float64 by default), and the LBA's √2 came from `np.sqrt`, which is always float64. They are Python floats now and take the graph's dtype. (2) The default lapse's log-density entered the graph as a float64 constant; it is now in `floatX`. (3) PyMC's chains under the `spawn` or `forkserver` start method (the default on Linux from Python 3.14, on Intel macOS and on Windows) run in fresh interpreters that imported PyTensor at float64 and turned JAX's x64 back on, so an RLSSM fit at float32 failed with `unexpected JAX type ... for argument to VJP function`. `set_floatX` now also writes `floatX` into `PYTENSOR_FLAGS`, keeping your other flags, and JAX's matmul precision into `JAX_DEFAULT_MATMUL_PRECISION`, so worker processes started afterwards use the same precision. Call it before the first multi-process fit of a session: a forkserver that is already running keeps the environment it started with. (4) In float32, the DDM's fast-time series (`ddm`, `ddm_sdv`) gave NaN gradients for `a` and `t` when a response time was within a few milliseconds above `t`: the density underflowed to the `LOGP_LB` floor, and dividing by its 1/√(2π t³) normalization overflowed. The normalization now goes into the exponent, as in the JAX likelihood; float64 values and gradients change by less than 1e-13. Under float64, the DDM's `log 4` term, which was `pt.log` of an integer and so always float32, is now float64. A regression on any predictor (`v ~ 1 + x` as well as a categorical one) still carries Bambi's float64 design matrix as a graph constant; the log density still comes out float32.
+
+26. **`plot_quantile_probability` stays readable when conditions have similar accuracy** (closes #1488). The observed markers had seaborn's white edge, which cut each quantile line around its markers; where two conditions sit at nearly the same proportion (`LL` and `WW` in `cavanagh_theta`), the short step between them vanished under two touching markers and one line read as three. Markers are now drawn without an edge; `data_kwargs={"markeredgewidth": ...}` (or `mew`) still sets one. The condition labels on the top axis overlapped for the same conditions; a label that would overlap its left neighbour now sits one row higher.
+
+27. **`plot_quantile_probability` shows five quantiles by default** (closes #1474). The default `q=5` was turned into `np.linspace(0, 1, 5)` without its ends, so the plot showed three quantiles (0.25, 0.5, 0.75). The default is now `(0.1, 0.3, 0.5, 0.7, 0.9)`, the quantiles conventionally shown in quantile-probability plots. An integer `q` keeps its meaning; pass `q=5` for the previous plot.
+
+28. **Posterior predictive draws can be seeded** (closes #1473). `sample_posterior_predictive` takes `random_seed` (an `int` or a `numpy.random.Generator`) and passes it to bambi's `predict`; in safe mode each chunk of draws gets its own seed spawned from it. `plot_predictive` and `plot_quantile_probability` take `random_seed` too: it picks the posterior draws they use and, when they sample the posterior predictive themselves, the simulated responses, so a seeded plot is the same on every run. Without a seed nothing changes.
+
+29. **A formula that uses a data column named like a model parameter now fails with a clear error** (closes #1471). For example, `cavanagh_theta`'s `theta` column in an angle-family model, which has a `theta` parameter: `a ~ 1 + theta` failed later with `Variable name a_theta already exists`, and with another regression in the model it built without any message. HSSM now raises a `ValueError` at construction that names the column and suggests renaming it.
+
+30. **`sample_do` simulates the intercepts it is given** (closes #1470). With bambi's default `center_predictors=True`, the PyMC intercept of a regression with common predictors belongs to the centered design, while posteriors report it on the original scale, so `sample_do(params={"v_Intercept": b0, "v_x": b1})` simulated an intercept of `b0 - b1 * mean(x)`. `sample_do` now converts each fixed intercept to the centered design when all of that parameter's slopes are fixed too (and warns when they are not), so `params` means what the posterior reports. Behaviour change: simulations from such models change; refit any recovery study built on them. `sample_do` also gains `strict=True`, which raises when a free variable is not in `params` instead of drawing it from its prior, and a full docstring. The hierarchical-regression tutorial, whose stated intercept of 0.0 was simulated as about -0.4, is re-executed.
+
+31. **Free random variables no longer depend on Python's string-hash seed** (#1493, closes #1492). bambi collects a family's auxiliary parameters in a set. So in a model with two or more free non-parent parameters without a formula (`a`, `z` and `t` in the default DDM, or the logits of `softmax_inv_temperature_3` and `_4`), the order of the free random variables, and with it the draws of `sample(random_seed=...)`, depended on the per-process string-hash seed (`PYTHONHASHSEED`). HSSM's families now keep the order of `list_params`, so a seeded fit of such a model from an earlier version cannot be reproduced draw for draw.
+
+32. **Default intercept priors on bounded parameters are scaled to the bounds** (towards #1472). With `prior_settings="safe"` and an identity link, a regression intercept on a parameter with finite bounds got `Normal(mean(bounds), 0.25)`, truncated to the bounds; the SD is now a quarter of the bounds' width. For LAN models the bounds are the network's training range, so the old prior pulled typical values toward its middle: `angle_extended`'s `v_Intercept` prior was `Normal(0, 0.25)`, and a hierarchical fit recovered a group drift of 0.86 against a true 1.00. Behaviour change: default intercept priors are now `Normal(0, 1.5)` for `v` in `angle` (`Normal(0, 3)` in `angle_extended`), `Normal(1.65, 0.675)` for `a`, `Normal(0.5, 0.2)` for `z`, `Normal(1.0005, 0.5)` for `t` and `Normal(0.6, 0.35)` for `theta`. The analytical `ddm` (HDDM-based priors), slopes and priors you set yourself are unchanged. The prior follows the bounds, so a parameter whose bounds are much wider than its plausible values, as can happen in a custom model, gets a nearly flat intercept prior: give it an explicit `prior`. A parameter with finite bounds and no regression already gets a `Uniform` over them by default.
+
+33. **`sample(random_seed=...)` is reproducible across processes for models with group terms** (closes #1494). When it builds a model, HSSM jitters the default start of every vector parameter by up to `initval_jitter` (0.01), and it drew that jitter from NumPy's unseeded global generator, which `random_seed` does not control. A model with a group term, such as `v ~ 1 + x + (1|subject)`, therefore started from a different point, and gave a different posterior, in every new process. The jitter now comes from a generator with a fixed seed, so `model.initvals` is the same in every process; `initval_jitter` keeps its meaning, and `sample(initvals=...)` still overrides the start. With #1493 (item 31), seeded fits of such models now reproduce across processes once PyTensor's cache of compiled code is filled. The first fit of a new model can still differ from later ones, with or without group terms (seen with the analytical DDM on the PyMC sampler): PyTensor's numba backend compiles with fast-math, and newly compiled code rounds differently from the cached code that later fits load. Set `PYTENSOR_FLAGS=numba__fastmath=False` when fits must match exactly.
+
+34. **Models registered in ssm-simulators work by name** (closes #1467). `hssm.simulate_data` and `HSSM(model=...)` looked models up in `ssms.config.model_config`, a snapshot taken when `ssms` is imported, so a model registered with `ssms.config.register_model_config` was rejected by `simulate_data` and got none of its configuration in `HSSM`. Both now resolve the name through the ssm-simulators model registry. For a model HSSM does not ship but ssm-simulators knows, `HSSM` takes `list_params`, `bounds` (from its `param_bounds`, the training range of a LAN trained on it), `choices` and `ndt_edge_shift` (declared where the simulator's response times start below `t`, as for `full_ddm_rv`) from the ssm-simulators config unless `model_config` sets them (or, for `choices`, the `choices` argument). This includes ssm-simulators built-ins that HSSM does not ship, which previously took only `choices` from there. A bound that ssm-simulators gives as another parameter's name (`full_ddm_rv` bounds `st` by `t`) has no HSSM form, so that parameter gets no bound from ssm-simulators. With `loglik_kind="approx_differentiable"`, a `loglik` given as an ONNX path or file name now defaults `backend` to `"jax"`, as the docstring stated, instead of raising. A registered model with its own network is then `hssm.HSSM(data, model="name", loglik="net.onnx", loglik_kind="approx_differentiable")`. Lapse responses in predictive samples of a registered model are drawn from its own choices; ssm-simulators up to 0.16.0 reports `[0, 1, 2]` for it. The "not supported" warning ssm-simulators logs for such a model when HSSM builds its simulator is fixed in ssm-simulators (lnccbrown/ssm-simulators#427).
+
+35. **Faceted plots no longer draw the figure title over the facet titles** (closes #1513). With `col`, `row` or `col_wrap`, `plot_predictive` and `plot_model_cartoon` placed the figure title at a fixed fraction of the figure height, so at the default facet size (one row of facets, 3 inches high) "Posterior Predictive Distribution" was drawn over the facet titles; `plot_quantile_probability` did the same at some facet heights. The title now sits above the facet titles at any figure height, and a tall grid no longer leaves a tenth of its height empty for it. A faceted figure with a title is laid out once more with `tight_layout` after its legend is added, so its margins change slightly; `title=None` is unaffected.
+
+36. **Documentation: tutorials pass `simulate_data` only the parameters of the simulated model** (#1511, refs lnccbrown/ssm-simulators#424). The scenic-route tutorial (twice) and the archived *PyMC to HSSM* notebook called `hssm.simulate_data(model="ddm", ...)` with a `theta` dictionary that also held entries the DDM does not have: `theta`, and in the tutorial the known regression coefficients `v_x`, `v_y` and `v_Intercept`, which later cells use as reference values. Until now, ssm-simulators dropped such keys without a message; its next release raises a `ValueError` for them. The calls now pass `v`, `a`, `z` and `t` only. The simulated data, and with them the published outputs, are unchanged.
+
+#### Breaking changes that require migration:
+
+1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.
+
+2. **The `ddm_sdv` LAN no longer accepts `sv=0.0` or `t=0.0`** (#1440). Its bounds now start at 0.001, where its network's training range starts, so fixing either parameter at 0.0 raises `ValueError`. For zero drift variability, use `model="ddm"`. Likewise, a fixed `z` outside `[0.1, 0.9]` now raises with the `ddm` LAN.
+
+#### Dependency changes:
+
+1. **`ssm-simulators` floor raised to `>=0.16.0`**, the first release with the `softmax_inv_temperature_{2,3,4}` simulators (lnccbrown/ssm-simulators#421), which replace HSSM's own adapter (#1416).
+
+### 0.5.0
+
+This version includes the following changes:
+
+1. **`plot_model_cartoon` displays posterior uncertainty as graded bands by default** (#1124), adopting the same `uncertainty="band" | "samples" | "both" | None` vocabulary as `plot_predictive` (#1122): pointwise quantile bands on the RT histograms, fan-chart ribbons on the decision bounds, a graded drift-quantile fan, graded non-decision-time spans (replacing the per-draw vertical-line smear), and a starting-point whisker. `uncertainty=None` reproduces the previous mean-only look; the default call now runs per-draw simulations (seconds). New parameters: `hdi`, `alpha_mean`, `alpha_uncertainty`, `hist_height`, `legend`; `plot_predictive_mean`/`plot_predictive_samples` are deprecated with a `FutureWarning`. The previously documented-but-ignored `bins`, `step`, `colors`, `linestyles`, and `linewidths` parameters now work. With uncertainty display on, the drawn mean is the pointwise predictive mean across draws (it cannot exit its own bands) rather than the plug-in simulation at the posterior-mean parameters. The figure uses a three-way color encoding — model geometry stays neutral black (`color_model`), predictions and data use the predictive palette. Note for regression/hierarchical models: the drawn geometry of each posterior draw derives from that draw's trial-mean parameter vector (see the correctness entry below). See the new "Model cartoon plot gallery" tutorial.
+
+2. **`plot_model_cartoon` correctness follow-up** (#1125). Each posterior draw's geometry now derives from **one coherent θ vector** — the across-trials mean by default, or one trial via the new `obs=` parameter (which then conditions every simulated layer on that trial; the observed histogram stays pooled, with a warning). New `random_state=` (int or `np.random.Generator`) makes the whole figure reproducible: which posterior draws are displayed (previously chosen by the unseeded global RNG before any seed applied), every simulator seed, and the trajectories — facets consume successive segments of one stream. Geometry and trajectory simulations now receive a `max_t` horizon derived from the x-limits instead of the simulator's 20 s default (previously ~75% of every boundary polyline lay outside the axes); the noisy RT simulations deliberately keep the long horizon so defective densities are not silently re-normalized by censoring. Trajectories are noisy realizations of the reduced reference θ, so their crossing markers land on the drawn boundary by construction. `n_trajectories`, `xlims`, and `ylims` are promoted to documented parameters (None keeps each renderer's defaults). Bug fix: the >2-choice renderer simulated each draw's RT histogram with `n_samples=1` (silently ignoring `n_reps`) and one seed shared across draws, so its uncertainty bands summarized degenerate, noise-correlated histograms. Deliberate value changes for a fixed `random_state`: a new seeding protocol, trial-mean instead of trial-0 geometry for regression models (intercept-only models unaffected), and reference-θ trajectories. Documented caveat: geometry is nonlinear in θ, so the trial-mean curve is not the mean of per-trial curves and need not sit mid-band — the reduction is a display convention.
+
+3. **`plot_model_cartoon` accepts `hist_height="auto"`** (#1127): fits the tallest RT-histogram curve to 90% of the vertical headroom between the histogram baseline (ribbon-aware — expanding bounds are cleared too) and the upper y-limit, so histograms can never overrun the axes; resolves per facet. Its mirror image, `ylims="auto"`, keeps the raw density scale and grows the frame around the content instead (never below the default limits; the two spellings are mutually exclusive). The defaults remain unchanged. The >2-choice renderer now also draws per-choice drift-uncertainty cones in band mode (graded fills in each accumulator's color; previously slope uncertainty appeared only as per-draw spaghetti in the samples display).
+
+4. **Safe priors now zero-center matching group-specific effects** (#1224). HSSM matches each Formulae group expression to an exact common-term counterpart and assigns the generated group deviation `mu=0`. This removes disconnected group-mean variables under non-centering and the redundant common/group location under centering. Explicit priors are not rewritten, including Bambi's `common` and `group_specific` wildcards; parameterization diagnostics now describe the graph Bambi actually builds. Item 12 below adds compatibility validation and defines population-location ownership for unmatched group-only effects.
+
+5. **`hssm.Link` now constructs Bambi built-in and custom links** (#1231). Standard links delegate correctly to Bambi, while HSSM's bounded `gen_logit` behavior remains unchanged.
+
+6. **Safe common-intercept priors now recognize every identity-link spelling consistently** (#1232). An omitted link, `"identity"`, `bambi.Link("identity")`, and `hssm.Link("identity")` all retain response-scale priors, including HDDM-derived priors; transformed links use a coefficient-scale `Normal(mu=0, sigma=0.25)`. Item 12 below extends semantic identity handling to generated unmatched group-only intercepts and defines their transformed-link predictor-scale behavior. See [Link functions and safe priors](tutorials/link_functions.ipynb) for the underlying model-design logic.
+
+7. **Invalid model-level prior and link presets now fail fast** (#1233). `prior_settings` accepts only `"safe"` or `None`, and `link_settings` accepts only `"log_logit"` or `None`; wrong-case strings, booleans, mappings, and other unsupported values now raise a clear `ValueError` instead of silently changing prior, link, initial-value, or display behavior. The API documentation now clarifies that both presets act on regression parameters: `prior_settings=None` delegates missing regression-term priors to Bambi but leaves HSSM's simple-parameter defaults unchanged. The Poisson-race tutorial has also been migrated to marimo and no longer presents `prior_settings` as a prior dictionary.
+
+8. **`hssm.load_data` now returns a `pd.DataFrame` unconditionally** (#1146). Its `dataset` argument is required, and the return type is no longer `pd.DataFrame | str`, which forced type-checkers (and users) to narrow away a `str` branch that existed only to print the dataset listing. Use the new **`hssm.list_data()`** to get the names of the built-in datasets as a `tuple[str, ...]` (mirroring `hssm.list_models()`). Breaking: `hssm.load_data()` with no argument now raises `TypeError` instead of returning a listing string.
+
+9. **New built-in model: `gamma_drift`** (#1248) -- a drift-diffusion model whose drift is a constant `v` plus a gamma-shaped bump with signed peak amplitude `c`, its time course set by `shape` and `scale`. This is the conflict-task (DMC-style) family: a negative `c` pulls evidence toward the wrong boundary early in the trial, then decays back to baseline. Parameters `v, a, z, t, shape, scale, c`.
+
+10. **New built-in model: `gamma_drift_angle`** (#1296) -- `gamma_drift` with a linearly collapsing (angle) decision bound. Parameters `v, a, z, t, theta, shape, scale, c` in ssms registry order (`theta` at index 4 -- the order is the ONNX input contract), bounds set to the network training box, and a registry cross-check test asserting both against `ssm-simulators`. The LAN artifact ships at the root of `franklab/HSSM`; its parameter-recovery report (published alongside) documents identifiability limits of `shape`/`scale` when the collapsing bound truncates the drift bump -- see the model card on the Hub.
+
+11. **New built-in model: `angle_extended`** (#1298) -- the angle model with drift bounds widened to (-6, 6) for designs producing strong evidence. Bounds and parameter order asserted against the `ssm-simulators` registry; the LAN passed a 240-fit parameter-recovery sweep with zero coverage or bias failures (report published beside the artifact). Raises the `ssm-simulators` floor to `>=0.14.0`, the first release containing the model.
+
+12. **Safe priors now preserve a unique unmatched group-only population location and reject ambiguous or unrepresentable specifications** ([#1225](https://github.com/lnccbrown/HSSM/issues/1225)). When HSSM generates a prior for a group term with no exact common Formulae counterpart, the group distribution owns the population location. HSSM therefore preserves its location-bearing hierarchy and centers that generated term even when the model or component requested non-centering, because Bambi's current non-centered construction omits `mu`. For previously generated unmatched Normal terms under default non-centering, this intentionally changes the likelihood by reconnecting the location that Bambi had discarded. Exact common/group matches remain zero-mean deviations and honor the requested parameterization ([#1224](https://github.com/lnccbrown/HSSM/issues/1224)). Repeated unmatched expressions now fail when safe generation has no unique owner. Explicit priors are never rewritten, but HSSM raises before Bambi when a group prior cannot be represented faithfully and warns about buildable centered specifications with multiple free owners of one location. Identity-linked group-only intercepts retain their response-scale hierarchy for every identity spelling ([#1232](https://github.com/lnccbrown/HSSM/issues/1232)); transformed links use a hierarchy on the linear-predictor scale. For generic models, safe generation now fails closed when such an identity-linked intercept has finite response bounds, rather than inventing an unqualified unbounded hierarchy ([#1269](https://github.com/lnccbrown/HSSM/issues/1269)). Explicit priors remain authoritative, and exact/black-box HDDM likelihoods retain their calibrated natural-support hierarchies. Follow-ups cover upstream location-aware non-centering ([#1268](https://github.com/lnccbrown/HSSM/issues/1268), [Bambi #1003](https://github.com/bambinos/bambi/issues/1003)) and broader numeric regression-term semantics ([#1271](https://github.com/lnccbrown/HSSM/issues/1271)).
+
+#### Breaking changes that require migration:
+
+1. **Safe priors now refuse to invent a hierarchy for a bounded parameter** (#1269). With the
+   default `prior_settings="safe"`, a **group-only intercept** — a formula with no matching common
+   intercept, such as `v ~ 0 + (1|subject)` or `v ~ -1 + (1|subject)` — on an identity-linked
+   parameter that carries any finite bound now raises `ValueError` instead of silently generating an
+   unbounded hierarchy. HSSM's generic group hierarchy is unbounded, so applying it to a bounded
+   parameter through an identity link would place a response-scale default outside the parameter's
+   support.
+
+   **This affects every `approx_differentiable` (LAN) model, including existing ones** such as
+   `angle`, `weibull`, `levy` and `ornstein` — not only models new in this release. Exact and
+   blackbox `ddm`, `ddm_sdv` and `full_ddm` keep the previous warning. The ordinary hierarchical
+   form `v ~ 1 + (1|subject)` is unaffected.
+
+   To migrate, pick one:
+   - keep a common intercept: `v ~ 1 + (1|subject)`;
+   - use a support-respecting link, e.g. `link_settings="log_logit"`;
+   - supply an explicit group prior for the term (or a `group_specific` wildcard) — note this
+     currently also requires `noncentered=False` for that parameter;
+   - set `prior_settings=None` and specify the complete prior policy yourself.
+
+2. **Explicit group-specific priors that bambi cannot represent faithfully now raise** (#1225).
+   Previously a logged warning, these are now an aggregated `ValueError` raised before sampling.
+   Under the default non-centered parameterization, an explicit group prior supplying a `mu`
+   hyperprior cannot be represented, because bambi builds `offset * sigma` and drops `mu`. Pass
+   `noncentered=False` for that parameter to keep the prior as written.
+
+3. **`ddm_sdv`'s `approx_differentiable` `sv` bound widened from `(0.0, 1.0)` to `(0.0, 2.5)`**
+   (#1230), matching the range the shipped network was actually trained on. The bound feeds
+   default priors and initial values, so fits of existing `ddm_sdv` models may differ from
+   0.4.0.
+
+4. **`hssm.load_data()` now requires its `dataset` argument** (#1146) and always returns a
+   `pd.DataFrame`. Use the new `hssm.list_data()` to list the built-in datasets.
+
+#### Dependency changes:
+
+1. **`ssm-simulators` floor raised to `>=0.14.0`** — the first release containing `angle_extended`.
+   0.14.0 also fixes `omission_p` / `choice_p_no_omission`, which were computed against the wrong
+   column and read as identically zero on deadline models.
+
+### 0.4.0
+
+This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.
+
+#### Major new features:
+
+1. A new `RLSSM` class has been added to support reinforcement learning sequential sampling models.
+2. **Attentional Drift Diffusion Model (aDDM)**: new `hssm.aDDM` model (with `aDDMConfig`) built on a vendored, differentiable JAX first-passage-time likelihood. Supports per-trial fixation covariates (`r1, r2, flag, sacc_array, d, sigma`), **trial-wise regression / hierarchical priors** on the core parameters (`eta, kappa, a, b, x0`), a sampled non-decision time `t`, and posterior-predictive checks conditioned on the observed fixations (via the aDDM simulator in ssm-simulators). See the "Attentional DDM" tutorial and `scripts/addm_parameter_recovery.py` for an end-to-end recovery check.
+3. **Analytical four-choice LBA (LBA4)**, with a JAX likelihood enabling JAX/NumPyro-compatible sampling and gradients for the analytical LBA4 model.
+4. Per-parameter centered vs. non-centered parameterization. Pass `noncentered` to `HSSM(...)` as a `dict` keyed by parameter name (e.g. `noncentered={"v": False, "a": True}`), or set a per-prior `noncentered` field on a group term's prior (dict or `hssm.Prior`) to override the model-level choice. Requires Bambi >= 0.19. See the "Per-parameter centered vs. non-centered parameterization" tutorial.
+
+#### Breaking changes that require migration:
+
+1. Dependencies have been streamlined to support PyMC 6.0+, pytensor 3.0+, ArviZ 1.0+, and Bambi 0.19+.
+2. We added support for Python 3.14.
+3. Consistent with PyMC 6.0+ and ArviZ 1,0+ expectations, the `model.sample()` by default uses `numba` as the compute backend.
+4. `model.sample()` now returns an `xarray.DataTree` object instead of the `arviz.InferenceData` object. Other functions that expect `arviz.InferenceData` objects have been updated to accept `xarray.DataTree` objects.
+5. `model.summary()` and `model.plot_trace()` methods are now removed. Use `az.summary()` and `az.plot_trace_dist()` instead.
+6. HSSM can now be installed directly from PyPI via `pip` or `uv`. Conda support is no longer provided.
+
+#### Dependency changes:
+
+1. `bambi` floor raised to `>=0.19.0` (per-parameter non-centered support); `ssm-simulators` floor raised to `>=0.13.1` (aDDM engine + fixation continuation).
+
+#### Bug fixes:
+
+1. **Restore JAX-NUTS jitter control**: HSSM again disables the built-in initial-value jitter of the `numpyro`/`blackjax` samplers (PyMC 6 removed the public switch that made this possible), so sampling starts from HSSM's own controlled `initval_jitter` instead of an extra uniform jitter (#999).
+2. **Python 3.14: posterior/prior predictive sampling fixed.** On 3.14, the dynamically created SSM random-variable class carried PEP 649 annotation metadata that numba's vendored cloudpickle could not serialize (`TypeError: cannot pickle '_abc._abc_data' object`), breaking `sample_posterior_predictive` and related plotting under the numba backend. The class attributes are now un-annotated plain assignments, and the previous 3.14 xfail markers on the predictive/plotting tests have been removed.
+3. **`model.vi(..., backend="jax")` now works (#1056).** PyMC 6 added a `backend` option to `pm.fit()`, which `HSSM.vi()` forwards. Requesting `backend="jax"` failed with `NotImplementedError: No JAX conversion for the given Op: LANLogpVJPOp`, because the operator that computes LAN likelihood gradients had no JAX translation. It now has one, and its gradients are tested to match the existing execution path exactly. Two remaining PyMC bugs (which break `pm.fit(backend="jax")` for *any* model, HSSM or not; tracked in #1056) are worked around by scoped, self-disabling compatibility shims in `hssm._vi_compat`, applied only when `backend="jax"` is requested — they detect a fixed PyMC and become no-ops, and will be removed once the pinned PyMC includes the upstream fixes. Known limitation: models with a single free parameter dimension may still fail to compile; use `backend="c"` there.
+4. **Fixed incorrect gradients for choice-only models with all-scalar parameters and outlier modeling.** For likelihoods that take parameters only (CPN/OPN networks) with no regression parameters, the gradient computation ignored any transformation applied downstream of the likelihood — for example the `p_outlier` mixture. Gradient-based fitting (VI, or NUTS on the default backend) of such models silently used incorrect gradients. The gradient is now exact, and a regression test asserts the chain rule holds on every backend.
+5. **Internal cleanup of the LAN likelihood operators.** The Op classes are now defined once at module level instead of once per model, so building many models in one long-running process (e.g. a parameter-recovery loop in a notebook) no longer grows PyTensor's dispatch registry — which previously kept every model's network weights in memory for the lifetime of the process. The gradient hook was also migrated from PyTensor's deprecated `grad` to the new `pullback` API, silencing a `FutureWarning` that appeared on every model fit.
+6. **Documentation build fix for the marimo aDDM tutorial.** The docs build now includes the marimo dependency needed to parse the aDDM marimo tutorial, and skips CI execution for its button-gated sampling cells.
+
+### 0.3.1
+
+This version includes the following changes:
+
+1. **sbi NRE ONNX integration**: train an sbi Neural Ratio Estimator (NRE), export it to ONNX via `lanfactory.onnx.transform_sbi_to_onnx`, and load it into HSSM's `loglik_kind="approx_differentiable"` pipeline for MCMC inference (keystone tutorial `sbi_nre_integration.ipynb`).
+2. **ONNX loader hardening**: `onnx2jax` now rejects ONNX graphs with dynamic/symbolic input dimensions (enforcing the single-trial + `jax.vmap` contract), and raises a clear error when JAX x64 is disabled and a graph carries int64 constants that would be truncated (guarding against silent likelihood corruption from flow-export sentinels). Applies across all ONNX exporters (LANfactory, BayesFlow, sbi).
+
+### 0.3.0
+
+This version includes the following changes:
+
+1. Support for **choice-only models**: the HSSM class, data validator, distributions, and model configs now handle models without reaction times, including a softmax likelihood family.
+2. **Racing Diffusion Model (RDM3)**: analytical likelihood, model configuration, and tests for a 3-choice RDM, with safe negative-RT handling and JAX backend support.
+3. **Poisson Race model**: initial implementation of the Poisson race model.
+4. **Hidden Markov Model (HMM-SSM)** example notebook.
+5. **BayesFlow LRE integration** through HSSM for likelihood ratio estimation.
+6. **RLSSM config system**: new `RLSSMConfig` and `BaseModelConfig` classes with comprehensive validation, plus a generalized RL likelihood builder supporting multiple computed parameters.
+7. New tutorials: choice-only modeling, first HMM-SSM example, and updated existing tutorials.
+8. `DataValidator` refactored to `DataValidatorMixin` for improved extensibility.
+9. Bug fixes: default prior assignment, dimensionality errors with Bambi 0.17.0, negative-RT checks on missing data, flaky tests.
+10. Infrastructure: Python 3.13 support, restructured CI test workflows with coverage reporting, updated `model.sample()` API to match Bambi conventions.
+
+### 0.2.12
+
+This version includes the following changes:
+
+1. Compatibility with Python 3.13 and Bambi 0.17.1+.
+2. A new `make_distribution_for_supported_model` convenience function for creating `pm.Distribution`.
+3. Bug fix for default prior assignment.
+4. Initial private implementations of RLSSM features.
+5. Added disaggregation of quantile computation by grouping of choice.
+
+### 0.2.11
+
+This version include the following:
+
+1. Simplification of simulator logic inside HSSM random variables (see the `ssm-simulators` `0.11.3` release as well)
+2. Plotting functions now allow `prior_predictive` plots wherever suitable.
+3. A new tutorial on using [bayeux](https://github.com/jax-ml/bayeux) for sampling
+4. Consolidated `plotting` tutorial
+5. New tutorial on how to use the `do-operator` from PyMC to control forward simulations
+
+### 0.2.8
+
+This version of HSSM incorporated the following changes:
+
+1. Addition of tutorials for RLSSM paradigms.
+2. Restructure `rldm.py` to make it more template-based to allow easy introduction of new models.
+
+### 0.2.7
+
+This version of HSSM incorporated the following changes:
+
+1. Bugfix in `mkdocs.yml`. No tutorial notebooks should be actively executed when re-building docs.
+
+### 0.2.6
+
+This version of HSSM incorporated the following changes:
+
+1. Overhaul of our development infrastructure to depend on `uv`
+2. Addition of various new tutorials (highlight: how to fit RL+SSM models)
+3. New `rldm` likelihoods
+4. Major internal refactor (e.g. `DataValidator` class for pre-processing)
+
+### 0.2.5
+
+This version of HSSM incorporated the following changes:
+
+1. We added a new tutorial on how to use custom likelihood functions with HSSM.
+2. Added convenience function `compile_logp()` to return a compiled log-likelihood function to be used freely downstream.
+3. Some improvements to internals to allow for (1.)
+4. Major improvments to plotting with `model_cartoon_plots()`
+5. Refactoring and minor improvements to pre-existing plots
+6. Added functionality to save and load models with `save_model()` and `load_model()`.
+
+### 0.2.4
+
+This version of HSSM incorporated the following changes:
+
+1. We updated HSSM to be compatible with the major API changes in `bambi` v0.14.0.
+2. We fixed various graphing issues in `pymc` 5.16.0+, thanks to the API changes in `bambi`.
+3. We added variational inference via native `pymc`.
+4. We can now use `float64` inference.
+5. We fixed some minor bugs in providing initial values.
+6. We added a model.dic() convenience function.
+7. We added a model.restore_traces() convenience function.
+8. Other minor bug fixes.
+
+### 0.2.3
+
+This is a maintenance release of HSSM, mainly to add a version constraint on `bambi` in light of the many breaking changes that version `0.1.4` introduces. This version also improved compatibility with `PyMC>=5.15` and incorporated minor bug fixes:
+
+1. We incorporated a temporary fix to graphing which broke after `PyMC>=5.15`.
+2. We deprecated `ndim` and `ndim_supp` definition in `SSMRandomVariable` in `PyMC>-5.16`.
+3. We fixed a bug that prevents new traces from being returned if `model.sample()` is called again.
+
+### 0.2.2
+
+HSSM is now on Conda! We now recommend installing HSSM through `conda install -c conda-forge hssm`. For advanced users, we also support installing the GPU version of JAX through `pip install hssm[cuda12]`.
+
+This version incorporates various bug fixes:
+
+1. We fixed a major bug that causes divergences for models using `approx_differentiable` and `blackbox` likelihoods. We are still looking into the issues of divergence with `analytical` likelihoods.
+2. We made the model creation process more robust, fixing errors when categorical variables are used with group identifiers.
+3. We updated the codebase according to the deprecations in higher versions of JAX.
+4. We implemented a temporary fix to an issue that might cause the kernel to die due to OOM.
 
 ### 0.2.1
 
@@ -9,11 +303,16 @@ We added a few new features in 0.2.1:
 1. We have finished updating the HSSM code base to support go-nogo data and deadline. We will provide documentation once the networks are added to our huggingface repo.
 2. We updated `hssm.distribution_utils` to streamline the creation of `pm.Distribution`s.
 3. We now support response variables other than `rt` and `response`. They can be specified through `model_config` via the new `response` field.
+4. We have fixed some of the issues with convergence when using `log-logit` link functions and/or safe priors.
 
 Other minor updates
 
 - Fixed an incompatible shape error during posterior predictive sampling when `p_outlier` is estimated as a parameter.
 - Updated documentation for using `make_distribution` with PyMC.
+
+Bug fixes:
+
+- Fixed default list of parameters for `ddm_full` model and the bounds for `ddm_sdv` model.
 
 ### 0.2.0
 
@@ -30,7 +329,7 @@ be thrown.
 - Added `link_settings` and `prior_settings` arguments to `hssm.HSSM`, which allows HSSM
   to use intelligent default priors and link functions for complex hierarchical models.
 
-- Added an `hssm.plotting` submodule with `plot_posterior_predictive()` and
+- Added an `hssm.plotting` submodule with `plot_predictive()` and
   `plot_quantile_probability` for creating posterior predictive plots and quantile
   probability plots.
 

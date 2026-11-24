@@ -1,9 +1,59 @@
+"""Tests for HSSM posterior-predictive sampling."""
+
+import numpy as np
+import pandas as pd
+import pytest
+import xarray as xr
+
 import hssm
 
 hssm.set_floatX("float32")
 
+# Full-posterior cases run on a thinned copy of the cavanagh fixture: predicting
+# over all 500 draws dominated this file's runtime, and the assertions only check
+# draw counts. 20 draws still gives safe_mode two chunks of 10.
+THIN_DRAWS = 20
 
-def test_sample_posterior_predictive(cav_idata, cavanagh_test):
+PARAMETER_NAMES = "fixture,draws,safe_mode,inplace"
+PARAMETER_GRID = [
+    ("cav_dt", 1, False, False),
+    ("cav_dt", 1, True, False),
+    # ("cav_dt_thin", None, False, False), # slow test...
+    ("cav_dt_thin", None, True, False),
+    # ("cav_dt", 50, False, False),
+    ("cav_dt", 50, True, False),
+    # ("cav_dt_thin", np.arange(THIN_DRAWS), False, False), # very slow to test
+    ("cav_dt_thin", np.arange(THIN_DRAWS), True, False),
+    ("cav_dt", 1, False, True),
+    ("cav_dt", 1, True, True),
+    # ("cav_dt_thin", None, False, True), # very slow to test
+    ("cav_dt_thin", None, True, True),
+    ("cav_dt", 50, False, True),
+    ("cav_dt", 50, True, True),
+    ("cav_dt", np.arange(50), False, True),
+    ("cav_dt_thin", np.arange(THIN_DRAWS), True, True),
+    ("cav_dt", [1, 2, 3, 4, 5], False, False),
+    ("cav_dt", [1, 2, 3, 4, 5], True, False),
+    ("cav_dt", [1, 2, 3, 4, 5], False, True),
+    ("cav_dt", [1, 2, 3, 4, 5], True, True),
+]
+
+
+@pytest.fixture
+def cav_dt_thin(cav_dt):
+    """Return the Cavanagh idata thinned to its first ``THIN_DRAWS`` draws."""
+    return cav_dt.isel(
+        draw=slice(0, THIN_DRAWS),  # Take only the first THIN_DRAWS draws
+        missing_dims="ignore",  # Ignore any dimensions that are missing in the selection
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
+def test_sample_posterior_predictive(
+    request, cavanagh_test, fixture, draws, safe_mode, inplace
+):
+    """Test sample_posterior_predictive method."""
     model = hssm.HSSM(
         data=cavanagh_test,
         include=[
@@ -13,30 +63,152 @@ def test_sample_posterior_predictive(cav_idata, cavanagh_test):
                     "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
                     "theta": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
                 },
-                "formula": "v ~ (1|participant_id) + theta",
+                "formula": "v ~ theta + (1|participant_id)",
                 "link": "identity",
             },
         ],
     )  # Doesn't matter what model or data we use here
-    delattr(cav_idata, "posterior_predictive")
-    cav_idata_copy = cav_idata.copy()
+    cav_dt = request.getfixturevalue(fixture)
+    if "posterior_predictive" in cav_dt:
+        del cav_dt["posterior_predictive"]
+    cav_dt_copy = cav_dt.copy()
 
     posterior_predictive = model.sample_posterior_predictive(
-        idata=cav_idata_copy, n_samples=1, inplace=False
+        dt=cav_dt_copy, draws=draws, safe_mode=safe_mode, inplace=inplace
     )
-    assert posterior_predictive.posterior_predictive.draw.size == 1
-    assert "posterior_predictive" not in cav_idata_copy
 
-    model.sample_posterior_predictive(idata=cav_idata_copy, n_samples=1, inplace=True)
-    assert cav_idata_copy.posterior_predictive.draw.size == 1
-    assert cav_idata_copy.posterior.draw.size == 500
+    if draws is None:
+        size = cav_dt.posterior.draw.size
+    elif isinstance(draws, int):
+        size = draws
+    elif isinstance(draws, np.ndarray):
+        size = draws.size
+    elif isinstance(draws, list):
+        size = len(draws)
+    else:
+        raise ValueError("draws must be int, None, np.ndarray, or list")
 
-    model._inference_obj = cav_idata
-    posterior_predictive = model.sample_posterior_predictive(n_samples=1, inplace=False)
+    try:
+        if inplace:
+            assert "posterior_predictive" in cav_dt_copy
+            assert cav_dt_copy.posterior_predictive.draw.size == size
+        else:
+            assert posterior_predictive is not None
+            assert "posterior_predictive" not in cav_dt_copy
+            assert posterior_predictive.posterior_predictive.draw.size == size
+    except AssertionError:
+        raise
 
-    assert posterior_predictive.posterior_predictive.draw.size == 1
-    assert "posterior_predictive" not in cav_idata
 
-    model.sample_posterior_predictive(n_samples=1, inplace=True)
-    assert cav_idata.posterior_predictive.draw.size == 1
-    assert cav_idata.posterior.draw.size == 500
+@pytest.mark.parametrize("safe_mode", [True, False])
+def test_sample_posterior_predictive_random_seed(cav_dt, cavanagh_test, safe_mode):
+    """The same random_seed gives the same draws; another seed does not."""
+    model = hssm.HSSM(
+        data=cavanagh_test,
+        include=[{"name": "v", "formula": "v ~ theta + (1|participant_id)"}],
+    )
+    if "posterior_predictive" in cav_dt:
+        del cav_dt["posterior_predictive"]
+
+    def simulate(seed):
+        # 12 draws make two chunks in safe mode
+        result = model.sample_posterior_predictive(
+            dt=cav_dt.copy(),
+            draws=12,
+            safe_mode=safe_mode,
+            inplace=False,
+            random_seed=seed,
+        )
+        return result["posterior_predictive"]["rt,response"].values
+
+    np.testing.assert_array_equal(simulate(1), simulate(1))
+    assert not np.array_equal(simulate(1), simulate(2))
+
+
+def test_sample_posterior_predictive_uses_attached_traces_for_response_params(
+    data_ddm, minimal_posterior_datatree, monkeypatch
+):
+    """Response-parameter prediction delegates with attached traces by default."""
+    model = hssm.HSSM(data=data_ddm)
+    traces = minimal_posterior_datatree()
+    expected = traces.copy(deep=True)
+    model._inference_obj = traces
+    calls = []
+
+    def fake_predict(dt, kind, data, inplace, include_group_specific):
+        calls.append((dt, kind, data, inplace, include_group_specific))
+        return expected
+
+    monkeypatch.setattr(model.model, "predict", fake_predict)
+
+    result = model.sample_posterior_predictive(
+        kind="response_params",
+        inplace=False,
+        include_group_specific=False,
+    )
+
+    assert result is expected
+    assert len(calls) == 1
+    assert calls[0][0] is traces
+    assert calls[0][1:] == ("response_params", None, False, False)
+
+
+def test_sample_posterior_predictive_replaces_existing_group_inplace(
+    caplog, data_ddm, minimal_posterior_datatree, monkeypatch
+):
+    """An explicit in-place prediction removes stale draws before replacement."""
+    model = hssm.HSSM(data=data_ddm)
+    traces = minimal_posterior_datatree(include_posterior_predictive=True)
+    replacement = xr.Dataset(
+        {"prediction": (("chain", "draw"), np.array([[1.0, 2.0]]))},
+        coords={"chain": [0], "draw": [0, 1]},
+    )
+    calls = []
+
+    def fake_predict(dt, kind, data, inplace, include_group_specific):
+        calls.append((dt, kind, data, inplace, include_group_specific))
+        assert "posterior_predictive" not in dt
+        dt["posterior_predictive"] = replacement
+
+    monkeypatch.setattr(model.model, "predict", fake_predict)
+
+    result = model.sample_posterior_predictive(
+        dt=traces,
+        kind="response_params",
+        inplace=True,
+    )
+
+    assert result is None
+    assert len(calls) == 1
+    assert calls[0][0] is traces
+    assert calls[0][1:] == ("response_params", None, True, True)
+    np.testing.assert_array_equal(
+        traces["posterior_predictive"]["prediction"].values,
+        np.array([[1.0, 2.0]]),
+    )
+    assert "pre-existing posterior_predictive group deleted" in caplog.text
+
+
+@pytest.mark.parametrize("model", ["ddm", "softmax_inv_temperature_2"])
+def test_posterior_predictive_with_p_outlier_regression(model):
+    """A trial-wise ``p_outlier`` alone still gives one draw per trial.
+
+    A regression on any other parameter hides a missing broadcast (#1416), so
+    every other parameter stays intercept-only.
+    """
+    rng = np.random.default_rng(0)
+    if model == "ddm":
+        theta = {"v": 0.5, "a": 1.5, "z": 0.5, "t": 0.3}
+        data = hssm.simulate_data(model="ddm", theta=theta, size=100, random_state=1)
+    else:
+        data = pd.DataFrame({"response": rng.choice([-1, 1], size=100)})
+    hssm_model = hssm.HSSM(
+        data=data.assign(x=rng.normal(size=100)),
+        model=model,
+        p_outlier={"formula": "p_outlier ~ 1 + x", "link": "logit"},
+    )
+    hssm_model.sample(draws=10, tune=10, chains=1, cores=1, progressbar=False)
+
+    hssm_model.sample_posterior_predictive(draws=5)
+
+    assert hssm_model.traces["posterior_predictive"].sizes["__obs__"] == 100

@@ -6,36 +6,39 @@ generation ops.
 """
 
 import logging
+from collections.abc import Callable, Sequence
 from os import PathLike
-from pathlib import Path
-from typing import Any, Callable, Literal, Type
+from typing import Any, Literal, Protocol, cast, get_args
 
 import bambi as bmb
 import numpy as np
-import onnx
 import pymc as pm
 import pytensor
 import pytensor.tensor as pt
 from bambi.backend.utils import get_distribution_from_prior
-from numpy.typing import ArrayLike
 from pytensor.tensor.random.op import RandomVariable
-from ssms.basic_simulators.simulator import simulator
-from ssms.config import model_config as ssms_model_config
+from ssms.config import get_model_registry
+from ssms.hssm_support import (
+    get_simulator_fun_internal,
+    validate_simulator_fun,
+)
+from ssms.hssm_support import rng_fn as ssms_rng_fn
 
-from ..utils import download_hf
+from .._types import LogLikeFunc, LoglikKind, NDTEdgeShift, SupportedModels
 from .blackbox import make_blackbox_op
+from .jax import make_jax_logp_funcs_from_callable, make_jax_logp_ops
 from .onnx import (
     make_jax_logp_funcs_from_onnx,
-    make_jax_logp_ops,
-    make_pytensor_logp,
+    make_pytensor_logp_from_onnx,
 )
-
-LogLikeFunc = Callable[..., ArrayLike]
-LogLikeGrad = Callable[..., ArrayLike]
+from .onnx_utils.model import load_onnx_model
 
 _logger = logging.getLogger("hssm")
 
-LOGP_LB = pm.floatX(-66.1)
+# The placeholder `rt` value that marks missing-RT and omission (deadline) rows.
+MISSING_RT = -999.0
+
+LOGP_LB = -66.1  # a Python float takes the graph's dtype (see likelihoods.analytical)
 
 
 def apply_param_bounds_to_loglik(
@@ -63,7 +66,10 @@ def apply_param_bounds_to_loglik(
     """
     dist_params_dict = dict(zip(list_params, dist_params))
 
-    bounds = {k: (pm.floatX(v[0]), pm.floatX(v[1])) for k, v in bounds.items()}
+    bounds = {
+        k: (pm.pytensorf.floatX(v[0]), pm.pytensorf.floatX(v[1]))
+        for k, v in bounds.items()
+    }
     out_of_bounds_mask = pt.zeros_like(logp, dtype=bool)
 
     for param_name, param in dist_params_dict.items():
@@ -85,11 +91,12 @@ def apply_param_bounds_to_loglik(
 # AF-TODO: define clip params
 
 
-def ensure_positive_ndt(data, logp, list_params, dist_params):
-    """Ensure that the non-decision time is always positive.
-
-    Replaces the log probability of the model with a lower bound if the non-decision
-    time is not positive.
+def ensure_positive_ndt(
+    data: Any,
+    logp: Any,
+    lower_edge: Any,
+) -> pt.TensorVariable:
+    """Floor the log-likelihood of response times outside the model's support.
 
     Parameters
     ----------
@@ -97,92 +104,220 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
         A two-column numpy array with response time and response.
     logp
         The log-likelihoods.
-    list_params
-        A list of parameters that the log-likelihood accepts. The order of the
-        parameters in the list will determine the order in which the parameters
-        are passed to the log-likelihood function.
-    dist_params
-        A list of parameters used in the likelihood computation. The parameters
-        can be both scalars and arrays.
+    lower_edge
+        The fastest response time the model admits, as a scalar or a trial-wise
+        tensor. See :func:`_ndt_lower_edge` for how it is resolved.
 
     Returns
     -------
-    float
-        The log-likelihood of the model.
+    pt.TensorVariable
+        The log-likelihoods, with LOGP_LB substituted for responses at or below
+        the support edge; missing responses (-999.0) are left alone.
     """
     rt = data[:, 0]
 
-    if "t" not in list_params:
-        return logp
-
-    t = dist_params[list_params.index("t")]
+    # Skip the check for missing data (encoded as -999.0)
+    missing_mask = pt.eq(rt, MISSING_RT)
 
     return pt.where(
         # consistent with the epsilon in the analytical likelihood
-        rt - t <= 1e-15,
+        pt.bitwise_and(rt - lower_edge <= 1e-15, pt.bitwise_not(missing_mask)),
         LOGP_LB,
         logp,
     )
 
 
-def make_ssm_rv(
-    model_name: str, list_params: list[str], lapse: bmb.Prior | None = None
-) -> Type[RandomVariable]:
+def _ndt_lower_edge(
+    list_params: list[str],
+    dist_params: Sequence[Any],
+    ndt_edge_shift: NDTEdgeShift | None,
+) -> Any | None:
+    """Resolve the lower edge of the response-time support.
+
+    This is the one place that reads the ``"t"`` naming convention for the
+    non-decision time and a likelihood's ``ndt_edge_shift`` declaration; the
+    guard in :func:`ensure_positive_ndt` knows no parameter names.
+
+    Parameters
+    ----------
+    list_params
+        A list of parameters that the log-likelihood accepts, in the order of
+        ``dist_params``.
+    dist_params
+        The distribution parameters, scalars or trial-wise tensors.
+    ndt_edge_shift
+        The likelihood's declaration of which parameter shifts the edge and by
+        how much: the support starts at ``t - scale * <param>``. ``None`` keeps
+        the edge at ``t``.
+
+    Returns
+    -------
+    tensor or None
+        The lower edge, or ``None`` when ``t`` is not among the parameters, in
+        which case no floor applies.
+    """
+    if "t" not in list_params:
+        return None
+
+    t = dist_params[list_params.index("t")]
+
+    if ndt_edge_shift is None:
+        return t
+
+    shift_param = dist_params[list_params.index(ndt_edge_shift["param"])]
+
+    return t - pm.pytensorf.floatX(ndt_edge_shift["scale"]) * shift_param
+
+
+class _RandomVariable(Protocol):  # for mypy
+    _list_params: list[str]
+    _lapse: bmb.Prior | float | None
+
+
+def _extract_size(args, kwargs):
+    """Extract size from args and kwargs.
+
+    Returns
+    -------
+    size : int
+        The size of the random sample to generate.
+    args : tuple
+        The original arguments, with size removed if it was present.
+    kwargs : dict
+        The original keyword arguments, with size removed if it was present.
+    """
+    if "size" in kwargs:
+        size = kwargs.pop("size")
+    else:
+        size = args[-1]
+        args = args[:-1]
+
+    if size is None:
+        size = 1
+
+    return size, args, kwargs
+
+
+def _create_arg_arrays(cls: type[_RandomVariable], args: tuple) -> list[np.ndarray]:
+    """
+    Create argument arrays from input arguments.
+
+    Parameters
+    ----------
+    cls : type
+        The class containing `_list_params`.
+    args : tuple
+        Input arguments.
+
+    Returns
+    -------
+    list of np.ndarray
+        List of argument arrays.
+    """
+    num_params = len(cls._list_params)
+    n_args = min(num_params, len(args))
+    arg_arrays = [np.asarray(arg) for arg in args[:n_args]]
+    return arg_arrays
+
+
+def _get_p_outlier(cls: type[_RandomVariable], arg_arrays):
+    """Get p_outlier from arg_arrays and update arg_arrays."""
+    list_params = cls._list_params
+    p_outlier = None
+    if list_params and list_params[-1] == "p_outlier":
+        p_outlier = arg_arrays.pop(-1)
+    return p_outlier, arg_arrays
+
+
+def make_hssm_rv(
+    simulator_fun: Callable | str,
+    list_params: list[str],
+    lapse: bmb.Prior | float | None = None,
+    is_choice_only: bool = False,
+) -> type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
 
     Parameters
     ----------
-    model_name
-        The name of the model. If the `model_name` is not one of the supported
-        models in the `ssm_simulators` package, a warning will be raised, and any
-        attempt to sample from the RandomVariable will result in an error.
+    simulator_fun
+        A simulator function with the `model_name` and `choices` attributes.
     list_params
         A list of str of all parameters for this `RandomVariable`.
     lapse : optional
         A bmb.Prior object representing the lapse distribution.
+    is_choice_only : bool
+        Whether the model is a choice-only model.
 
     Returns
     -------
-    Type[RandomVariable]
+    type[RandomVariable]
         A class of RandomVariable that are to be used in a `pm.Distribution`.
     """
-    if model_name not in ssms_model_config:
-        _logger.warning(
-            "You supplied a model '%s', which is currently not supported in "
-            + "the ssm_simulators package. An error will be thrown when sampling from "
-            + "the random variable or when using any "
-            + "posterior or prior predictive sampling methods.",
-            model_name,
-        )
+    simulator_fun_internal = get_simulator_fun_internal(simulator_fun)
+    model_name, choices, obs_dim_int = validate_simulator_fun(simulator_fun_internal)
+
+    # ssm-simulators up to 0.16.0 reports its fallback choices [0, 1, 2] for a
+    # model registered after import. Lapse responses are drawn from `choices`,
+    # so a model named by a string takes its own from the live registry.
+    if isinstance(simulator_fun, str):
+        registry = get_model_registry()
+        if registry.has_model(simulator_fun):
+            choices = registry.get(simulator_fun).get("choices", choices)
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
 
     # pylint: disable=W0511, R0903
-    class SSMRandomVariable(RandomVariable):
-        """SSM random variable."""
+    class HSSMRV(RandomVariable):
+        """HSSMRV random variable.
 
-        name: str = "SSM_RV"
-        # to get around the support checking in PyMC that would result in error
-        ndim_supp: int = 1
+        The class attributes below are deliberately NOT type-annotated. On
+        Python 3.14, class-body annotations generate a PEP 649
+        ``__annotate_func__`` whose closure references the class namespace —
+        including ABCMeta's unpicklable ``_abc_impl`` (``HSSMRV``'s metaclass
+        chain is rooted in ``ABCMeta`` via pytensor's ``MetaType``). This
+        dynamic ``<locals>`` class is pickled by value by numba's vendored
+        cloudpickle whenever the numba backend object-mode-lifts an RV
+        ``perform`` (posterior/prior predictive sampling), and that vendored
+        cloudpickle cannot serialize the annotate function:
+        ``TypeError: cannot pickle '_abc._abc_data' object``. Plain
+        assignments create no ``__annotate_func__`` and pickle cleanly.
+        Types, for reference: ``name``/``signature``/``dtype``: ``str``;
+        ``_print_name``: ``tuple[str, str]``; ``_extra_fields``: ``dict | None``.
+        """
 
-        ndims_params: list[int] = [0 for _ in list_params]
-        dtype: str = "floatX"
-        _print_name: tuple[str, str] = ("SSM", "\\operatorname{SSM}")
+        name = model_name + "_RV"
+        # New in PyMC 5.16+: instead of using `ndims_supp`, we use `signature` to define
+        # the signature of the random variable. The string to the left of the `->` sign
+        # describes the input signature, which is `()` for each parameter, meaning each
+        # parameter is a scalar. The string to the right of the
+        # `->` sign describes the output signature, which is `(2)`, which means the
+        # random variable is a length-2 array.
+
+        # Override the output from ssm_simulator based on whether the model is
+        # choice-only.
+        output = "()" if is_choice_only else f"({obs_dim_int})"
+        signature = f"{','.join(['()'] * len(list_params))}->{output}"
+
+        dtype = "floatX"
+        _print_name = ("SSM", "\\operatorname{SSM}")
         _list_params = list_params
         _lapse = lapse
-
-        # PyTensor, as of version 2.12, enforces a check to ensure that
-        # at least one parameter has the same ndims as the support.
-        # This overrides that check and ensures that the dimension checks are correct.
-        # For more information, see this issue
-        # https://github.com/lnccbrown/HSSM/issues/36
-        def _supp_shape_from_params(*args, **kwargs):
-            return (2,)
+        # Optional per-inference covariates forwarded to the simulator so the
+        # generative path (posterior/prior predictive) can condition on observed
+        # per-trial inputs — e.g. aDDM fixations. Populated on the RV class at PPC
+        # time (see aDDM._update_extra_fields); ``None`` keeps every existing
+        # model's generative path byte-for-byte unchanged (a plain **{} splat).
+        _extra_fields = None
 
         # pylint: disable=arguments-renamed,bad-option-value,W0221
         # NOTE: `rng` now is a np.random.Generator instead of RandomState
         # since the latter is now deprecated from numpy
+
+        # AF-TODO: I think the doc-string about sizes is too confusing.
+        # We are missing the separation of concepts between the
+        # `size` argument that is passed
+        # and the parameter vector shapes that are passed?
         @classmethod
         def rng_fn(
             cls,
@@ -191,21 +326,6 @@ def make_ssm_rv(
             **kwargs,
         ) -> np.ndarray:
             """Generate random variables from this distribution.
-
-            Parameters
-            ----------
-            rng
-                A `np.random.Generator` object for random state.
-            args
-                Unnamed arguments of parameters, in the order of `_list_params`, plus
-                the last one as size.
-            kwargs
-                Other keyword arguments passed to the ssms simulator.
-
-            Returns
-            -------
-            np.ndarray
-                An array of `(rt, response)` generated from the distribution.
 
             Note
             ----
@@ -232,139 +352,299 @@ def make_ssm_rv(
             # First figure out what the size specified here is
             # Since the number of unnamed arguments is undetermined,
             # we are going to use this hack.
-            if "size" in kwargs:
-                size = kwargs.pop("size")
-            else:
-                size = args[-1]
-                args = args[:-1]
+            requested_size = kwargs.get("size", args[-1])
+            size, args, kwargs = _extract_size(args, kwargs)
+            arg_arrays = _create_arg_arrays(cls, args)
+            param_shapes = [arr.shape for arr in arg_arrays]
+            p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
 
-            if size is None:
-                size = 1
+            # A trial-wise p_outlier (a p_outlier regression) needs one simulated
+            # trial per p_outlier value, even when the model parameters are scalar.
+            if p_outlier is not None and p_outlier.size > 1:
+                batch_shape = np.broadcast_shapes(*param_shapes)
+                arg_arrays = [np.broadcast_to(arr, batch_shape) for arr in arg_arrays]
 
-            # Although we got around the ndims_supp issue, the size parameter passed
-            # here is still an array with one element. We need to take it out.
-            if not np.isscalar(size):
-                size = np.squeeze(size)
+            # Forward observed per-trial covariates to the simulator when the RV
+            # has been given them (covariate-conditioned PPC); a no-op otherwise.
+            if cls._extra_fields is not None:
+                kwargs.setdefault("extra_fields", cls._extra_fields)
 
-            num_params = len(cls._list_params)
-
-            # TODO: We need to figure out what to do with extra_fields when
-            # doing posterior predictive sampling. Right now nothing is done.
-            if num_params < len(args):
-                arg_arrays = [np.asarray(arg) for arg in args[:num_params]]
-            else:
-                arg_arrays = [np.asarray(arg) for arg in args]
-
-            p_outlier = None
-
-            if cls._list_params[-1] == "p_outlier":
-                p_outlier = arg_arrays.pop(-1)
-
-            iinfo32 = np.iinfo(np.uint32)
-            seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
-
-            params = (
-                cls._list_params[:-1]
-                if cls._list_params[-1] == "p_outlier"
-                else cls._list_params
-            )
-
-            if params != ssms_model_config[model_name]["params"]:
-                raise ValueError(
-                    f"The list of parameters in `list_params` {params} "
-                    + "is different from the model config in SSM Simulators "
-                    + f"({ssms_model_config[model_name]['params']})."
-                )
-
-            is_all_scalar = all(arg.size == 1 for arg in arg_arrays)
-
-            if is_all_scalar:
-                # All parameters are scalars
-
-                theta = np.stack(arg_arrays)
-                n_samples = size
-            else:
-                # Preprocess all parameters, reshape them into a matrix of dimension
-                # (size, n_params) where size is the number of elements in the largest
-                # of all parameters passed to *arg
-
-                elem_max_size = np.argmax([arg.size for arg in arg_arrays])
-                max_shape = arg_arrays[elem_max_size].shape
-
-                new_data_size = max_shape[-1]
-
-                theta = np.column_stack(
-                    [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
-                )
-
-                if size is None or size == 1:
-                    n_samples = 1
-                elif size % new_data_size != 0:
-                    raise ValueError(
-                        "`size` needs to be a multiple of the size of data"
-                    )
-                else:
-                    n_samples = size // new_data_size
-
-            sim_out = simulator(
-                theta=theta,
-                model=model_name,
-                n_samples=n_samples,
-                random_state=seed,
+            sims_out = ssms_rng_fn(
+                arg_arrays,
+                size,
+                rng,
+                simulator_fun_internal,
+                obs_dim_int,
+                *args,
                 **kwargs,
             )
 
-            sims_out = np.column_stack([sim_out["rts"], sim_out["choices"]])
+            # ssm-simulators returns (rt, response) pairs; keep only the response.
+            if is_choice_only and obs_dim_int > 1:
+                sims_out = sims_out[..., -1]
 
-            if not is_all_scalar:
-                sims_out = sims_out.reshape(
-                    (*max_shape[:-1], max_shape[-1] * n_samples, 2)
+            # With all-scalar parameters ssm-simulators squeezes a single draw's
+            # batch axis away; restore the batch shape PyMC expects.
+            if all(arr.size == 1 for arr in arg_arrays):
+                batch_shape = (
+                    np.broadcast_shapes(*param_shapes)
+                    if requested_size is None
+                    else tuple(np.atleast_1d(requested_size))
                 )
+                support_shape = () if is_choice_only else (obs_dim_int,)
+                sims_out = sims_out.reshape(batch_shape + support_shape)
 
-            if p_outlier is not None:
-                assert cls._lapse is not None, (
-                    "You have specified `p_outlier`, the probability of the lapse "
-                    + "distribution but did not specify the distribution."
-                )
-                out_shape = sims_out.shape[:-1]
-                if not np.isscalar(p_outlier) and len(p_outlier.shape) > 0:
-                    if p_outlier.shape[-1] == 1:
-                        p_outlier = np.broadcast_to(p_outlier, out_shape)
-                    else:
-                        p_outlier = p_outlier.reshape(out_shape)
-                replace = rng.binomial(n=1, p=p_outlier, size=out_shape).astype(bool)
-                replace_n = int(np.sum(replace, axis=None))
-                if replace_n == 0:
-                    return sims_out
-                replace_shape = (*out_shape[:-1], replace_n)
-                replace_mask = np.stack([replace, replace], axis=-1)
-                n_draws = np.prod(replace_shape)
-                lapse_rt = pm.draw(
-                    get_distribution_from_prior(cls._lapse).dist(**cls._lapse.args),
-                    n_draws,
-                    random_seed=rng,
-                ).reshape(replace_shape)
-                lapse_response = rng.binomial(n=1, p=0.5, size=replace_shape)
-                lapse_response = np.where(lapse_response == 1, 1, -1)
-                lapse_output = np.stack(
-                    [lapse_rt, lapse_response],
-                    axis=-1,
-                )
-                np.putmask(sims_out, replace_mask, lapse_output)
+            sims_out = _apply_lapse_model(
+                sims_out=sims_out,
+                p_outlier=p_outlier,
+                rng=rng,
+                lapse_dist=cls._lapse,
+                choices=choices,
+                is_choice_only=is_choice_only,
+            )
 
             return sims_out
 
-    return SSMRandomVariable
+    return HSSMRV
+
+
+def _apply_lapse_model(
+    sims_out: np.ndarray,
+    p_outlier: np.ndarray | float | None,
+    rng: np.random.Generator,
+    lapse_dist: bmb.Prior | float | None,
+    choices: list,
+    is_choice_only: bool = False,
+) -> np.ndarray:
+    """Apply lapse model to the simulation output.
+
+    Parameters
+    ----------
+    sims_out : np.ndarray
+        The simulation output to apply lapse model to
+    p_outlier : np.ndarray | float
+        Probability of outlier/lapse for each trial
+    rng : np.random.Generator
+        Random number generator
+    lapse_dist : bmb.Prior
+        The lapse distribution to draw from
+    choices : list
+        List of possible choices
+    is_choice_only : bool
+        Whether `sims_out` holds responses only, without a reaction-time column.
+        Lapses then draw a uniformly random choice, matching the choice-only
+        lapse likelihood of 1 / n_choices.
+
+    Returns
+    -------
+    np.ndarray
+        The simulation output with lapse model applied
+    """
+    if p_outlier is None:
+        return sims_out
+
+    if lapse_dist is None:
+        raise ValueError(
+            "You have specified `p_outlier`, the probability of the lapse "
+            "distribution but did not specify the distribution."
+        )
+
+    if not is_choice_only and not isinstance(lapse_dist, bmb.Prior):
+        # A numeric `lapse` has no reaction-time distribution to draw lapse RTs
+        # from, so it cannot drive simulation via this RT/response path.
+        raise TypeError(
+            "Lapse simulation is not supported for models with reaction times "
+            f"and a numeric lapse ({lapse_dist!r}). Provide a `bmb.Prior` lapse "
+            "distribution to simulate lapses, or disable `p_outlier`."
+        )
+
+    out_shape = sims_out.shape if is_choice_only else sims_out.shape[:-1]
+
+    # Handle p_outlier shape/type to ensure consistent shape:
+    # - 0-dim numpy array (scalar array) -> convert to float
+    # - 1-dim array with single value -> broadcast to match output shape
+    # - n-dim array -> reshape to match output shape
+    # - Python scalar (float) -> fill array of output shape
+    if isinstance(p_outlier, np.ndarray):
+        if p_outlier.ndim == 0:  # scalar array
+            p_outlier = float(p_outlier)
+        elif p_outlier.shape[-1] == 1:  # vector with single value
+            p_outlier = np.broadcast_to(p_outlier, out_shape)
+        else:  # reshape to match output shape
+            p_outlier = p_outlier.reshape(out_shape)
+    else:  # p_outlier is a float/scalar
+        p_outlier = np.full(out_shape, p_outlier)
+
+    replace = rng.binomial(n=1, p=p_outlier, size=out_shape).astype(bool)
+    replace_n = int(np.sum(replace, axis=None))
+    if replace_n == 0:
+        return sims_out
+
+    if is_choice_only:
+        sims_out[replace] = rng.choice(choices, size=replace_n)
+        return sims_out
+
+    lapse_prior = cast("bmb.Prior", lapse_dist)  # numeric lapse rejected above
+
+    replace_shape = (*out_shape[:-1], replace_n)
+    replace_mask = np.stack([replace, replace], axis=-1)
+    n_draws = np.prod(replace_shape)
+    lapse_rt = cast(
+        "np.ndarray",
+        pm.draw(
+            get_distribution_from_prior(lapse_prior).dist(**lapse_prior.args),
+            n_draws,
+            random_seed=rng,
+        ),
+    ).reshape(replace_shape)
+
+    lapse_response = rng.choice(
+        choices,
+        p=1 / len(choices) * np.ones(len(choices)),
+        size=replace_shape,
+    )
+    lapse_output = np.stack(
+        [lapse_rt, lapse_response],
+        axis=-1,
+    )
+    np.putmask(sims_out, replace_mask, lapse_output)
+    return sims_out
+
+
+def _to_numpy(data: Any) -> np.ndarray:
+    """Evaluate a (constant) data tensor to a numpy array."""
+    if isinstance(data, pt.TensorVariable):
+        return np.asarray(data.eval())
+    return np.asarray(data)
+
+
+def _make_lapse_func(
+    lapse: float | bmb.Prior,
+    is_choice_only: bool,
+    has_deadline: bool,
+    n_choices: int | None,
+) -> Callable[[np.ndarray], np.ndarray]:
+    """Build the function that evaluates the per-row lapse term of the mixture.
+
+    The observation model is the mixture
+    ``f(rt, c) = (1 - p) * s(rt, c) + p * l(rt) * q(c)``, with ``s`` the SSM
+    likelihood, ``l`` the lapse RT distribution and ``q(c) = 1 / n_choices``.
+    Rows with ``rt == -999.0`` are not observed at their RT, so the lapse term
+    has to be marginalised in the same way as the SSM term
+    (see :func:`assemble_callables`):
+
+    - observed rows: ``log l(rt)`` (unchanged; see issue #1323 for ``q(c)``),
+    - missing-RT rows without a deadline (choice observed): ``-log(n_choices)``,
+    - omission rows with a deadline ``d`` in the last column:
+      ``log(1 - CDF_l(d))``.
+
+    Parameters
+    ----------
+    lapse
+        A ``bmb.Prior`` describing the lapse RT distribution, or a float for
+        choice-only models. The float enters the mixture as ``exp(lapse)``
+        without transformation; ``HSSMBase`` passes ``1 / n_choices`` (a
+        probability, not a log-probability), which is tracked in issue #1323.
+    is_choice_only
+        Whether the model is a choice-only model. Choice-only models keep the
+        historical behaviour: the lapse term is evaluated on the whole data.
+    has_deadline
+        Whether the last column of the data is the trial deadline.
+    n_choices
+        The number of response options, needed for missing-RT rows without a
+        deadline.
+
+    Returns
+    -------
+    Callable[[np.ndarray], np.ndarray]
+        A function mapping the full ``(n_obs, k)`` data matrix to an
+        ``(n_obs,)`` vector of per-row lapse log-terms.
+    """
+    if isinstance(lapse, float):
+        lapse_logp_func: Callable[[np.ndarray], np.ndarray] | None = None
+        lapse_logsf_func: Callable[[np.ndarray], np.ndarray] | None = None
+    else:
+        lapse_dist = get_distribution_from_prior(lapse).dist(**lapse.args)
+        data_vector = pt.dvector("lapse_rt")
+        lapse_logp_func = pytensor.function(
+            [data_vector], pm.logp(lapse_dist, data_vector)
+        )
+        lapse_logsf_func = None
+        if has_deadline and not is_choice_only:
+            deadline_vector = pt.dvector("lapse_deadline")
+            try:
+                lapse_logcdf = pm.logcdf(lapse_dist, deadline_vector)
+            except NotImplementedError as e:
+                raise ValueError(
+                    f"The lapse distribution `{lapse.name}` does not implement a "
+                    "log-CDF, which is required to marginalise the lapse "
+                    "process on omission (deadline) rows. Please choose a lapse "
+                    "distribution with a `logcdf` implementation in PyMC."
+                ) from e
+            # log(1 - CDF(d)), numerically safe for CDF close to 1.
+            lapse_logsf_func = pytensor.function(
+                [deadline_vector], pt.log1mexp(lapse_logcdf)
+            )
+
+    if is_choice_only:
+        if lapse_logp_func is None:
+            return lambda data: np.full_like(data, lapse)
+        return lapse_logp_func
+
+    def lapse_func(data: np.ndarray) -> np.ndarray:
+        data = np.asarray(data)
+        rt = np.asarray(data[:, 0], dtype=np.float64)
+        is_missing = rt == MISSING_RT
+        out = np.empty(rt.shape[0], dtype=np.float64)
+
+        if lapse_logp_func is None:
+            # Float lapse: a fixed log-probability per observed row.
+            if is_missing.any():
+                raise ValueError(
+                    "A float `lapse` cannot be combined with missing-RT or "
+                    "deadline rows (rt == -999.0): there is no lapse RT "
+                    "distribution to marginalise. Please provide the lapse as a "
+                    "`bmb.Prior`."
+                )
+            out[:] = lapse
+            return out
+
+        out[~is_missing] = lapse_logp_func(rt[~is_missing])
+
+        if is_missing.any():
+            if has_deadline:
+                assert lapse_logsf_func is not None
+                deadline = np.asarray(data[is_missing, -1], dtype=np.float64)
+                out[is_missing] = lapse_logsf_func(deadline)
+            else:
+                if n_choices is None:
+                    raise ValueError(
+                        "The data contains missing-RT rows (rt == -999.0) "
+                        "without a deadline, so the lapse process contributes "
+                        "1 / n_choices to those rows, but `n_choices` was not "
+                        "provided to `make_distribution`."
+                    )
+                out[is_missing] = -np.log(n_choices)
+
+        return out
+
+    return lapse_func
 
 
 def make_distribution(
-    rv: str | Type[RandomVariable],
+    rv: str | type[RandomVariable] | RandomVariable | Callable[..., Any],
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: list[str],
     bounds: dict | None = None,
-    lapse: bmb.Prior | None = None,
+    lapse: float | bmb.Prior | None = None,
     extra_fields: list[np.ndarray] | None = None,
-) -> Type[pm.Distribution]:
+    fixed_vector_params: dict[str, np.ndarray] | None = None,
+    params_is_trialwise: list[bool] | None = None,
+    is_choice_only: bool = False,
+    ndt_edge_shift: NDTEdgeShift | None = None,
+    n_choices: int | None = None,
+    has_deadline: bool = False,
+) -> type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
     Constructs a `pymc.Distribution` from a log-likelihood function and a
@@ -389,69 +669,187 @@ def make_distribution(
         A dictionary with parameters as keys (a string) and its boundaries as values.
         Example: {"parameter": (lower_boundary, upper_boundary)}.
     lapse : optional
-        A bmb.Prior object representing the lapse distribution.
+        A float or bmb.Prior object representing the lapse distribution.
     extra_fields : optional
         An optional list of arrays that are stored in the class created and will be
         used in likelihood calculation. Defaults to None.
+    fixed_vector_params : optional
+        A dictionary mapping parameter names to their fixed ``np.ndarray``
+        values.  These parameters are removed from Bayesian estimation:
+        Bambi receives a scalar ``0.0`` placeholder, and the real vector is
+        injected as a constant PyTensor tensor inside
+        ``HSSMDistribution.logp()``, replacing the placeholder at the
+        correct position in ``dist_params``.  Defaults to ``None``
+        (no fixed-vector parameters).
+    params_is_trialwise : optional
+        A list of booleans, one per parameter in ``list_params`` (plus extra
+        fields), indicating whether each parameter is trial-wise (i.e. should
+        be broadcast to ``(n_obs,)`` in the symbolic graph).  This ensures
+        that vmapped JAX log-likelihoods receive consistently shaped inputs,
+        regardless of whether Bambi produces ``(1,)`` or ``(n_obs,)`` tensors.
+        When ``None``, no graph-level broadcasting is applied.
+    is_choice_only : optional
+        Whether the model is a choice-only model.
+    ndt_edge_shift : optional
+        Declares which parameter shifts the lower edge of the response-time
+        support and by how much: the log-likelihood is floored at ``LOGP_LB``
+        for response times at or below ``t - scale * <param>``. ``None`` (the
+        default) keeps the edge at ``t``. Ignored when ``is_choice_only`` or
+        when ``"t"`` is not in ``list_params``.
+    n_choices : optional
+        The number of response options. Required when ``lapse`` is a
+        ``bmb.Prior`` and the data contains missing-RT rows (``rt == -999.0``)
+        without a deadline: the lapse process then contributes ``1 / n_choices``
+        (a uniform choice) to such rows. Defaults to ``None``.
+    has_deadline : optional
+        Whether the last column of the data holds a per-trial deadline. When
+        ``True``, rows with ``rt == -999.0`` are omissions and the lapse process
+        contributes its survival probability at the deadline,
+        ``1 - CDF_lapse(deadline)``. Defaults to ``False``.
 
     Returns
     -------
-    Type[pm.Distribution]
+    type[pm.Distribution]
         A pymc.Distribution that uses the log-likelihood function.
     """
-    random_variable = make_ssm_rv(rv, list_params, lapse) if isinstance(rv, str) else rv
+    if isinstance(rv, type) and issubclass(rv, RandomVariable):
+        rv_instance = rv()
+    elif not isinstance(rv, type) and isinstance(rv, RandomVariable):
+        rv_instance = rv
+    elif callable(rv):
+        random_variable = make_hssm_rv(
+            simulator_fun=cast("Callable[..., Any]", rv),
+            list_params=list_params,
+            lapse=lapse,
+            is_choice_only=is_choice_only,
+        )
+        rv_instance = random_variable()
+    elif isinstance(rv, str):
+        random_variable = make_hssm_rv(
+            simulator_fun=rv,
+            list_params=list_params,
+            lapse=lapse,
+            is_choice_only=is_choice_only,
+        )
+        rv_instance = random_variable()
+    else:
+        raise ValueError(f"rv is {rv}, which is not a valid type.")
+
+    extra_fields = [] if extra_fields is None else extra_fields
+
+    # Pre-build PyTensor tensors for fixed-vector params. These replace the
+    # scalar constants that Bambi provides, at the correct positions in the
+    # dist_params list inside logp().
+    _fixed_vector_substitutions: dict[int, pt.TensorVariable] = {}
+    if fixed_vector_params:
+        for name, vector in fixed_vector_params.items():
+            idx = list_params.index(name)
+            _fixed_vector_substitutions[idx] = pt.as_tensor_variable(
+                pm.pytensorf.floatX(vector)
+            )
 
     if lapse is not None:
         if list_params[-1] != "p_outlier":
             list_params.append("p_outlier")
 
-        data_vector = pt.dvector()
-        lapse_logp = pm.logp(
-            get_distribution_from_prior(lapse).dist(**lapse.args),
-            data_vector,
+        lapse_func = _make_lapse_func(
+            lapse,
+            is_choice_only=is_choice_only,
+            has_deadline=has_deadline,
+            n_choices=n_choices,
         )
-        lapse_func = pytensor.function(
-            [data_vector],
-            lapse_logp,
-        )
+    else:
+        lapse_func = None
 
-    class SSMDistribution(pm.Distribution):
+    class HSSMDistribution(pm.Distribution):
         """Wiener first-passage time (WFPT) log-likelihood for LANs."""
 
         # This is just a placeholder because pm.Distribution requires an rv_op
         # Might be updated in the future once
 
         # NOTE: rv_op is an INSTANCE of RandomVariable
-        rv_op = random_variable()
-        params = list_params
-        _extra_fields = extra_fields
+        rv_op = rv_instance
+        _params = list_params
 
         @classmethod
+        # PyMC idiom (cf. pm.Flat.dist): named params in, a list to super().dist.
+        # pyrefly: ignore[bad-override]
         def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
             dist_params = [
-                pt.as_tensor_variable(pm.floatX(kwargs[param])) for param in cls.params
+                pt.as_tensor_variable(pm.pytensorf.floatX(kwargs[param]))
+                for param in cls._params
             ]
-            if cls._extra_fields:
-                dist_params += [pm.floatX(field) for field in cls._extra_fields]
-            other_kwargs = {k: v for k, v in kwargs.items() if k not in cls.params}
+            other_kwargs = {k: v for k, v in kwargs.items() if k not in cls._params}
             return super().dist(dist_params, **other_kwargs)
 
         def logp(data, *dist_params):  # pylint: disable=E0213
-            # AF-TODO: Apply clipping here
+            """Calculate log probability of the data given the parameters.
 
-            num_params = len(list_params)
-            extra_fields = []
+            Parameters
+            ----------
+            data : array-like
+                The observed data
+            dist_params : tuple
+                Distribution parameters
 
-            if num_params < len(dist_params):
-                extra_fields = dist_params[num_params:]
-                dist_params = dist_params[:num_params]
+            Returns
+            -------
+            tensor
+                Log probability
+            """
+            # Substitute fixed-vector params for Bambi's scalar constants
+            if _fixed_vector_substitutions:
+                dist_params = tuple(
+                    _fixed_vector_substitutions.get(i, p)
+                    for i, p in enumerate(dist_params)
+                )
 
+            # Extract p_outlier before broadcasting (params_is_trialwise
+            # excludes p_outlier, so we must strip it first to align indices).
+            p_outlier = None
             if list_params[-1] == "p_outlier":
                 p_outlier = dist_params[-1]
                 dist_params = dist_params[:-1]
-                lapse_logp = lapse_func(data[:, 0].eval())
+
+            # Graph-level broadcast: ensure trialwise params have shape
+            # (n_obs,).  Bambi >= 0.17 produces (1,)-shaped tensors for
+            # intercept-only parent parameters.  The vmapped JAX
+            # log-likelihoods require all mapped inputs to share the same
+            # batch dimension.  Broadcasting here — in the symbolic graph
+            # — lets PyTensor handle gradient reduction for broadcast
+            # dimensions automatically, keeping the JAX Ops simple.
+            if params_is_trialwise is not None:
+                n_obs = data.shape[0]
+                dist_params = tuple(
+                    pt.broadcast_to(p, (n_obs,)) if params_is_trialwise[i] else p
+                    for i, p in enumerate(dist_params)
+                )
+
+            # The fastest response time the model admits; None when nothing is
+            # to be floored (choice-only models, or no non-decision time).
+            lower_edge = (
+                None
+                if is_choice_only
+                else _ndt_lower_edge(list_params, dist_params, ndt_edge_shift)
+            )
+
+            # AF-TODO: Apply clipping here
+            if p_outlier is not None:
+                if not callable(lapse_func):
+                    raise ValueError(
+                        "lapse_func is not defined. "
+                        "Make sure lapse is properly initialized."
+                    )
+                # The lapse term is a graph constant: it is evaluated once on
+                # the (constant) observed data, and p_outlier's gradient flows
+                # through the mixture weights only. In floatX: a float64
+                # constant would upcast a float32 graph.
+                lapse_logp = lapse_func(_to_numpy(data)).astype(pytensor.config.floatX)
+
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
+                if lower_edge is not None:
+                    logp = ensure_positive_ndt(data, logp, lower_edge)
                 logp = pt.log(
                     (1.0 - p_outlier) * pt.exp(logp)
                     + p_outlier * pt.exp(lapse_logp)
@@ -459,26 +857,91 @@ def make_distribution(
                 )
             else:
                 logp = loglik(data, *dist_params, *extra_fields)
+                if lower_edge is not None:
+                    logp = ensure_positive_ndt(data, logp, lower_edge)
 
             if bounds is not None:
                 logp = apply_param_bounds_to_loglik(
                     logp, list_params, *dist_params, bounds=bounds
                 )
 
-            # Ensure that non-decision time is always smaller than rt.
-            # Assuming that the non-decision time parameter is always named "t".
-            return ensure_positive_ndt(data, logp, list_params, dist_params)
+            return logp
 
-    return SSMDistribution
+    return HSSMDistribution
+
+
+def make_distribution_for_supported_model(
+    model: SupportedModels,
+    loglik_kind: LoglikKind = "analytical",
+    backend: Literal["pytensor", "jax", "other"] = "pytensor",
+    reg_params: list[str] | None = None,
+    lapse: bmb.Prior | None = None,
+    is_choice_only: bool = False,
+) -> type[pm.Distribution]:
+    """Make a pm.Distribution class for a supported model.
+
+    This is a convenience function that makes it easy to create a pm.Distribution
+    class that can be used for PyMC modeling.
+
+    Parameters
+    ----------
+    model
+        The name of the supported model.
+    loglik_kind: optional
+        The kind of the log-likelihood for the model. Must be one of "analytical",
+        "approx_differentiable", or "blackbox". Defaults to "analytical".
+    backend : optional
+        The backend to use for the log-likelihood function. Must be one of "pytensor",
+        "jax", or "other". Defaults to "pytensor".
+    reg_params: optional
+        A list of regression parameters, if any. If not specified, no regression
+        parameters are assumed.
+    lapse : optional
+        A bmb.Prior object representing the lapse distribution.
+    is_choice_only : optional
+        Whether the model is a choice-only model.
+    """
+    supported_models = get_args(SupportedModels)
+    if model not in supported_models:
+        raise ValueError(f"`model` must be one of {supported_models}, but got {model}.")
+
+    # Build loglik callable
+    # Lazy import to avoid circular imports
+    from ..config import Config
+
+    config = Config.from_defaults(model, loglik_kind)
+    params_is_reg = (
+        None
+        if reg_params is None
+        else [param in reg_params for param in config.list_params]
+    )
+    likelihood_callable = make_likelihood_callable(
+        loglik=config.loglik,
+        loglik_kind=loglik_kind,
+        backend=backend,
+        params_is_reg=params_is_reg,
+    )
+
+    # Build pm.Distribution
+    return make_distribution(
+        rv=model,
+        loglik=likelihood_callable,
+        list_params=config.list_params,
+        bounds=config.bounds,
+        lapse=lapse,
+        is_choice_only=is_choice_only,
+        ndt_edge_shift=config.ndt_edge_shift,
+    )
 
 
 def make_family(
-    dist: Type[pm.Distribution],
+    dist: type[pm.Distribution],
     list_params: list[str],
-    link: str | dict[str, bmb.families.Link],
+    link: str | dict[str, str | bmb.families.Link],
     parent: str = "v",
     likelihood_name: str = "SSM Likelihood",
     family_name="SSM Family",
+    is_choice_only: bool = False,
 ) -> bmb.Family:
     """Build a family in bambi.
 
@@ -496,6 +959,9 @@ def make_family(
         the name of the likelihood function. Defaults to "SSM Likelihood".
     family_name
         the name of the family. Defaults to "SSM Family".
+    is_choice_only : optional
+        Whether the model is choice-only. Choice-only draws have no (rt, response)
+        axis, so the family must not add one to the posterior predictive coords.
 
     Returns
     -------
@@ -506,12 +972,31 @@ def make_family(
         likelihood_name, parent=parent, params=list_params, dist=dist
     )
 
-    family = SSMFamily(family_name, likelihood=likelihood, link=link)
+    family_cls = OrderedFamily if is_choice_only else SSMFamily
+    family = family_cls(family_name, likelihood=likelihood, link=link)
 
     return family
 
 
-class SSMFamily(bmb.Family):
+class OrderedFamily(bmb.Family):
+    """A bmb.Family whose auxiliary parameters keep the likelihood's order.
+
+    bambi returns them as a set, so the components that bambi builds from them,
+    and the free random variables of the PyMC model, follow Python's string-hash
+    seed. NUTS then explores a different ordering in each process, and a seeded
+    ``sample()`` gives different draws (#1492). Drop this override once the bambi
+    floor reaches a release that keeps the order
+    (bambinos/bambi#1091).
+    """
+
+    @property
+    def auxiliary_parameters(self):
+        """Get the likelihood's parameters other than the parent, in order."""
+        parent = self.likelihood.parent
+        return [param for param in self.likelihood.params if param != parent]
+
+
+class SSMFamily(OrderedFamily):
     """Extends bmb.Family to get around the dimensionality mismatch."""
 
     def create_extra_pps_coord(self):
@@ -520,7 +1005,7 @@ class SSMFamily(bmb.Family):
 
 
 def make_likelihood_callable(
-    loglik: pytensor.graph.Op | Callable | PathLike | str,
+    loglik: pytensor.graph.Op | Callable[..., Any] | PathLike | str,
     loglik_kind: Literal["analytical", "approx_differentiable", "blackbox"],
     backend: Literal["pytensor", "jax", "other"] | None,
     params_is_reg: list[bool] | None = None,
@@ -545,8 +1030,15 @@ def make_likelihood_callable(
         A list of boolean values indicating whether the parameters are regression
         parameters. Defaults to None.
     params_only : Optional
-        Whether the missing data likelihood is takes its first argument as the data.
-        Defaults to None.
+        Controls the expected signature of the ``loglik`` callable.
+        If False (the default when None), the callable signature is
+        ``f(data, *params)``, where ``data`` is a 2-column array of
+        [rt, choice].  This is the standard case for LANs and other
+        likelihoods that condition on observed data.
+        If True, the callable signature is ``f(*params)`` with no data
+        argument.  This is used for Choice Probability Networks (CPNs)
+        and Outcome Probability Networks (OPNs).
+        Defaults to None (treated as False).
     """
     if isinstance(loglik, pytensor.graph.Op):
         return loglik
@@ -556,49 +1048,73 @@ def make_likelihood_callable(
         # callable directly. Otherwise, we wrap it in a BlackBoxOp.
         if loglik_kind == "analytical":
             if backend is None or backend == "pytensor":
-                return loglik
-            return make_blackbox_op(loglik)
-
-        # In the approx_differentiable case or the blackbox case, unless the backend
-        # is `pytensor`, we wrap the callable in a BlackBoxOp.
-        if backend == "pytensor":
-            return loglik
-            # In all other cases, we assume that the callable cannot be directly
-            # used in the backend and thus we wrap it in a BlackBoxOp
-        return make_blackbox_op(loglik)
+                return cast("Callable[..., Any]", loglik)
+            logp_funcs = make_jax_logp_funcs_from_callable(
+                cast("Callable[..., Any]", loglik),
+                vmap=False,
+                params_only=False if params_only is None else params_only,
+            )
+            lan_logp_jax = make_jax_logp_ops(*logp_funcs)
+            return lan_logp_jax
+        elif loglik_kind == "blackbox":
+            return make_blackbox_op(cast("Callable[..., Any]", loglik))
+        elif loglik_kind == "approx_differentiable":
+            if backend is None or backend == "jax":
+                if params_is_reg is None:
+                    raise ValueError(
+                        "You set `loglik_kind` to `approx_differentiable` "
+                        + "and `backend` to `jax` and supplied a jax callable, "
+                        + "but did not set `params_is_reg`."
+                    )
+                _params_only = False if params_only is None else params_only
+                logp_funcs = make_jax_logp_funcs_from_callable(
+                    cast("Callable[..., Any]", loglik),
+                    vmap=True,
+                    params_is_reg=params_is_reg,
+                    params_only=_params_only,
+                )
+                lan_logp_jax = make_jax_logp_ops(*logp_funcs)
+                return lan_logp_jax
+            if backend == "pytensor":
+                raise ValueError(
+                    "You set `backend` to `pytensor`, `loglik_kind` to"
+                    + "`approx_differentiable` and provided a callable."
+                    + "Currently we support only jax callables in this case."
+                )
 
     # Other cases, when `loglik` is a string or a PathLike.
-    if loglik_kind != "approx_differentiable":
-        raise ValueError(
-            "You set `loglik_kind` to `approx_differentiable "
-            + "but did not provide a pm.Distribution, an Op, or a callable "
-            + "as `loglik`."
+    if isinstance(loglik, str) or isinstance(loglik, PathLike):
+        if loglik_kind != "approx_differentiable":
+            raise ValueError(
+                "You set `loglik_kind` to `approx_differentiable "
+                + "but did not provide a pm.Distribution, an Op, or a callable "
+                + "as `loglik`."
+            )
+
+        loglik_path = cast("str | PathLike", loglik)
+        onnx_model = load_onnx_model(loglik_path)
+
+        if backend == "pytensor":
+            lan_logp_pt = make_pytensor_logp_from_onnx(onnx_model)
+            return lan_logp_pt
+
+        if params_is_reg is None:
+            raise ValueError(
+                "You set `loglik_kind` to `approx_differentiable` "
+                + "and `backend` to `jax` but did not provide `params_is_reg`."
+            )
+
+        _params_only = False if params_only is None else params_only
+        logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
+            onnx_model,
+            params_is_reg,
+            params_only=_params_only,
         )
 
-    if isinstance(loglik, (str, PathLike)):
-        if not Path(loglik).exists():
-            loglik = download_hf(str(loglik))
+        lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
 
-    onnx_model = onnx.load(str(loglik))
-
-    if backend == "pytensor":
-        lan_logp_pt = make_pytensor_logp(onnx_model)
-        return lan_logp_pt
-
-    if params_is_reg is None:
-        raise ValueError(
-            "You set `loglik_kind` to `approx_differentiable` "
-            + "and `backend` to `jax` but did not provide `params_is_reg`."
-        )
-
-    logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
-        onnx_model,
-        params_is_reg,
-        params_only=False if params_only is None else params_only,
-    )
-    lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
-
-    return lan_logp_jax
+        return lan_logp_jax
+    raise TypeError("loglik must be a Callable, str, or PathLike")
 
 
 def make_missing_data_callable(
@@ -611,29 +1127,37 @@ def make_missing_data_callable(
 
     Please refer to the documentation of `make_likelihood_callable` for more.
     """
+    # AF-TODO: Remove this once clear that it is actually not needed
     if backend == "jax":
         if params_is_reg is None:
             raise ValueError(
-                "You have chosen `jax` as the backend for the missing data likelihood. "
+                "You have chosen `jax` as the backend for "
+                + "the missing data likelihood. "
                 + "However, you have not provided any values to `params_is_reg`."
             )
         if params_only is None:
             raise ValueError(
-                "You have chosen `jax` as the backend for the missing data likelihood. "
+                "You have chosen `jax` as the backend "
+                + "for the missing data likelihood. "
                 + "However, you have not provided any values to `params_only`."
             )
 
     # We assume that the missing data network is always approx_differentiable
     return make_likelihood_callable(
-        loglik, "approx_differentiable", backend, params_is_reg, params_only
+        loglik=loglik,
+        loglik_kind="approx_differentiable",
+        backend=backend,
+        params_is_reg=params_is_reg,
+        params_only=params_only,
     )
 
 
 def assemble_callables(
     callable: pytensor.graph.Op | Callable,
     missing_data_callable: pytensor.graph.Op | Callable,
-    params_only: bool,
+    params_only: bool | None,
     has_deadline: bool,
+    params_is_trialwise: list[bool] | None = None,
 ) -> Callable:
     """Assemble the likelihood callables into a single callable.
 
@@ -647,43 +1171,78 @@ def assemble_callables(
         Whether the missing data likelihood is takes its first argument as the data.
     has_deadline
         Whether the model has a deadline.
+    params_is_trialwise : optional
+        A list of booleans, one per entry in ``dist_params`` (model params +
+        extra fields, excluding p_outlier), indicating whether each input is
+        trial-wise.  Trialwise inputs are broadcast to ``(n_obs,)`` after
+        squeezing; non-trialwise inputs are simply squeezed to scalars.
+        When ``None``, all inputs are squeezed without broadcasting.
     """
 
     def likelihood_callable(data, *dist_params):
         """Compute the log-likelihoood of the model."""
         # Assuming the first column of the data is always rt
         data = pt.as_tensor_variable(data)
-        dist_params = [pt.as_tensor_variable(param) for param in dist_params]
 
-        n_missing = pt.sum(pt.eq(data[:, 0], -999.0)).astype(int)
+        # New in PyMC 5.16+: PyMC uses the signature of the RandomVariable to
+        # determine the dimensions of the inputs to the likelihood function.
+        # It automatically adds one additional dimension to our input variable
+        # if it is a scalar. We need to squeeze this dimension out.
+        #
+        # For trialwise params we additionally broadcast to (n_obs,) so that
+        # the vmapped JAX Ops always receive consistently sized arrays on
+        # mapped axes. This also handles Bambi >= 0.17 intercept-only (1,)
+        # shapes and the missing-data path where pt.squeeze can produce ()
+        # scalars. Broadcasting in the symbolic graph lets PyTensor handle
+        # gradient reduction automatically.
+        n_obs = data.shape[0]
+        if params_is_trialwise is not None:
+            dist_params = [
+                pt.broadcast_to(pt.squeeze(param), (n_obs,))
+                if params_is_trialwise[i]
+                else pt.squeeze(param)
+                for i, param in enumerate(dist_params)
+            ]
+        else:
+            dist_params = [pt.squeeze(param) for param in dist_params]
+
+        # AF-TODO: This part actually overrides what
+        #          is treated as missing to always be -999.0
+        n_missing = pt.sum(pt.eq(data[:, 0], MISSING_RT)).astype(int)
         if n_missing == 0:
             raise ValueError("No missing data in the data.")
 
         observed_data = data[n_missing:, :]
+        missing_data = data[:n_missing, -1:]
 
         dist_params_observed = [
-            param if param.ndim == 0 else param[n_missing:] for param in dist_params
+            param[n_missing:] if param.ndim >= 1 else param for param in dist_params
+        ]
+
+        dist_params_missing = [
+            param[:n_missing] if param.ndim >= 1 else param for param in dist_params
         ]
 
         if has_deadline:
             logp_observed = callable(observed_data[:, :-1], *dist_params_observed)
-        else:
-            logp_observed = callable(observed_data, *dist_params_observed)
-
-        dist_params_missing = [
-            param if param.ndim == 0 else param[:n_missing] for param in dist_params
-        ]
-
-        if params_only:
-            logp_missing = missing_data_callable(None, *dist_params_missing)
-        else:
-            missing_data = data[:n_missing, -1:]
             logp_missing = missing_data_callable(missing_data, *dist_params_missing)
+        else:
+            if not params_only:
+                raise ValueError(
+                    "When `has_deadline` is False, `params_only` must be True. \n"
+                    "The provided settings are inconsistent."
+                )
+            logp_observed = callable(observed_data, *dist_params_observed)
+            logp_missing = missing_data_callable(None, *dist_params_missing)
+
+        # if has_deadline:
+        #     logp_missing = missing_data_callable(missing_data, *dist_params_missing)
+        # else:
+        # logp_missing = missing_data_callable(None, *dist_params_missing)
 
         logp = pt.empty_like(data[:, 0], dtype=pytensor.config.floatX)
         logp = pt.set_subtensor(logp[n_missing:], logp_observed)
         logp = pt.set_subtensor(logp[:n_missing], logp_missing)
-
         return logp
 
     return likelihood_callable

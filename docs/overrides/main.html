@@ -1,18 +1,35 @@
-{% extends "base.html" %} {% block announce %}
+{#- HSSM ecosystem shared Material override.
+    VENDORED COPY — source of truth: https://github.com/lnccbrown/HSSMSpine
+    (docs-brand/main.html). Edit there and re-sync; local edits will be
+    flagged as drift. -#}
+{% extends "base.html" %}
+{% block announce %}
 <span class="show-on-small right-margin">
-  <span class="twemoji right-margin show-on-small move-down">
-    {% include ".icons/fontawesome/solid/angles-down.svg" %}
-  </span>
-  Navigate the site here!
+    <span class="twemoji right-margin show-on-small move-down">
+        {% include ".icons/fontawesome/solid/angles-down.svg" %}
+    </span>
+    Navigate the site here!
 </span>
-<span class="right-margin"> v0.2.1 is released! </span>
+{% if config.extra and config.extra.release_announcement %}
+<span class="right-margin">
+    <a href="{{ config.repo_url | trim('/') }}/releases/latest">
+        A new release is out — read the release notes
+    </a>
+</span>
+{% endif %}
 <span>
-  <span class="twemoji">
-    {% include ".icons/material/head-question.svg" %}
-  </span>
-  Questions?
-  <a href="https://github.com/lnccbrown/HSSM/discussions">
-    Open a discussion here!
-  </a>
+    <span class="twemoji">
+        {% include ".icons/material/head-question.svg" %}
+    </span>
+    Questions?
+    <a href="https://github.com/lnccbrown/HSSM/discussions">
+        Open a discussion!
+    </a>
 </span>
+{% endblock %}
+{% block footer %}
+<div class="hssm-footer hssm-on-dark">
+{% include "partials/ecosystem-links.html" %}
+{{ super() }}
+</div>
 {% endblock %}

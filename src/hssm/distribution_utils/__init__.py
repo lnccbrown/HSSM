@@ -1,23 +1,26 @@
 """Utility functions for dynamically building pm.Distributions."""
 
-from ..utils import download_hf
 from .dist import (
     assemble_callables,
     make_blackbox_op,
     make_distribution,
+    make_distribution_for_supported_model,
     make_family,
+    make_hssm_rv,
     make_likelihood_callable,
     make_missing_data_callable,
-    make_ssm_rv,
 )
+from .onnx_utils.model import download_hf, load_onnx_model
 
 __all__ = [
     "assemble_callables",
     "download_hf",
+    "load_onnx_model",
     "make_blackbox_op",
     "make_distribution",
+    "make_distribution_for_supported_model",
     "make_likelihood_callable",
     "make_missing_data_callable",
     "make_family",
-    "make_ssm_rv",
+    "make_hssm_rv",
 ]
