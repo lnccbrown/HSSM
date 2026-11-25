@@ -1,5 +1,8 @@
 """Tests for HSSM distribution utility helpers."""
 
+import os
+import subprocess
+import sys
 from unittest.mock import patch
 
 import bambi as bmb
@@ -32,6 +35,9 @@ from hssm.register import register_model
 
 hssm.set_floatX("float32")
 
+# LOGP_LB as these float32 graphs store it.
+FLOOR = np.float32(LOGP_LB)
+
 # Response times for the ndt_edge_shift wiring tests. With t = 0.5 and st = 0.1
 # the candidate edges are 0.5 (no declaration), 0.45 (scale 0.5), 0.4 (scale 1.0)
 # and 0.2 (scale 3.0); every grid point keeps 0.01 clear of all of them, so
@@ -60,7 +66,7 @@ def _ndt_grid_data():
 
 def _floored_at(edge):
     """Return the expected logp on the grid for a floor at ``edge``."""
-    return np.where(NDT_RT_GRID <= edge, LOGP_LB, 1.0)
+    return np.where(NDT_RT_GRID <= edge, FLOOR, 1.0)
 
 
 def test_make_hssm_rv():
@@ -97,6 +103,20 @@ def test_make_hssm_rv():
     random_sample = wfpt_rv.rng_fn(rng, *true_values, size=100)
 
     assert random_sample.shape == (100, 2)
+
+
+def test_lapse_responses_use_a_registered_models_choices(registered_ssms_model):
+    """A model registered in ssm-simulators after import draws lapse responses
+    from its own choices, not from ssm-simulators' fallback [0, 1, 2]."""
+    rv = distribution_utils.make_hssm_rv(
+        registered_ssms_model["name"],
+        ["v", "a", "z", "t"],
+        lapse=bmb.Prior("Uniform", lower=0.0, upper=1.0),
+    )
+    # p_outlier = 1: every response is a lapse draw.
+    sample = rv.rng_fn(np.random.default_rng(1), *[0.5, 1.0, 0.5, 0.3], 1.0, 200)
+
+    assert set(np.unique(sample[:, 1])) == {-1.0, 1.0}
 
 
 def test_lapse_distribution():
@@ -281,7 +301,7 @@ def test_make_distribution_floors_at_t_without_declaration():
 
     result = np.asarray(Dist.logp(data, 0.5, 0.5, 0.5, 0.5, 0.2).eval())
 
-    np.testing.assert_array_equal(result, [LOGP_LB] * 5 + [1.0])
+    np.testing.assert_array_equal(result, [FLOOR] * 5 + [1.0])
 
 
 @pytest.mark.parametrize(
@@ -434,7 +454,7 @@ def test_ensure_positive_ndt(edge, trialwise):
     after = ensure_positive_ndt(data, logp, lower_edge).eval()
     mask = (rt - edge <= 1e-15) & (rt != -999.0)
 
-    assert np.all(after[mask] == LOGP_LB)
+    assert np.all(after[mask] == FLOOR)
     assert np.all(after[~mask] == logp[~mask])
 
 
@@ -781,3 +801,50 @@ def test_rt_single_draw_keeps_the_requested_shape(size, expected):
     rv = distribution_utils.make_hssm_rv("ddm", ["v", "a", "z", "t"])()
 
     assert pm.draw(rv(0.5, 1.5, 0.5, 0.3, size=size), random_seed=5).shape == expected
+
+
+_FREE_RV_NAMES = """
+import numpy as np
+import pandas as pd
+
+import hssm
+
+theta = dict(v=0.5, a=1.5, z=0.5, t=0.3)
+ddm_data = hssm.simulate_data(model="ddm", theta=theta, size=20, random_state=1)
+choices = np.random.default_rng(1).choice(3, size=20)
+for model, data in [
+    ("ddm", ddm_data),
+    ("softmax_inv_temperature_3", pd.DataFrame({"response": choices})),
+]:
+    rvs = hssm.HSSM(data=data, model=model).pymc_model.free_RVs
+    print("free_RVs:", model, *[rv.name for rv in rvs])
+"""
+
+
+def _free_rv_names(hash_seed: str) -> dict[str, list[str]]:
+    result = subprocess.run(
+        [sys.executable, "-c", _FREE_RV_NAMES],
+        env={**os.environ, "PYTHONHASHSEED": hash_seed},
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,  # the assertion below reports the failure with its stderr
+    )
+    assert result.returncode == 0, result.stderr
+    lines = [line.split() for line in result.stdout.splitlines()]
+    return {line[1]: line[2:] for line in lines if line[:1] == ["free_RVs:"]}
+
+
+def test_free_rv_order_does_not_depend_on_the_hash_seed():
+    """bambi orders the auxiliary parameters as a set; the family keeps list_params.
+
+    With bambi's set, the DDM (SSMFamily) gives ['z', 'a', 't', 'v'] under hash
+    seed 1 and ['t', 'z', 'a', 'v'] under seed 2, and the choice-only model
+    (OrderedFamily) puts logit2 before logit1, so a seeded sample() differs
+    between processes.
+    """
+    expected = {
+        "ddm": ["a", "z", "t", "v"],
+        "softmax_inv_temperature_3": ["logit1", "logit2", "beta"],
+    }
+    assert _free_rv_names("1") == _free_rv_names("2") == expected
