@@ -74,6 +74,7 @@ nav:
           - Plot posteriors and predictions: tutorials/plotting.ipynb
           - Posterior predictive plot gallery: tutorials/ppc_gallery.ipynb
           - Model cartoon plot gallery: tutorials/cartoon_gallery.ipynb
+          - Inspect a model's network: tutorials/network_inspection.ipynb
           - Compare and interpret models: how_to/compare_models.ipynb
           - Get trial-wise parameters: tutorials/tutorial_trial_wise_parameters.ipynb
           - Run Bayesian t-tests on the posterior: tutorials/tutorial_bayesian_t_test.ipynb
@@ -186,6 +187,7 @@ plugins:
         - tutorials/blackbox_contribution_onnx_example.ipynb
         - tutorials/compile_logp.ipynb
         - tutorials/do_operator.ipynb
+        - tutorials/network_inspection.ipynb
         - tutorials/save_load_tutorial.ipynb
         - tutorials/tutorial_bayesian_t_test.ipynb
         - tutorials/tutorial_trial_wise_parameters.ipynb
