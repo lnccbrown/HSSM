@@ -311,7 +311,11 @@ def test_registered_canonical_model_ignores_ssms_legacy_fallback(monkeypatch):
         },  # type: ignore[arg-type]
         description=None,
     )
-    monkeypatch.setitem(config_module.ssms_model_config, name, {"choices": (8, 9)})
+    monkeypatch.setattr(
+        config_module,
+        "_get_ssms_model_config",
+        lambda model: {"choices": (8, 9)} if model == name else None,
+    )
     try:
         config = Config._build_model_config(name, "analytical", None, None)
 
