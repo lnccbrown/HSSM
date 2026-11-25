@@ -76,6 +76,8 @@ This version includes the following changes:
 
 36. **Documentation: tutorials pass `simulate_data` only the parameters of the simulated model** (#1511, refs lnccbrown/ssm-simulators#424). The scenic-route tutorial (twice) and the archived *PyMC to HSSM* notebook called `hssm.simulate_data(model="ddm", ...)` with a `theta` dictionary that also held entries the DDM does not have: `theta`, and in the tutorial the known regression coefficients `v_x`, `v_y` and `v_Intercept`, which later cells use as reference values. Until now, ssm-simulators dropped such keys without a message; its next release raises a `ValueError` for them. The calls now pass `v`, `a`, `z` and `t` only. The simulated data, and with them the published outputs, are unchanged.
 
+37. **Inspect a model's network: `hssm.plotting.plot_kde_vs_lan` and `plot_lan_manifold`** (closes #1505; optional extra `hssm[inspect]`). Both take an HSSM model with `loglik_kind="approx_differentiable"` and plot its ONNX network with LANfactory's network inspectors: `plot_kde_vs_lan(model, parameter_df)` draws the network likelihood over response time and choice against kernel density estimates of data simulated with ssm-simulators, and `plot_lan_manifold(model, vary={"v": [...]})` draws it as a 3D plotly surface while one parameter varies (two-choice models), with the other parameters from `parameters=` or the ssm-simulators defaults. The network is the one the model loads, fetched again at the HuggingFace commit recorded when the model was built, and is evaluated one trial at a time through `jax.vmap`, as in the model's likelihood, so no torch model is involved. A model whose likelihood is not an ONNX network, whose name is not an ssm-simulators model, or whose parameters or choices differ from that model's (which LANfactory uses to label the network inputs and to simulate) raises `ValueError`. `plot_kde_vs_lan` returns nothing, because LANfactory closes the figure after showing or saving it (`PlotConfig(save=True)`). LANfactory is imported only when a plot is made, and without the extra the call raises an `ImportError` naming `hssm[inspect]`.
+
 #### Breaking changes that require migration:
 
 1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.
@@ -85,6 +87,8 @@ This version includes the following changes:
 #### Dependency changes:
 
 1. **`ssm-simulators` floor raised to `>=0.16.0`**, the first release with the `softmax_inv_temperature_{2,3,4}` simulators (lnccbrown/ssm-simulators#421), which replace HSSM's own adapter (#1416).
+
+2. **New optional extra `inspect`** (`lanfactory>=0.9.0`, which depends on torch) for the network-inspection plots (#1505). It is not installed by default or by the `dev` group.
 
 ### 0.5.0
 
