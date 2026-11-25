@@ -60,6 +60,17 @@ def simulate_data(
     if model == "poisson_race" and "smooth_unif" not in kwargs:
         kwargs["smooth_unif"] = False
 
+    if model == "circular_diffusion" and isinstance(theta, dict):
+        # HSSM names the Cartesian components v_x/v_y; ssms uses vx/vy.
+        theta = theta.copy()
+        for public, internal in (("v_x", "vx"), ("v_y", "vy")):
+            if public in theta:
+                if internal in theta:
+                    raise ValueError(
+                        f"Specify only one of {public!r} and {internal!r}."
+                    )
+                theta[internal] = theta.pop(public)
+
     sims = simulator(
         theta,
         model=model,

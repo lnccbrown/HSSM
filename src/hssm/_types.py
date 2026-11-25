@@ -29,6 +29,7 @@ SupportedModels = Literal[
     "lba2",
     "racing_diffusion_3",
     "poisson_race",
+    "circular_diffusion",
     "softmax_inv_temperature_2",
     "softmax_inv_temperature_3",
     "softmax_inv_temperature_4",
@@ -57,6 +58,7 @@ class LoglikConfig(TypedDict):
     bounds: dict[str, tuple[float, float]]
     extra_fields: Optional[list[str]]
     ndt_edge_shift: NotRequired[NDTEdgeShift]
+    rv: NotRequired[Callable[..., np.ndarray]]
     # A JAX implementation of this same likelihood, f(data, *list_params) -> (N,),
     # for callers that need JAX (the RLSSM registry); plain HSSM uses `loglik`.
     jax_loglik: NotRequired[Callable[..., Any]]
@@ -78,7 +80,7 @@ class DefaultConfig(TypedDict):
 
     response: list[str]
     list_params: list[str]
-    choices: NotRequired[list[int]]
+    choices: NotRequired[list[int] | None]
     response_domains: NotRequired[dict[str, ResponseDomainSpec]]
     description: Optional[str]
     likelihoods: LoglikConfigs
