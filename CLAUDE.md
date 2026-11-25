@@ -41,7 +41,10 @@ docs/              # MkDocs documentation source
 HSSM uses PEP 735 dependency groups alongside traditional optional-dependencies:
 
 - **Core deps** (`[project.dependencies]`): pymc, bambi, numpyro, jax, arviz, etc.
-- **Optional extras** (`[project.optional-dependencies]`): `cuda12`, `cuda13` (GPU-enabled JAX; e.g. `pip install hssm[cuda13]` or `uv sync --extra cuda13`)
+- **Optional extras** (`[project.optional-dependencies]`):
+  - `cuda12`, `cuda13`: GPU-enabled JAX (e.g. `pip install hssm[cuda13]` or `uv sync --extra cuda13`)
+  - `tracking`: MLflow experiment tracking (mlflow, pyarrow)
+  - `inspect`: network-inspection plots, `hssm.plotting.plot_kde_vs_lan` / `plot_lan_manifold` (lanfactory, which pulls in torch). CI runs these tests in the `run_inspect_tests` job of `run_tests.yml`.
 - **Dependency groups** (`[dependency-groups]`):
   - `dev` — pytest, ruff, mypy, pre-commit, coverage
   - `notebook` — jupyterlab, nbconvert, graphviz, bayesflow `>=2.0.12`, keras
