@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pytensor
 import pytest
+from ssms.config import get_model_registry
 
 import hssm
 from hssm.config import Config
@@ -13,11 +14,43 @@ from hssm.modelconfig import get_default_model_config
 
 
 def test_registered_circular_metadata_roundtrips():
-    """A fresh config must resolve to the same simulator and response metadata."""
-    Config.from_defaults("circular_diffusion", None)
+    """The fit uses the producer's ordered observations and circular domain."""
+    config = Config.from_defaults("circular_diffusion", None)
+    schema = get_model_registry().get("circular_diffusion")["observation_schema"]
+    assert config.response == [field["name"] for field in schema]
+    angle = schema[1]
+    assert config.response_domains == {
+        angle["name"]: {
+            "kind": angle["kind"],
+            "bounds": (angle["lower"], angle["upper"]),
+        }
+    }
     assert default_model_config["circular_diffusion"] == get_default_model_config(
         "circular_diffusion"
     )
+
+
+@pytest.mark.parametrize("mismatch", ["no_schema", "version", "order", "units"])
+def test_incompatible_circular_producer_fails_only_for_that_model(
+    mismatch, monkeypatch
+):
+    """A missing or incompatible producer must not silently select a fallback."""
+    registry = get_model_registry()
+    producer = registry.get("circular_diffusion")
+    if mismatch == "no_schema":
+        del producer["observation_schema"]
+    elif mismatch == "version":
+        producer["observation_schema_version"] += 1
+    elif mismatch == "order":
+        producer["observation_schema"] = producer["observation_schema"][::-1]
+    else:
+        producer["observation_schema"][1].update(lower=-180, upper=180)
+    monkeypatch.setattr(registry, "get", lambda name: producer)
+    error = ImportError if mismatch == "no_schema" else ValueError
+    with pytest.raises(error, match="ssm-simulators"):
+        get_default_model_config("circular_diffusion")
+    assert "circular_diffusion" in hssm.list_models()
+    assert get_default_model_config("ddm")["response"] == ["rt", "response"]
 
 
 def test_registered_simulation_uses_hssm_parameter_names():
