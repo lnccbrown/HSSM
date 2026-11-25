@@ -58,7 +58,7 @@ def _(mo):
     installed, this is the tested simulator revision (no JEAM required):
 
     ```sh
-    python -m pip install "ssm-simulators @ git+https://github.com/lnccbrown/ssm-simulators.git@ba6a67858f01940bfc49d8d91baa49fe61670fb4"
+    python -m pip install "ssm-simulators @ git+https://github.com/lnccbrown/ssm-simulators.git@285ca52a4d45566c522d8339a0c8f15ca59fa9e9"
     ```
 
     ## Simulate one participant
@@ -66,7 +66,9 @@ def _(mo):
     Use the target as the zero direction. A positive `v_x` points toward the
     target; a positive `v_y` pulls the mean report counterclockwise. These
     are the two components of **one** drift vector. We give it a small sideways
-    component here. The reported angles wrap at −π and π; RT is in seconds.
+    component here. RT is in seconds; the `response` column is an angle in radians
+    on [−π, π). HSSM reads that circular domain from the simulator's model config;
+    you don't need an extra column or a plotting option to declare it.
     """)
     return
 
