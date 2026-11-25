@@ -340,7 +340,8 @@ class Config(BaseModelConfig):
             return Config(
                 model_name=model_name,
                 loglik_kind=loglik_kind,
-                response=DEFAULT_SSM_OBSERVED_DATA,
+                response=list(DEFAULT_SSM_OBSERVED_DATA),
+                choices=DEFAULT_SSM_CHOICES,
             )
 
     def update_loglik(self, loglik: Any | None) -> None:
