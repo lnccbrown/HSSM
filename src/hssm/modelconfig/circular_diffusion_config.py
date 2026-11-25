@@ -2,18 +2,9 @@
 
 from math import inf, pi
 
-from ssms.hssm_support import decorate_atomic_simulator
-
 from .._types import DefaultConfig
 from ..likelihoods.circular import logp_circular_diffusion
-
-
-@decorate_atomic_simulator("circular_diffusion", choices=[], obs_dim=2)
-def _simulate(theta, random_state, n_replicas):
-    # Predictives use the uncensored sampler, not the public simulator's max_t.
-    from ssms.basic_simulators.circular_diffusion import sample_circular_diffusion
-
-    return sample_circular_diffusion(theta, random_state, n_replicas)
+from ..simulator import _sample_circular_diffusion
 
 
 def get_circular_diffusion_config() -> DefaultConfig:
@@ -27,7 +18,7 @@ def get_circular_diffusion_config() -> DefaultConfig:
         "likelihoods": {
             "analytical": {
                 "loglik": logp_circular_diffusion,
-                "rv": _simulate,
+                "rv": _sample_circular_diffusion,
                 "backend": "jax",
                 "bounds": {
                     "v_x": (-inf, inf),

@@ -5,6 +5,15 @@ import pandas as pd
 from numpy.typing import ArrayLike
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import get_model_registry
+from ssms.hssm_support import decorate_atomic_simulator
+
+
+@decorate_atomic_simulator("circular_diffusion", choices=[], obs_dim=2)
+def _sample_circular_diffusion(theta, random_state, n_replicas):
+    """Draw uncensored RT/angle pairs for the model's predictive distribution."""
+    from ssms.basic_simulators.circular_diffusion import sample_circular_diffusion
+
+    return sample_circular_diffusion(theta, random_state, n_replicas)
 
 
 def simulate_data(

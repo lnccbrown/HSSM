@@ -7,6 +7,17 @@ import pytensor
 import pytest
 
 import hssm
+from hssm.config import Config
+from hssm.defaults import default_model_config
+from hssm.modelconfig import get_default_model_config
+
+
+def test_registered_circular_metadata_roundtrips():
+    """A fresh config must resolve to the same simulator and response metadata."""
+    Config.from_defaults("circular_diffusion", None)
+    assert default_model_config["circular_diffusion"] == get_default_model_config(
+        "circular_diffusion"
+    )
 
 
 def test_registered_simulation_uses_hssm_parameter_names():
