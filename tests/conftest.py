@@ -17,6 +17,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 from ssms.basic_simulators.simulator import simulator
+from ssms.config import ModelConfigBuilder, get_model_registry, register_model_config
 
 import hssm
 
@@ -45,7 +46,8 @@ def _slow_test_memory(request):
     end-of-test RSS (the leak-hunting signal) is sampled first, then cleanup
     runs, then post-cleanup RSS is sampled to show how much was freed. RSS
     logging is opt-in via ``HSSM_TEST_RSS_LOG`` because JAX and pytensor allocate
-    outside the Python heap, which allocation-only profilers miss.
+    outside the Python heap, which allocation-only profilers miss. The lines are
+    INFO, so also pass ``--log-cli-level=INFO`` (CI's slow step does).
     """
     global _PSUTIL_AVAILABLE
 
@@ -186,6 +188,26 @@ def fixture_path():
     test file between ``tests/`` subdirectories does not break it.
     """
     return FIXTURES
+
+
+@pytest.fixture
+def registered_ssms_model():
+    """Register a DDM copy in ssm-simulators' model registry; return its config.
+
+    The model is registered after import, so it is in the registry but not in
+    the ``ssms.config.model_config`` snapshot, like a user's own model (#1467).
+    Its bounds are narrower than the DDM's so tests can tell them apart.
+    """
+    name = "ddm_registered_1467"
+    config = ModelConfigBuilder.from_model(
+        "ddm",
+        name=name,
+        param_bounds=[[-2.0, 0.5, 0.2, 0.1], [2.0, 2.0, 0.8, 1.5]],
+    )
+    register_model_config(name, config)
+    yield config
+    # ssms has no public way to unregister a model.
+    get_model_registry()._configs.pop(name, None)
 
 
 @pytest.fixture
@@ -357,3 +379,33 @@ def pytest_collection_modifyitems(config, items):
 
     # Reorder items so fast tests run first, then slow tests
     items[:] = fast_tests + slow_tests
+
+
+def _block_hf_hub_download(mp: pytest.MonkeyPatch, when: str) -> None:
+    """Make HSSM's Hugging Face Hub download raise instead of using the network."""
+
+    def _blocked(*args, **kwargs):
+        raise RuntimeError(
+            f"Hugging Face Hub download of {kwargs.get('filename')!r} {when}; "
+            "load the local copy from tests/fixtures instead (see #1061)."
+        )
+
+    mp.setattr("hssm.distribution_utils.onnx_utils.model.hf_hub_download", _blocked)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_collection():
+    """Block Hugging Face Hub downloads while test modules are imported.
+
+    pytest-timeout only times test execution, so a download that stalls during
+    collection hangs the CI job until the workflow timeout (#1061).
+    """
+    with pytest.MonkeyPatch.context() as mp:
+        _block_hf_hub_download(mp, "during test collection")
+        return (yield)
+
+
+@pytest.fixture
+def no_hf_hub_download(monkeypatch):
+    """Fail the test if it downloads from the Hugging Face Hub."""
+    _block_hf_hub_download(monkeypatch, "in a test that must use local fixtures")

@@ -2,7 +2,7 @@
 
 import logging
 from itertools import product
-from typing import TYPE_CHECKING, Any, Iterable, Literal, cast
+from typing import Any, Iterable, Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,23 +10,26 @@ import pandas as pd
 import seaborn as sns
 import xarray as xr
 from matplotlib.axes import Axes
+from matplotlib.cbook import normalize_kwargs
+from matplotlib.lines import Line2D
 from matplotlib.patches import Ellipse
 from scipy.stats import chi2
 from seaborn import FacetGrid
-
-if TYPE_CHECKING:
-    from matplotlib.lines import Line2D
 
 from .utils import (
     _check_groups_and_groups_order,
     _get_plotting_df,
     _get_title,
     _process_df_for_qp_plot,
+    _set_facet_suptitle,
     _subset_df,
     _use_traces_or_sample,
 )
 
 _logger = logging.getLogger("hssm")
+
+# The quantiles conventionally shown in quantile-probability plots.
+DEFAULT_QUANTILES = (0.1, 0.3, 0.5, 0.7, 0.9)
 
 
 def _confidence_to_n_std(confidence: float, n_dim: int = 2) -> float:
@@ -142,7 +145,7 @@ def _plot_quantile_probability_1D(
     ellipse_confidence: float = 0.95,
     ellipse_min_points: int = 5,
     correct: str | None = None,
-    q: int | Iterable[float] = 5,
+    q: int | Iterable[float] = DEFAULT_QUANTILES,
     quantile_by: list[str] | str | None = None,
     title: str | None = "Quantile Probability Plot",
     xlabel: str | None = "Proportion",
@@ -183,16 +186,20 @@ def _plot_quantile_probability_1D(
     plot_data = _process_df_for_qp_plot(data, q, cond, correct, quantile_by)
     df_data = plot_data.loc[plot_data["observed"] == "observed", :]
 
-    ax = kwargs.get("ax", plt.gca())
+    ax = kwargs.pop("ax", None) or plt.gca()
 
     if data_kwargs is None:
         data_kwargs = kwargs.copy()
 
+    # Seaborn outlines markers in white, which cuts the line around each marker and
+    # hides its step between conditions with nearly equal proportions
     data_kwargs_default = {
         "marker": "X",
+        "markeredgewidth": 0,
     }
 
-    data_kwargs = data_kwargs_default | data_kwargs
+    # Normalized, so that an alias such as `mew` overrides the default
+    data_kwargs = data_kwargs_default | normalize_kwargs(data_kwargs, Line2D)
 
     # Plot observed data (always as line plot)
     ax = sns.lineplot(
@@ -203,6 +210,17 @@ def _plot_quantile_probability_1D(
         ax=ax,
         **data_kwargs,  # pyrefly: ignore[bad-argument-type]
     )
+
+    # The ellipses take the colors of the observed quantile lines. Read them now,
+    # before predictive points add legend lines with the same labels. Only lines
+    # carry the quantile colors; the axes may already hold other labelled
+    # artists (e.g. the bands of `plot_predictive`)
+    handles, labels = ax.get_legend_handles_labels()
+    color_map = {
+        label: handle.get_color()
+        for handle, label in zip(handles, labels)
+        if isinstance(handle, Line2D)
+    }
 
     if plot_predictive:
         df_predictive = plot_data.loc[plot_data["observed"] == "predicted", :]
@@ -249,14 +267,6 @@ def _plot_quantile_probability_1D(
             quantiles = df_predictive[hue].unique()
             conditions = df_predictive[cond].unique()
             correct_vals = df_predictive["is_correct"].unique()
-
-            # Get the color mapping from the current plot
-            # The line plot has already been created, so we can extract colors from it
-            handles, labels = ax.get_legend_handles_labels()
-            color_map = {
-                label: cast("Line2D", handle).get_color()
-                for handle, label in zip(handles, labels)
-            }
 
             # Group by quantile, condition, and x-value
             for quantile in quantiles:
@@ -322,6 +332,17 @@ def _plot_quantile_probability_1D(
                             **ellipse_kwargs,
                         )
                         ax.add_patch(ellipse)
+                        # add_patch bounds a rotated ellipse by its Bezier segment
+                        # endpoints only; add its exact extents to the data limits
+                        ax.update_datalim(
+                            ellipse.get_path()
+                            .get_extents(ellipse.get_patch_transform())
+                            .get_points()
+                        )
+
+            # add_patch does not rescale the view, so rescale it to include the
+            # ellipses (limits the user fixed before the call are kept)
+            ax.autoscale_view()
 
     ticks_and_labels = (
         df_data.groupby(x, observed=True)[cond].first().reset_index(x, drop=False)
@@ -333,6 +354,20 @@ def _plot_quantile_probability_1D(
     secax.set_xticklabels(xticklabels)
     secax.set_xlim(*ax.get_xlim())
     secax.set_label(cond)
+
+    # Conditions with close proportions get overlapping labels; lift a label that
+    # would overlap the previous label of the bottom row by one row.
+    # ponytail: two rows; a label overlapping neighbours on both sides still
+    # collides, add a third row if that turns up
+    right_edge = -np.inf
+    for tick in secax.xaxis.get_major_ticks():
+        box = tick.label2.get_window_extent()
+        if box.x0 < right_edge + box.height / 2:
+            # matplotlib's stubs type the pad as optional and the size as
+            # float | str; both are floats here
+            tick.set_pad((tick.get_pad() or 0.0) + float(tick.label2.get_fontsize()))
+        else:
+            right_edge = box.x1
 
     if title:
         ax.set_title(title)
@@ -360,7 +395,7 @@ def _plot_quantile_probability_2D(
     ellipse_confidence: float = 0.95,
     ellipse_min_points: int = 5,
     correct: str | None = None,
-    q: int | Iterable[float] = 5,
+    q: int | Iterable[float] = DEFAULT_QUANTILES,
     quantile_by: list[str] | str | None = None,
     title: str | None = "Quantile Probability Plot",
     xlabel: str | None = "Proportion",
@@ -414,8 +449,7 @@ def _plot_quantile_probability_2D(
 
     g.add_legend()
     if title:
-        g.figure.subplots_adjust(top=0.85)
-        g.figure.suptitle(title)
+        _set_facet_suptitle(g, title)
 
     g.set_xlabels(xlabel)
     g.set_ylabels(ylabel)
@@ -449,7 +483,7 @@ def plot_quantile_probability(
     ellipse_confidence: float = 0.95,
     ellipse_min_points: int = 5,
     correct: str | None = None,
-    q: int | Iterable[float] = 5,
+    q: int | Iterable[float] = DEFAULT_QUANTILES,
     quantile_by: list[str] | str | None = None,
     title: str | None = "Quantile Probability Plot",
     xlabel: str | None = "Proportion",
@@ -459,6 +493,7 @@ def plot_quantile_probability(
     data_kwargs: dict[str, Any] | None = None,
     predictive_samples_kwargs: dict[str, Any] | None = None,
     ellipse_kwargs: dict[str, Any] | None = None,
+    random_seed: int | np.random.Generator | None = None,
     **kwargs,
 ) -> Axes | FacetGrid | list[FacetGrid]:
     """Plot the quantile probabilities against the observed data.
@@ -538,9 +573,9 @@ def plot_quantile_probability(
         column from `data` indicates whether the response is correct or not. By default
         None.
     q : optional
-        If an `int`, quantiles will be determined using np.linspace(0, 1, q) (0 and 1
-        will be excluded. If an iterable, will generate quantiles according to this
-        iterable.
+        The quantiles to plot, by default (0.1, 0.3, 0.5, 0.7, 0.9). If an `int`,
+        quantiles will be determined using np.linspace(0, 1, q), with 0 and 1
+        excluded, so `q=5` gives the three quantiles 0.25, 0.5 and 0.75.
     title : optional
         The title of the plot, by default "Quantile Probability Plot". Ignored
         when `groups` is provided.
@@ -560,6 +595,11 @@ def plot_quantile_probability(
     ellipse_kwargs : optional
         Keyword arguments passed to matplotlib.patches.Ellipse. Useful for customizing
         ellipse appearance (e.g., facecolor, edgecolor, alpha, linewidth).
+    random_seed : optional
+        Seeds the samples the plot draws itself (an `int` or a
+        `numpy.random.Generator`): which posterior draws are used, and, when `dt` has
+        no predictive group yet, the simulated responses. The same seed gives the same
+        plot. Defaults to None, which keeps the previous, unseeded behavior.
     kwargs : optional
         Keyword arguments passed to both seaborn.lineplot and seaborn.scatterplot.
 
@@ -587,24 +627,16 @@ def plot_quantile_probability(
     )
 
     extra_dims = (
-        list(
-            set(
-                [
-                    e
-                    for e in [cond, correct, row, col, kwargs.get("marker", None)]
-                    if e is not None
-                ]
-            )
-        )
-        or None
+        list(set([e for e in [cond, correct, row, col] if e is not None])) or None
     )
     if extra_dims is not None and groups is not None:
         extra_dims += list(groups)
 
     if predictive_group is not None:
         # Use the model's trace if dt is None
+        rng = None if random_seed is None else np.random.default_rng(random_seed)
         dt, sampled = _use_traces_or_sample(
-            model, data, dt, n_samples, predictive_group
+            model, data, dt, n_samples, predictive_group, rng=rng
         )
 
         plotting_df = _get_plotting_df(
@@ -615,6 +647,7 @@ def plot_quantile_probability(
             n_samples=None if sampled else n_samples,
             response_str=model.response_str,
             predictive_group=predictive_group,
+            rng=rng,
         )
     else:
         # Note if dt is passed as None,
@@ -706,7 +739,7 @@ def plot_quantile_probability(
             _logger.warning("No data for group %s. Skipping this group", title)
             continue
         g = _plot_quantile_probability_2D(
-            plotting_df,
+            df,
             cond=cond,
             x=x,
             y=y,

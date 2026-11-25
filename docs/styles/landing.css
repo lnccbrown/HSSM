@@ -1,0 +1,100 @@
+/* HSSM ecosystem docs theme: opt-in landing components (need attr_list + md_in_html).
+   VENDORED COPY — source of truth: https://github.com/lnccbrown/HSSMSpine
+   (docs-brand/landing.css). Edit there and re-sync; local edits will be
+   flagged as drift. Loaded after styles/tokens.css and styles/extra.css by
+   every INHERIT base variant that includes "landing"
+   (overrides/.mkdocs-brand*-landing*.yml); sites opt in via brand_styles. */
+
+.md-typeset .hssm-hero {
+  margin: 0 0 1.6rem;
+}
+
+/* web-eyebrow: mono caps. */
+.md-typeset .hssm-eyebrow {
+  margin: 0 0 0.4rem;
+  font-family: var(--hssm-font-mono);
+  font-size: var(--hssm-web-eyebrow-size);
+  font-weight: var(--hssm-web-eyebrow-weight);
+  line-height: var(--hssm-web-eyebrow-line-height);
+  letter-spacing: var(--hssm-web-eyebrow-letter-spacing);
+  text-transform: uppercase;
+  color: var(--hssm-text-emphasis);
+}
+
+.md-typeset .hssm-hero h1 {
+  position: relative;
+  display: inline-block;
+  margin: 0 0 1.2rem;
+}
+
+.md-typeset .hssm-hero h1::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -6px;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--hssm-brand-gradient);
+}
+
+/* web-body-lg: lead paragraph, prose width. */
+.md-typeset .hssm-lead {
+  max-width: var(--hssm-prose-max);
+  font-size: var(--hssm-web-body-lg-size);
+  line-height: var(--hssm-web-body-lg-line-height);
+  color: var(--hssm-muted);
+}
+
+/* web-code install box. */
+.md-typeset .hssm-install {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.8rem;
+  background: var(--hssm-wash);
+  border: 1px solid var(--hssm-rule);
+  border-radius: var(--hssm-radius-sm);
+  font-family: var(--hssm-font-mono);
+  font-size: var(--hssm-docs-code-size);
+  line-height: var(--hssm-web-code-line-height);
+  color: var(--hssm-code-plain);
+  overflow-x: auto;
+}
+
+.md-typeset .hssm-install code {
+  padding: 0;
+  background: transparent;
+}
+
+.md-typeset .hssm-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.8rem;
+  margin: 1.2rem 0;
+}
+
+.md-typeset .hssm-card {
+  padding: 1.2rem;
+  background: var(--hssm-wash);
+  border: 1px solid var(--hssm-rule);
+  border-radius: var(--hssm-radius-card);
+}
+
+.md-typeset .hssm-card > :first-child {
+  margin-top: 0;
+}
+
+.md-typeset .hssm-card > :last-child {
+  margin-bottom: 0;
+}
+
+/* web-h3 card title, tinted by the package identity when one is set. */
+.md-typeset .hssm-card h3 {
+  margin: 0 0 0.4rem;
+  font-size: var(--hssm-web-h3-size);
+  font-weight: var(--hssm-web-h3-weight);
+  line-height: var(--hssm-web-h3-line-height);
+  color: var(--pkg, var(--hssm-text-heading));
+}

@@ -1,8 +1,9 @@
 <div>
     <a href="https://ccbs.carney.brown.edu/brainstorm" style="display: block; float: right; padding: 10px">
-        <img src="images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;">
+        <img class="hssm-figure" src="images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;" alt="BRAINSTORM">
     </a>
-    <img src="images/mainlogo.png" style="width: 175px;">
+    <img src="images/mainlogo.png#only-light" style="width: 175px;" alt="HSSM">
+    <img src="images/mainlogo-on-dark.png#only-dark" style="width: 175px;" alt="HSSM">
 </div>
 
 ![PyPI](https://img.shields.io/pypi/v/hssm)
@@ -84,12 +85,16 @@ model.sample()
 
     1. [Installation](getting_started/installation.md) — a working environment, GPU extras included.
     2. [Quickstart](getting_started/getting_started.ipynb) — simulate, fit, and check a DDM in about 15 minutes.
-    3. [The HSSM tutorial](tutorials/main_tutorial.ipynb) — the guided introduction: model choice, priors, diagnostics, predictive checks, comparison.
+    3. [The HSSM tutorial](tutorials/main_tutorial.ipynb) — one guided next step: fit a drift-rate regression, diagnose it, check predictions, and interpret the condition effect.
     4. [Hierarchical modeling](getting_started/hierarchical_modeling.ipynb) — `lmer`-style formulas on any model parameter.
     5. [Hierarchical DDM regressions](tutorials/ddm_hierarchical_tutorial.ipynb) — map your actual design onto a formula, and recover it.
     6. [Compare and interpret models](how_to/compare_models.ipynb) — rank candidates, and recognise when the data cannot separate them.
 
     **Capstone:** [A complete scientific workflow](tutorials/scientific_workflow_hssm.ipynb) — one dataset, start to finish.
+
+    *Fitting several models?* [Track fits with MLflow](how_to/track_with_mlflow.md) keeps a record of each one — settings, diagnostics and traces — so a study stays legible weeks later.
+
+    *Want every option?* Take the optional [scenic route](tutorials/main_tutorial_scenic_route.ipynb) through model families, priors, regressions, hierarchies, comparison, and low-level extensions.
 
     *Used HDDM before?* [Coming from HDDM](explanations/coming_from_hddm.md) maps what you know onto HSSM.
 
@@ -134,6 +139,8 @@ ownership boundaries, contributor routes, and the complete site directory.
   black-box Python function.
 - Built on PyMC, Bambi, and ArviZ, so the wider Python Bayesian ecosystem
   applies directly.
+- Optional run tracking, so every fit leaves a record of the model, the sampler
+  settings, the diagnostics and the traces behind it.
 
 ## Citation
 

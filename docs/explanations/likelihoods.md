@@ -68,3 +68,40 @@ described by [`hssm.ModelConfig`](../api/model_config.md) or
 The [built-in model and likelihood matrix](../reference/models-and-likelihoods.md)
 is the canonical catalog. Exact constructor rules live in the
 [`hssm.HSSM` API reference](../api/hssm.md).
+
+## Declaring where the response-time support starts
+
+HSSM floors the log-likelihood of every response time at or below the non-decision time `t`, because a sequential sampling model assigns no density there. Some likelihoods admit responses *below* `t`: the `hddm_wfpt` likelihood behind `full_ddm` reads `st` as the full width of the non-decision-time distribution, so its support starts at `t - st / 2`. Such a likelihood declares where its support starts with an `ndt_edge_shift` entry, `{"param": "<name>", "scale": s}` (the `hssm._types.NDTEdgeShift` `TypedDict`), which moves the floor to `t - s * <name>`. The declaration can be given in three places:
+
+- in the likelihood dict of a model registered with `hssm.register_model`, so it ships with the likelihood;
+- as an `"ndt_edge_shift"` field of `model_config` when constructing `hssm.HSSM(...)`, which overrides the registered declaration;
+- as the `ndt_edge_shift=` keyword of `make_distribution` when building a `pm.Distribution` directly (see [Use the low-level API with PyMC](https://lnccbrown.github.io/HSSM/tutorials/pymc/)).
+
+`full_ddm` declares `{"param": "st", "scale": 0.5}`. A likelihood without the key keeps the floor at `t`, and a model without `t` in its `list_params` has no floor at all. For a network trained on `ssm-simulators` output, the declaration must match the simulator's: the network does not learn the edge, its training labels merely smooth across it, and the floor is what restores the model's zero density below the edge. For example, a registered model whose non-decision time varies uniformly between `t - st` and `t + st` declares the edge at `t - st`:
+
+```python
+hssm.register_model(
+    name="my_ddm_st",
+    response=["rt", "response"],
+    list_params=["v", "a", "z", "t", "st"],
+    choices=[-1, 1],
+    description="A DDM whose non-decision time is Uniform(t - st, t + st)",
+    likelihoods={
+        "blackbox": {
+            "loglik": my_ddm_st_logp,
+            "backend": None,
+            "default_priors": {},
+            "bounds": {
+                "v": (-3.0, 3.0),
+                "a": (0.3, 3.0),
+                "z": (0.1, 0.9),
+                "t": (0.001, 2.0),
+                "st": (0.0, 0.5),
+            },
+            "extra_fields": None,
+            # Responses are admissible from t - st onwards, not from t.
+            "ndt_edge_shift": {"param": "st", "scale": 1.0},
+        }
+    },
+)
+```
