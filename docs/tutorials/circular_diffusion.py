@@ -58,7 +58,7 @@ def _(mo):
     installed, this is the tested simulator revision (no JEAM required):
 
     ```sh
-    python -m pip install "ssm-simulators @ git+https://github.com/lnccbrown/ssm-simulators.git@285ca52a4d45566c522d8339a0c8f15ca59fa9e9"
+    python -m pip install "ssm-simulators @ git+https://github.com/lnccbrown/ssm-simulators.git@41b54d3084941608a1d27fa441faf844a9e5b380"
     ```
 
     ## Simulate one participant
