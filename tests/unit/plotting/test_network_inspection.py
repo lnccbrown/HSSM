@@ -138,6 +138,15 @@ def test_network_params_rejects_different_choices():
         network_params(model)
 
 
+def test_network_params_rejects_two_choices_other_than_minus_one_and_one():
+    """LANfactory evaluates two-choice networks at choices -1 and 1 only."""
+    model = _stand_in(
+        model_name="lba2", list_params=("A", "b", "v0", "v1"), choices=(0, 1)
+    )
+    with pytest.raises(ValueError, match=r"choices \[0, 1\], but LANfactory"):
+        network_params(model)
+
+
 def test_network_params_rejects_a_model_unknown_to_ssms():
     model = _stand_in(model_name="not_an_ssms_model")
     with pytest.raises(ValueError, match="ssm-simulators has none"):

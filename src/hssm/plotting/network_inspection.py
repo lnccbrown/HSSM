@@ -17,7 +17,7 @@ from __future__ import annotations
 import contextlib
 import os
 from collections.abc import Callable, Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import jax
 import numpy as np
@@ -46,6 +46,9 @@ LAN_LOGLIK_KIND = "approx_differentiable"
 DATA_COLUMNS = ("rt", "choice")
 # Parameters HSSM adds to a model that are not inputs of its network.
 NON_NETWORK_PARAMS = frozenset({"p_outlier"})
+# LANfactory builds the (rt, choice) grid of a two-choice network with these
+# choices, whatever choices the model declares.
+TWO_CHOICE_GRID_CHOICES = (-1, 1)
 
 Predictor = Callable[[np.ndarray], np.ndarray]
 
@@ -94,7 +97,10 @@ def network_source(model: HSSMBase) -> str | os.PathLike | onnx.ModelProto:
             f"likelihood was given as a {type(loglik).__name__}. Build the model "
             "with `loglik` set to an ONNX file path or a HuggingFace file name."
         )
-    return loglik
+    # mypy keeps `type[Any]` (from LogLik's `type[Distribution]`) through the
+    # isinstance check above, because ModelProto's metaclass makes a class
+    # object a possible instance.
+    return cast("str | os.PathLike | onnx.ModelProto", loglik)
 
 
 def network_params(model: HSSMBase) -> list[str]:
@@ -118,8 +124,9 @@ def network_params(model: HSSMBase) -> list[str]:
     Raises
     ------
     ValueError
-        If ssm-simulators has no model named like ``model``, or if its
-        parameters or choices differ from the model's.
+        If ssm-simulators has no model named like ``model``, if its
+        parameters or choices differ from the model's, or if a two-choice
+        model's choices are not the -1 and 1 LANfactory evaluates.
     """
     name = model.model_name
     try:
@@ -151,6 +158,12 @@ def network_params(model: HSSMBase) -> list[str]:
             f"The choices of model '{name}' ({hssm_choices}) do not match the "
             f"ssm-simulators model of that name ({ssms_choices}), which LANfactory "
             "simulates to compare the network with."
+        )
+    if len(hssm_choices) == 2 and hssm_choices != list(TWO_CHOICE_GRID_CHOICES):
+        raise ValueError(
+            f"Model '{name}' has choices {hssm_choices}, but LANfactory evaluates "
+            "a two-choice network at choices "
+            f"{list(TWO_CHOICE_GRID_CHOICES)}, so it cannot inspect this network."
         )
     return ssms_params
 
