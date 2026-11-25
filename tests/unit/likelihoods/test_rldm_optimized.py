@@ -2,6 +2,7 @@ from pathlib import Path
 import pytest
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 
 import hssm
@@ -100,7 +101,10 @@ def test_make_rldm_logp_op(fixture_path):
 
 
 @pytest.mark.parametrize("lower_code", [0.0, -1.0], ids=["0/1", "-1/1"])
-def test_response_coding_reaches_the_lan_as_minus_one_one(fixture_path, lower_code):
+@pytest.mark.parametrize("jitted", [False, True], ids=["eager", "jit"])
+def test_response_coding_reaches_the_lan_as_minus_one_one(
+    fixture_path, lower_code, jitted
+):
     """Both response codings give the likelihood with -1/1 choices for the LAN.
 
     The reference computes the Rescorla-Wagner drifts in NumPy and evaluates the
@@ -131,12 +135,72 @@ def test_response_coding_reaches_the_lan_as_minus_one_one(fixture_path, lower_co
     logp = make_rldm_logp_func(
         n_participants, n_trials, model=fixture_path / "angle.onnx"
     )
+    if jitted:
+        logp = jax.jit(logp)
     params = [np.full(len(data), p) for p in (rl_alpha, scaler, a, z, t, theta)]
     responses = np.where(upper, 1.0, lower_code)
     result = logp(np.column_stack([rt, responses]), *params, feedback)
 
     # float32-safe tolerance; feeding the LAN a 0 choice is off by O(1).
     np.testing.assert_allclose(result, expected, atol=1e-4)
+
+
+@pytest.fixture
+def small_rldm_case(fixture_path):
+    """A small mixed-choice dataset with a local angle LAN and valid parameters."""
+    data = np.array([[0.9, 0.0], [1.1, 1.0], [0.8, 0.0], [1.2, 1.0]])
+    params = tuple(np.full(len(data), p) for p in (0.6, 3.2, 1.2, 0.4, 0.1, 0.1))
+    feedback = np.array([1.0, 0.0, 0.0, 1.0])
+    logp = make_rldm_logp_func(1, len(data), model=fixture_path / "angle.onnx")
+    return logp, data, params, feedback
+
+
+@pytest.mark.parametrize("response", [np.nan, np.inf, -np.inf, -2.0, 2.0, 0.5])
+@pytest.mark.parametrize("jitted", [False, True], ids=["eager", "jit"])
+def test_invalid_response_does_not_become_a_boundary(small_rldm_case, response, jitted):
+    """Missing and unsupported response codes must not yield a valid likelihood."""
+    logp, data, params, feedback = small_rldm_case
+    data[0, 1] = response
+    if jitted:
+        logp = jax.jit(logp)
+
+    result = np.asarray(logp(data, *params, feedback)).ravel()
+
+    assert np.isnan(result[0]), result
+
+
+@pytest.mark.parametrize("shape", [(4, 3), (4, 1), (8,), (1, 4, 2)])
+@pytest.mark.parametrize("jitted", [False, True], ids=["eager", "jit"])
+def test_data_requires_exactly_rt_and_response(small_rldm_case, shape, jitted):
+    """Reject extra/missing columns and wrong-rank data rather than dropping fields."""
+    logp, _, params, feedback = small_rldm_case
+    if jitted:
+        logp = jax.jit(logp)
+
+    with pytest.raises(ValueError, match=r"two columns.*\[rt, response\]"):
+        logp(np.ones(shape), *params, feedback)
+
+
+@pytest.mark.parametrize("jitted", [False, True], ids=["eager", "jit"])
+def test_response_codings_have_identical_parameter_gradients(small_rldm_case, jitted):
+    """The response recoding preserves gradients of all six fitted parameters."""
+    logp, data, params, feedback = small_rldm_case
+
+    def summed_logp(values, *parameters):
+        return jnp.sum(logp(values, *parameters, feedback))
+
+    gradient = jax.grad(summed_logp, argnums=tuple(range(1, 7)))
+    if jitted:
+        gradient = jax.jit(gradient)
+    gradients_zero_one = gradient(data, *params)
+    data[:, 1] = np.where(data[:, 1] == 0, -1.0, 1.0)
+    gradients_minus_one_one = gradient(data, *params)
+
+    for grad_zero_one, grad_minus_one_one in zip(
+        gradients_zero_one, gradients_minus_one_one, strict=True
+    ):
+        assert np.isfinite(grad_zero_one).all()
+        np.testing.assert_allclose(grad_zero_one, grad_minus_one_one, atol=1e-6)
 
 
 @pytest.mark.parametrize(
