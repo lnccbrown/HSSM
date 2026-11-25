@@ -202,7 +202,7 @@ class BaseModelConfig(ABC):
 class Config(BaseModelConfig):
     """Config class that stores the configurations for models."""
 
-    rv: RandomVariable | None = None
+    rv: RandomVariable | Callable[..., np.ndarray] | None = None
     # Fields with dictionaries are automatically deepcopied
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     # Which parameter shifts the lower edge of the response-time support, and by
@@ -254,16 +254,13 @@ class Config(BaseModelConfig):
                 if kind in default_config["likelihoods"]:
                     kind = cast("LoglikKind", kind)
                     loglik_config = default_config["likelihoods"][kind]
+                    choices = default_config.get("choices")
 
                     return Config(
                         model_name=model_name,
                         loglik_kind=kind,
                         response=list(default_config["response"]),
-                        choices=(
-                            tuple(default_config["choices"])
-                            if default_config.get("choices") is not None
-                            else None
-                        ),
+                        choices=tuple(choices) if choices is not None else None,
                         response_domains=deepcopy(
                             default_config.get("response_domains")
                         ),
@@ -288,17 +285,14 @@ class Config(BaseModelConfig):
             if model_name in default_model_config:
                 model_name = cast("SupportedModels", model_name)
                 default_config = deepcopy(default_model_config[model_name])
+                choices = default_config.get("choices")
                 if loglik_kind in default_config["likelihoods"]:
                     loglik_config = default_config["likelihoods"][loglik_kind]
                     return Config(
                         model_name=model_name,
                         loglik_kind=loglik_kind,
                         response=list(default_config["response"]),
-                        choices=(
-                            tuple(default_config["choices"])
-                            if default_config.get("choices") is not None
-                            else None
-                        ),
+                        choices=tuple(choices) if choices is not None else None,
                         response_domains=deepcopy(
                             default_config.get("response_domains")
                         ),
@@ -310,11 +304,7 @@ class Config(BaseModelConfig):
                     model_name=model_name,
                     loglik_kind=loglik_kind,
                     response=list(default_config["response"]),
-                    choices=(
-                        tuple(default_config["choices"])
-                        if default_config.get("choices") is not None
-                        else None
-                    ),
+                    choices=tuple(choices) if choices is not None else None,
                     response_domains=deepcopy(default_config.get("response_domains")),
                     list_params=default_config["list_params"],
                     description=default_config["description"],
@@ -523,7 +513,7 @@ class ModelConfig:
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     backend: Literal["jax", "pytensor"] | None = None
-    rv: RandomVariable | None = None
+    rv: RandomVariable | Callable[..., np.ndarray] | None = None
     extra_fields: list[str] | None = None
     # Overrides the likelihood's own declaration when not None; see Config.
     ndt_edge_shift: NDTEdgeShift | None = None

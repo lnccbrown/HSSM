@@ -49,8 +49,9 @@ fit = model.sample(sampler="pymc", random_seed=42)
 predictions = model.sample_posterior_predictive(dt=fit, inplace=False, random_seed=43)
 ```
 
-Keep lapse mixtures off and summarize the predictions as RTs and directions;
-categorical-choice summaries do not apply. The simulator and likelihood use
+Keep lapse mixtures off. Use `plot_predictive` for pooled RTs, and use the
+raw predictive angles for directional summaries. Quantile-probability plots
+and model cartoons require categorical choices. The simulator and likelihood use
 a fixed radius, with no across-trial variability in drift or nondecision time
 unless modeled explicitly through covariates. This is a planar model with a
 single exit angle, not a spherical diffusion model.

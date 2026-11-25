@@ -21,6 +21,8 @@ def test_registered_simulation_uses_hssm_parameter_names():
     assert (sim.rt > params["t"]).all()
     assert ((-np.pi <= sim.response) & (sim.response < np.pi)).all()
     assert (sim.response != np.trunc(sim.response)).all()
+    with pytest.raises(ValueError, match="Specify only one"):
+        hssm.simulate_data("circular_diffusion", {**params, "vx": 0.0}, 1)
 
 
 def test_named_model_gradient_and_predictive_draws():
