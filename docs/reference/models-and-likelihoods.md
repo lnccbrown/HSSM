@@ -59,6 +59,8 @@ a fixed radius, with no across-trial variability in drift or nondecision time
 unless modeled explicitly through covariates. This is a planar model with a
 single exit angle, not a spherical diffusion model.
 
+For an end-to-end example, see [Fit response times and reported directions](../tutorials/circular_diffusion.ipynb).
+
 ## Specialized model families
 
 The table covers the `hssm.HSSM(model=...)` registry. Two specialized public
