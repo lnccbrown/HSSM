@@ -503,3 +503,22 @@ def test_predictive_idata_to_dataframe(data_ddm):
     assert df is not None
     assert df.shape == (10 * data_ddm.shape[0], 5)
     assert set(df.columns) == {"chain", "draw", "rt", "response", "__obs__"}
+
+
+def test_predictive_dataframe_ignores_dimensions_of_other_variables():
+    """One scalar response per trial must remain one row per trial."""
+    group = xr.Dataset(
+        {
+            "response": (("chain", "draw", "__obs__"), [[[0, 1, 0]]]),
+            "unrelated": ("other_dim", [10, 20]),
+        }
+    )
+    dt = xr.DataTree.from_dict({"prior_predictive": group})
+
+    frame = hssm.utils.predictive_dt_to_dataframe(
+        dt, predictive_group="prior_predictive", response_str="response"
+    )
+
+    assert list(frame.columns) == ["chain", "draw", "__obs__", "response"]
+    assert frame["__obs__"].tolist() == [0, 1, 2]
+    assert frame["response"].tolist() == [0, 1, 0]
