@@ -486,28 +486,24 @@ def _apply_lapse_model(
 
     lapse_prior = cast("bmb.Prior", lapse_dist)  # numeric lapse rejected above
 
-    replace_shape = (*out_shape[:-1], replace_n)
-    replace_mask = np.stack([replace, replace], axis=-1)
-    n_draws = np.prod(replace_shape)
+    # One (rt, response) draw per lapse row, assigned through the row mask.
+    # `np.putmask` picks values by flat position in `sims_out` instead, which
+    # wrote the same draw to several rows (#1507).
     lapse_rt = cast(
         "np.ndarray",
         pm.draw(
             get_distribution_from_prior(lapse_prior).dist(**lapse_prior.args),
-            n_draws,
+            replace_n,
             random_seed=rng,
         ),
-    ).reshape(replace_shape)
+    ).reshape(replace_n)
 
     lapse_response = rng.choice(
         choices,
         p=1 / len(choices) * np.ones(len(choices)),
-        size=replace_shape,
+        size=replace_n,
     )
-    lapse_output = np.stack(
-        [lapse_rt, lapse_response],
-        axis=-1,
-    )
-    np.putmask(sims_out, replace_mask, lapse_output)
+    sims_out[replace] = np.stack([lapse_rt, lapse_response], axis=-1)
     return sims_out
 
 
