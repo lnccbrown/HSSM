@@ -132,6 +132,7 @@ class RLSSMConfig(BaseModelConfig):
     _ssms_participant_contract: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self):  # noqa: D105
+        super().__post_init__()
         if self.loglik_kind is None:
             self.loglik_kind = "approx_differentiable"
             _logger.debug(

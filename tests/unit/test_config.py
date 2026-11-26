@@ -12,6 +12,29 @@ import hssm
 hssm.set_floatX("float32")
 
 
+def test_direct_config_only_defaults_choices_when_omitted():
+    """Explicit None and supplied canonical domains must not inject binary labels."""
+    kwargs = {
+        "model_name": "custom",
+        "loglik_kind": "analytical",
+        "list_params": ["v"],
+        "loglik": lambda *args: 0.0,
+    }
+    legacy = Config(**kwargs)
+    legacy.validate()
+    assert legacy.choices == (0, 1)
+    assert legacy.response_domains == {
+        "response": {"kind": "categorical", "values": (0, 1)}
+    }
+
+    continuous = Config(**kwargs, response_domains={"response": {"kind": "continuous"}})
+    continuous.validate()
+    assert continuous.choices is None
+
+    with pytest.raises(ValueError, match="Provide `response_domains`"):
+        Config(**kwargs, choices=None).validate()
+
+
 def test_from_defaults():
     # Case 1: Has default prior
     config1 = Config.from_defaults("ddm", "analytical")
