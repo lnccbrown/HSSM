@@ -298,18 +298,19 @@ def log_likelihood(
         on_unused_input="ignore",
     )
 
-    # Loop through chain and draws
-    for ids in itertools.product(coords["chain"].values, coords["draw"].values):
+    # Loop through chain and draws by position: the coordinate values need not
+    # be 0, 1, ..., e.g. once burn-in draws are dropped or the trace is thinned.
+    for i_chain, i_draw in itertools.product(range(n_chains), range(n_draws)):
         kwargs_tmp = {
             key_: (
-                val[ids[0], ids[1], ...]
+                val[i_chain, i_draw, ...]
                 if (val.shape[0] == n_chains and val.shape[1] == n_draws)
                 else val[0, 0, ...]
             )
             for key_, val in kwargs.items()
         }
 
-        output_array[ids[0], ids[1], :] = logp_compiled(**kwargs_tmp)
+        output_array[i_chain, i_draw, :] = logp_compiled(**kwargs_tmp)
 
     # output_array
     return xr.DataArray(output_array, coords=coords)
@@ -542,7 +543,8 @@ def _random_sample(
 def _rearrange_data(data: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarray:
     """Rearrange a dataframe so that missing values are on top.
 
-    We assume the dataframe's first column can contain missing values coded as -999.0.
+    Missing values are coded as -999.0 in the ``rt`` column of a dataframe (its
+    first column if it has no ``rt`` column) and in the first column of an array.
 
     Parameters
     ----------
@@ -555,7 +557,11 @@ def _rearrange_data(data: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarra
         The rearranged dataframe.
     """
     if isinstance(data, pd.DataFrame):
-        missing_indices = data.iloc[:, 0] == -999.0
+        # `rt` need not be the first column, e.g. after a `participant_id` column.
+        rt = data["rt"] if "rt" in data.columns else data.iloc[:, 0]
+        # `fillna`: with a nullable dtype, `pd.NA` compares to `pd.NA`, and such a row
+        # would fall out of both splits below.
+        missing_indices = (rt == -999.0).fillna(False)
         split_missing = data.loc[missing_indices, :]
         split_not_missing = data.loc[~missing_indices, :]
 

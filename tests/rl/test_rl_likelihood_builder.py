@@ -106,6 +106,8 @@ def model_config():
 def rldm_data(fixture_path):
     """Load RLDM data and extract metadata."""
     data = np.load(fixture_path / "rldm_data.npy", allow_pickle=True).item()["data"]
+    # The fixture codes responses 0/1, but the angle LAN takes -1/1 choices (#1399).
+    data["response"] = np.where(data["response"] > 0, 1.0, -1.0)
     participant_id = data["participant_id"].values
     trial = data["trial"].values
     subj = np.unique(participant_id).astype(np.int32)
@@ -990,7 +992,7 @@ class TestRldmLikelihoodBuilder:
         """Check the fixture-backed RL logp function shape and aggregate value."""
         result = rldm_setup.logp_fn(rldm_setup.values, *rldm_setup.args)
         assert result.shape[0] == rldm_setup.total_trials
-        np.testing.assert_almost_equal(result.sum(), -6879.15, decimal=DECIMAL)
+        np.testing.assert_almost_equal(result.sum(), -6618.57, decimal=DECIMAL)
 
     def test_make_rl_logp_op(
         self, rldm_setup, rldm_data, model_config, param_arrays, annotated_ssm_logp_func
@@ -1014,7 +1016,7 @@ class TestRldmLikelihoodBuilder:
         result_eval = result_op.eval()
 
         assert result_eval.shape[0] == rldm_data.total_trials
-        np.testing.assert_almost_equal(result_eval.sum(), -6879.15, decimal=DECIMAL)
+        np.testing.assert_almost_equal(result_eval.sum(), -6618.57, decimal=DECIMAL)
 
         # Test 2: Op produces same results as make_rl_logp_func
         result_func = rldm_setup.logp_fn(rldm_setup.values, *rldm_setup.args)
