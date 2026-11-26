@@ -17,6 +17,7 @@ import pytensor
 import pytensor.tensor as pt
 from bambi.backend.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
+from ssms.config import get_model_registry
 from ssms.hssm_support import (
     get_simulator_fun_internal,
     validate_simulator_fun,
@@ -37,7 +38,7 @@ _logger = logging.getLogger("hssm")
 # The placeholder `rt` value that marks missing-RT and omission (deadline) rows.
 MISSING_RT = -999.0
 
-LOGP_LB = pm.pytensorf.floatX(-66.1)
+LOGP_LB = -66.1  # a Python float takes the graph's dtype (see likelihoods.analytical)
 
 
 def apply_param_bounds_to_loglik(
@@ -259,6 +260,14 @@ def make_hssm_rv(
     """
     simulator_fun_internal = get_simulator_fun_internal(simulator_fun)
     model_name, choices, obs_dim_int = validate_simulator_fun(simulator_fun_internal)
+
+    # ssm-simulators up to 0.16.0 reports its fallback choices [0, 1, 2] for a
+    # model registered after import. Lapse responses are drawn from `choices`,
+    # so a model named by a string takes its own from the live registry.
+    if isinstance(simulator_fun, str):
+        registry = get_model_registry()
+        if registry.has_model(simulator_fun):
+            choices = registry.get(simulator_fun).get("choices", choices)
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
@@ -519,28 +528,24 @@ def _apply_lapse_model(
 
     lapse_prior = cast("bmb.Prior", lapse_dist)  # numeric lapse rejected above
 
-    replace_shape = (*out_shape[:-1], replace_n)
-    replace_mask = np.stack([replace, replace], axis=-1)
-    n_draws = np.prod(replace_shape)
+    # One (rt, response) draw per lapse row, assigned through the row mask.
+    # `np.putmask` picks values by flat position in `sims_out` instead, which
+    # wrote the same draw to several rows (#1507).
     lapse_rt = cast(
         "np.ndarray",
         pm.draw(
             get_distribution_from_prior(lapse_prior).dist(**lapse_prior.args),
-            n_draws,
+            replace_n,
             random_seed=rng,
         ),
-    ).reshape(replace_shape)
+    ).reshape(replace_n)
 
     lapse_response = rng.choice(
         choices,
         p=1 / len(choices) * np.ones(len(choices)),
-        size=replace_shape,
+        size=replace_n,
     )
-    lapse_output = np.stack(
-        [lapse_rt, lapse_response],
-        axis=-1,
-    )
-    np.putmask(sims_out, replace_mask, lapse_output)
+    sims_out[replace] = np.stack([lapse_rt, lapse_response], axis=-1)
     return sims_out
 
 
@@ -823,6 +828,8 @@ def make_distribution(
         _params = list_params
 
         @classmethod
+        # PyMC idiom (cf. pm.Flat.dist): named params in, a list to super().dist.
+        # pyrefly: ignore[bad-override]
         def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
             dist_params = [
                 pt.as_tensor_variable(pm.pytensorf.floatX(kwargs[param]))
@@ -891,8 +898,9 @@ def make_distribution(
                     )
                 # The lapse term is a graph constant: it is evaluated once on
                 # the (constant) observed data, and p_outlier's gradient flows
-                # through the mixture weights only.
-                lapse_logp = lapse_func(_to_numpy(data))
+                # through the mixture weights only. In floatX: a float64
+                # constant would upcast a float32 graph.
+                lapse_logp = lapse_func(_to_numpy(data)).astype(pytensor.config.floatX)
 
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
@@ -1020,13 +1028,31 @@ def make_family(
         likelihood_name, parent=parent, params=list_params, dist=dist
     )
 
-    family_cls = bmb.Family if is_choice_only else SSMFamily
+    family_cls = OrderedFamily if is_choice_only else SSMFamily
     family = family_cls(family_name, likelihood=likelihood, link=link)
 
     return family
 
 
-class SSMFamily(bmb.Family):
+class OrderedFamily(bmb.Family):
+    """A bmb.Family whose auxiliary parameters keep the likelihood's order.
+
+    bambi returns them as a set, so the components that bambi builds from them,
+    and the free random variables of the PyMC model, follow Python's string-hash
+    seed. NUTS then explores a different ordering in each process, and a seeded
+    ``sample()`` gives different draws (#1492). Drop this override once the bambi
+    floor reaches a release that keeps the order
+    (bambinos/bambi#1091).
+    """
+
+    @property
+    def auxiliary_parameters(self):
+        """Get the likelihood's parameters other than the parent, in order."""
+        parent = self.likelihood.parent
+        return [param for param in self.likelihood.params if param != parent]
+
+
+class SSMFamily(OrderedFamily):
     """Extends bmb.Family to get around the dimensionality mismatch."""
 
     def create_extra_pps_coord(self):
