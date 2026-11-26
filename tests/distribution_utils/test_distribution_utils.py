@@ -179,6 +179,51 @@ def test_apply_lapse_model_rejects_numeric_lapse_distribution():
         )
 
 
+@pytest.mark.parametrize("shape", [(2000,), (3, 2000), (2, 3, 500)])
+@pytest.mark.parametrize("trialwise", [False, True], ids=["scalar", "trialwise"])
+@pytest.mark.parametrize("is_choice_only", [False, True], ids=["rt", "choice_only"])
+def test_apply_lapse_model_gives_each_lapse_row_its_own_draw(
+    shape, trialwise, is_choice_only
+):
+    """Lapse rows hold independent draws, and the same rows lapse as before (#1507).
+
+    `np.putmask` handed out the lapse draws by flat position in `sims_out`, so
+    several lapse rows shared one (rt, response) pair.
+    """
+    p_outlier = np.broadcast_to(
+        np.linspace(0.0, 0.1, shape[-1]) if trialwise else 0.05, shape
+    ).copy()
+    # 0.5 is neither a choice nor inside the lapse RT support: it marks non-lapse rows.
+    sims_out = np.full(shape if is_choice_only else (*shape, 2), 0.5)
+
+    out = _apply_lapse_model(
+        sims_out=sims_out.copy(),
+        p_outlier=p_outlier if trialwise else 0.05,
+        rng=np.random.default_rng(0),
+        lapse_dist=0.5
+        if is_choice_only
+        else bmb.Prior("Uniform", lower=5.0, upper=20.0),
+        choices=[-1, 1],
+        is_choice_only=is_choice_only,
+    )
+
+    # Which rows lapse is the function's first draw from the generator.
+    expected_lapse = (
+        np.random.default_rng(0).binomial(n=1, p=p_outlier, size=shape).astype(bool)
+    )
+    is_lapse = out != 0.5 if is_choice_only else out[..., 0] != 0.5
+    np.testing.assert_array_equal(is_lapse, expected_lapse)
+    np.testing.assert_array_equal(out[~is_lapse], sims_out[~is_lapse])
+
+    lapse_rows = out[is_lapse]
+    responses = lapse_rows if is_choice_only else lapse_rows[:, 1]
+    assert set(np.unique(responses)) == {-1.0, 1.0}
+    if not is_choice_only:
+        lapse_rt = lapse_rows[:, 0]
+        assert ((lapse_rt >= 5.0) & (lapse_rt <= 20.0)).all()
+        assert np.unique(lapse_rt).size == lapse_rt.size
+
+
 @pytest.mark.parametrize("rv", ["choice_only_model", lambda *args, **kwargs: None])
 def test_make_distribution_forwards_choice_only_to_generated_rv(monkeypatch, rv):
     """Generated RVs must keep the choice-only support-shape contract."""
