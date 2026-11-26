@@ -16,12 +16,14 @@ SupportedModels = Literal[
     "ddm_sdv",
     "full_ddm",
     "angle",
+    "angle_extended",
     "levy",
     "ornstein",
     "weibull",
     "race_no_bias_angle_4",
     "ddm_seq2_no_bias",
     "gamma_drift",
+    "gamma_drift_angle",
     "lba3",
     "lba4",
     "lba2",
@@ -29,10 +31,21 @@ SupportedModels = Literal[
     "poisson_race",
     "softmax_inv_temperature_2",
     "softmax_inv_temperature_3",
+    "softmax_inv_temperature_4",
 ]
 
 
 LoglikKind = Literal["analytical", "approx_differentiable", "blackbox"]
+
+
+class NDTEdgeShift(TypedDict):
+    """Declare which parameter shifts the lower edge of the response-time support.
+
+    The likelihood admits response times from ``t - scale * <param>`` upwards.
+    """
+
+    param: str
+    scale: float
 
 
 class LoglikConfig(TypedDict):
@@ -43,6 +56,10 @@ class LoglikConfig(TypedDict):
     default_priors: dict[str, ParamSpec]
     bounds: dict[str, tuple[float, float]]
     extra_fields: Optional[list[str]]
+    ndt_edge_shift: NotRequired[NDTEdgeShift]
+    # A JAX implementation of this same likelihood, f(data, *list_params) -> (N,),
+    # for callers that need JAX (the RLSSM registry); plain HSSM uses `loglik`.
+    jax_loglik: NotRequired[Callable[..., Any]]
 
 
 LoglikConfigs = dict[LoglikKind, LoglikConfig]

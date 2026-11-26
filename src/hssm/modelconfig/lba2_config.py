@@ -3,6 +3,7 @@ from ..likelihoods.analytical import (
     lba2_bounds,
     lba2_params,
     logp_lba2,
+    logp_lba_jax,
 )
 
 
@@ -25,8 +26,14 @@ def get_lba2_config() -> DefaultConfig:
         "likelihoods": {
             "analytical": {
                 "loglik": logp_lba2,
+                "jax_loglik": logp_lba_jax,
                 "backend": None,
-                "default_priors": {},
+                "default_priors": {
+                    # The bounds-derived prior, started below b's default start
+                    # (1.2): the likelihood rejects b <= A, and A's own default
+                    # start (2.0) would make log p -inf.
+                    "A": {"name": "HalfNormal", "sigma": 2.0, "initval": 0.5},
+                },
                 "bounds": lba2_bounds,
                 "extra_fields": None,
             }

@@ -5,6 +5,7 @@ from .analytical import (
     DDM_SDV,
     POISSON_RACE,
     logp_ddm,
+    logp_ddm_jax,
     logp_ddm_sdv,
     logp_poisson_race,
 )
@@ -12,6 +13,7 @@ from .blackbox import logp_ddm_bbox, logp_ddm_sdv_bbox, logp_full_ddm
 
 __all__ = [
     "logp_ddm",
+    "logp_ddm_jax",
     "logp_ddm_sdv",
     "DDM",
     "DDM_SDV",

@@ -172,7 +172,7 @@ def test_post_check_data_sanity_valid(base_data):
 
     invalid_response = max(dv_instance_no_missing.choices) + 1
     dv_instance_no_missing.data.loc[0, "response"] = invalid_response
-    with pytest.raises(ValueError, match=f"Invalid responses found in your dataset: "):
+    with pytest.raises(ValueError, match="Invalid responses found in your dataset: "):
         dv_instance_no_missing._post_check_data_sanity()
 
     dv_instance_no_missing.data.loc[0, "response"] = 1  # Reset to valid response

@@ -10,6 +10,7 @@ from hssm.modelconfig import get_default_model_config, list_models
 
 ROOT = Path(__file__).parent.parent
 MODEL_REFERENCE = ROOT / "docs/reference/models-and-likelihoods.md"
+REFERENCE_INDEX = ROOT / "docs/reference/index.md"
 
 
 def _code_values(cell: str) -> tuple[str, ...]:
@@ -68,6 +69,13 @@ def test_previously_missing_top_level_apis_are_documented() -> None:
     for relative_path, names in expectations.items():
         contents = (ROOT / relative_path).read_text()
         assert all(name in contents for name in names)
+
+
+def test_dataset_helpers_are_linked_from_reference_index() -> None:
+    """Keep both dataset discovery and loading reachable from the index."""
+    contents = REFERENCE_INDEX.read_text()
+    for target in ("../api/list_data.md", "../api/load_data.md"):
+        assert f"]({target})" in contents
 
 
 def test_onnx_reference_states_the_enforced_contract() -> None:

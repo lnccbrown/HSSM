@@ -266,10 +266,12 @@ def get_default_prior(
 
     The following summarizes default priors for each type of term:
 
-    * common_intercept: Bounded Normal prior (N(mean(bounds), 0.25)).
+    * common_intercept: Bounded Normal prior (N(mean(bounds), width(bounds) / 4)).
     * common: Normal prior (N(0, 0.25)).
-    * group_intercept: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3). It's supposed to
-    be bounded but Bambi does not fully support it yet.
+    * group_intercept: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3)). Under a
+      transformed link this correctly lives on an unbounded predictor scale. Safe
+      generation fails closed for a finitely bounded, identity-linked group-only
+      intercept because this generic hierarchy does not respect response support.
     * group_specific: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3).
 
     This function is taken from bambi.priors.prior.py and modified to handle hssm-
@@ -305,8 +307,15 @@ def get_default_prior(
                 # TODO: Make it more specific.
                 prior = generate_prior("Normal", bounds=bounds)
             else:
+                # A quarter of the width puts the bounds 2 SD from the mean, so the
+                # prior is weakly informative across the whole range. For LAN
+                # models the bounds are the training range, and a fixed SD of 0.25
+                # pulled typical values (t near 0.3, v near 1) toward the middle.
                 prior = generate_prior(
-                    "Normal", mu=mean(bounds), sigma=0.25, bounds=bounds
+                    "Normal",
+                    mu=mean(bounds),
+                    sigma=(bounds[1] - bounds[0]) / 4,
+                    bounds=bounds,
                 )
     elif term_type == "group_intercept":
         prior = generate_prior("Normal", mu="Normal", sigma="Weibull")
@@ -336,7 +345,7 @@ def get_hddm_default_prior(
         else:
             prior = generate_prior(HDDM_MU[param], bounds=bounds)
     elif term_type == "group_intercept":
-        if link is not None:
+        if not _is_identity_link(link):
             prior = generate_prior("Normal", mu="Normal", sigma="Weibull", bounds=None)
         else:
             prior = generate_prior(HDDM_SETTINGS_GROUP[param], bounds=None)
