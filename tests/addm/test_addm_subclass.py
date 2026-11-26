@@ -119,9 +119,18 @@ def test_is_hssmbase_subclass():
         assert hasattr(model, attr), f"missing HSSMBase API: {attr}"
 
 
+def test_loglik_op_injected():
+    """The JAX log-likelihood ``Op`` is injected into the private config."""
+    cfg = aDDMConfig()
+    model = hssm.aDDM(data=make_addm_dataframe(20), model_config=cfg)
+    assert isinstance(model.model_config.loglik, Op)
+    assert model.model_config.backend == "jax"
+    assert cfg.loglik is None and cfg.backend is None
+
+
 @pytest.mark.parametrize("canonical", [False, True])
-def test_loglik_op_injected_into_private_config(canonical):
-    """Resolving either response declaration leaves the caller's config untouched."""
+def test_caller_response_config_is_detached(canonical):
+    """Construction and subsequent caller edits cannot change each other's metadata."""
     labels = [-1, 1]
     domains = {"response": {"kind": "categorical", "values": labels}}
     cfg = (
@@ -130,9 +139,6 @@ def test_loglik_op_injected_into_private_config(canonical):
         else aDDMConfig(choices=labels)
     )
     model = hssm.aDDM(data=make_addm_dataframe(20), model_config=cfg)
-    assert isinstance(model.model_config.loglik, Op)
-    assert model.model_config.backend == "jax"
-    assert cfg.loglik is None and cfg.backend is None
     assert cfg.response_domains is (domains if canonical else None)
     assert cfg.choices is (None if canonical else labels)
 
@@ -251,8 +257,7 @@ if __name__ == "__main__":
         test_construct_default_config,
         test_construct_explicit_config,
         test_is_hssmbase_subclass,
-        lambda: test_loglik_op_injected_into_private_config(False),
-        lambda: test_loglik_op_injected_into_private_config(True),
+        test_loglik_op_injected,
         test_bad_columns_raise,
         test_smoke_sample,
         test_hierarchical_regression_builds,
