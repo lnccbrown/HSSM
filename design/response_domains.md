@@ -6,12 +6,12 @@
 
 ## Goal
 
-HSSM should describe each non-RT observation column in one canonical place. That
-contract must support mixed categorical, continuous, and circular observations and
-arbitrary fixed observation widths without model-specific branches.
+`Config.response` declares all physical observation columns in order, including `rt`
+when present. HSSM supplies the timing and omission rules for `rt`; `response_domains`
+declares whether each remaining coordinate is categorical, continuous, or circular.
 
-The implementation should replace fixed-width assumptions, not surround them with a
-second abstraction layer.
+The implementation should support mixed domains and arbitrary fixed observation
+widths without model-specific branches or a second abstraction layer.
 
 ## Canonical representation
 
@@ -86,8 +86,10 @@ part of this contract.
 4. Canonical metadata combined with explicitly supplied `choices` at a raw input
    boundary is ambiguous and fails. A resolved config may retain an exactly matching
    derived `choices` view so ordinary dataclass copying and validation remain
-   idempotent; conflicting values fail. Resolved configs have no implicit choice
-   default: built-in factories supply their existing labels explicitly. Resolved
+   idempotent; conflicting values fail. The legacy direct `Config` and `RLSSMConfig`
+   constructors retain their binary `(0, 1)` default when neither declaration is
+   supplied for a single-response model; it never overrides canonical metadata.
+   Explicit `choices=None` without a domain does not request this default. Resolved
    configs are construction snapshots, not mutable domain registries. Directly
    mutating nested canonical metadata is unsupported and a later validation fails if
    the derived view no longer matches; construct a replacement with canonical metadata

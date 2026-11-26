@@ -18,9 +18,9 @@ def register_model(
     name: SupportedModels,
     response: list[str],
     list_params: list[str],
-    choices: list[int] | None,
-    likelihoods: LoglikConfigs,
-    description: str | None,
+    choices: list[int] | None = None,
+    likelihoods: LoglikConfigs | None = None,
+    description: str | None = None,
     response_domains: dict[str, ResponseDomainSpec] | None = None,
 ) -> None:
     """Register a new model in HSSM.
@@ -34,7 +34,8 @@ def register_model(
     list_params : list[str]
         List of parameters
     choices : list[int] or None
-        Legacy list of possible choices for one categorical response.
+        Legacy list of possible choices for one categorical response. Omit
+        when supplying `response_domains`.
     response_domains : dict or None
         Canonical metadata keyed by each physical non-RT response column.
     description : str
@@ -58,6 +59,8 @@ def register_model(
     # Ensure no collisions with existing models
     if name in registered_models:
         raise ValueError(f"Model '{name}' already exists")
+    if likelihoods is None:
+        raise TypeError("register_model() requires `likelihoods`.")
     if response_domains is not None and choices is not None:
         raise ValueError(
             "Provide either `response_domains` or legacy `choices`, not both."
@@ -78,7 +81,6 @@ def register_model(
         assert resolved_choices is not None
         config["choices"] = list(resolved_choices)
     else:
-        config["choices"] = None
         config["response_domains"] = resolved_domains
 
     # TODO: validate provided configs?

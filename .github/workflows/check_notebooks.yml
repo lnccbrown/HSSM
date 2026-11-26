@@ -129,6 +129,14 @@ jobs:
           mkdir -p -- "$artifact_dir"
           printf '%s\n' "$TARGET_NOTEBOOK" > "$artifact_dir/target.txt"
 
+          # Check the committed notebooks for local paths before anything is
+          # cleaned or executed. Run afterwards, the check also scans the
+          # executed copy, whose warnings carry runner paths, and fails on
+          # output that is never published (#1519).
+          uv run python scripts/check_docs_notebook_paths.py \
+            2>&1 | tee "$artifact_dir/privacy.log"
+          privacy_status=${PIPESTATUS[0]}
+
           echo "Cleaning $TARGET_NOTEBOOK"
           uv run nb-clean clean -o "$TARGET_NOTEBOOK"
 
@@ -141,17 +149,12 @@ jobs:
 
           executed_notebook="${TARGET_NOTEBOOK%.ipynb}.nbconvert.ipynb"
           validation_status=1
-          privacy_status=1
           if [[ -f "$executed_notebook" ]]; then
             cp -- "$executed_notebook" "$artifact_dir/"
 
             uv run python scripts/check_executed_notebook.py "$executed_notebook" \
               2>&1 | tee "$artifact_dir/validation.log"
             validation_status=${PIPESTATUS[0]}
-
-            uv run python scripts/check_docs_notebook_paths.py \
-              2>&1 | tee "$artifact_dir/privacy.log"
-            privacy_status=${PIPESTATUS[0]}
           else
             echo "Executed notebook was not produced: $executed_notebook" \
               | tee "$artifact_dir/validation.log"

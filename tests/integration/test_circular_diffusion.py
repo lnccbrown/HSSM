@@ -18,6 +18,8 @@ def test_registered_circular_metadata_roundtrips():
     config = Config.from_defaults("circular_diffusion", None)
     schema = get_model_registry().get("circular_diffusion")["observation_schema"]
     assert config.response == [field["name"] for field in schema]
+    assert config.choices is None
+    assert "choices" not in default_model_config["circular_diffusion"]
     angle = schema[1]
     assert config.response_domains == {
         angle["name"]: {
@@ -100,3 +102,11 @@ def test_out_of_range_angles_are_rejected():
     data = pd.DataFrame({"rt": [0.5, 0.6], "response": [0.4, np.pi]})
     with pytest.raises(ValueError, match="response"):
         hssm.HSSM(data=data, model="circular_diffusion", p_outlier=None)
+
+
+def test_predictive_simulator_keeps_exits_after_twenty_seconds():
+    """The likelihood has no deadline; its simulator must keep long exits."""
+    config = Config.from_defaults("circular_diffusion", "analytical")
+    pairs = config.rv([0.0, 0.0, 10.0, 0.2], random_state=16, n_replicas=32)
+    assert np.isfinite(pairs).all()
+    assert pairs[..., 0].max() > 20.2

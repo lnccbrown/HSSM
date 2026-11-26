@@ -132,6 +132,7 @@ class RLSSMConfig(BaseModelConfig):
     _ssms_participant_contract: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self):  # noqa: D105
+        super().__post_init__()
         if self.loglik_kind is None:
             self.loglik_kind = "approx_differentiable"
             _logger.debug(
@@ -206,7 +207,6 @@ class RLSSMConfig(BaseModelConfig):
                     "Provide either `response_domains` or legacy `choices`, not both."
                 )
             init_kwargs["response_domains"] = deepcopy(response_domains)
-            init_kwargs["choices"] = None
         else:
             _get_or_warn("choices", DEFAULT_SSM_CHOICES)
 

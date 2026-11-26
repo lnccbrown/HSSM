@@ -108,6 +108,23 @@ def test_from_rlssm_dict_rejects_canonical_and_legacy_metadata():
         RLSSMConfig.from_rlssm_dict(config_dict)
 
 
+def test_direct_rlssm_config_defaults_choices_only_without_domains(
+    valid_rlssmconfig_kwargs,
+):
+    """Direct RL construction retains binary choices without overriding domains."""
+    del valid_rlssmconfig_kwargs["choices"]
+    legacy = RLSSMConfig(**valid_rlssmconfig_kwargs)
+    legacy.validate()
+    assert legacy.choices == (0, 1)
+
+    canonical = RLSSMConfig(
+        **valid_rlssmconfig_kwargs,
+        response_domains={"response": {"kind": "categorical", "values": (-1, 1)}},
+    )
+    canonical.validate()
+    assert canonical.choices == (-1, 1)
+
+
 def test_resolved_config_round_trip_accepts_matching_derived_choices(
     valid_rlssmconfig_kwargs,
 ):

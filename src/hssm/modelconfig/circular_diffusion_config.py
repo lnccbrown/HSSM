@@ -44,7 +44,6 @@ def get_circular_diffusion_config() -> DefaultConfig:
             )
     return {
         "response": response,
-        "choices": None,
         "response_domains": {angle["name"]: domain},
         "list_params": ["v_x", "v_y", "a", "t"],
         "description": "Centered diffusion to a fixed circle with Cartesian drift",
