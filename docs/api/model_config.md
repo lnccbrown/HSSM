@@ -21,6 +21,17 @@ and missing-data handling continue to use the existing RT contract.
 The mapping keys must match the non-RT entries in `response` exactly. HSSM
 normalizes mapping insertion order to the order declared by `response`.
 
+If the experiment records choice labels such as `"left"` and `"right"`, keep
+those labels in the raw data and map them explicitly before fitting. For a DDM
+where left is the lower boundary and right is the upper boundary:
+
+```python
+model_data = data.assign(response=data["response"].map({"left": -1, "right": 1}))
+```
+
+Use the codes expected by your likelihood and simulator. HSSM does not infer
+the mapping from the order of the labels.
+
 ## Custom RT and two-coordinate example
 
 The domain mapping below deliberately lists `azimuth` before `polar`. The

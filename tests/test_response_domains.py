@@ -160,6 +160,12 @@ def test_single_categorical_domain_derives_legacy_choices():
             "must be integers",
         ),
         (
+            ["rt", "action"],
+            {"action": {"kind": "categorical", "values": ["left", "right"]}},
+            None,
+            "values for 'action' must be integers.*Map string labels",
+        ),
+        (
             ["rt", "response"],
             {"response": {"kind": "circular"}},
             None,

@@ -673,7 +673,11 @@ def _resolve_response_domains(
                 isinstance(value, bool) or not isinstance(value, Integral)
                 for value in values
             ):
-                raise ValueError(f"Categorical values for {column!r} must be integers.")
+                raise ValueError(
+                    f"Categorical values for {column!r} must be integers. "
+                    "Map string labels in the data to the model's integer choice "
+                    "codes and declare those codes here."
+                )
             normalized_values = tuple(int(value) for value in values)
             if len(set(normalized_values)) != len(normalized_values):
                 raise ValueError(f"Categorical values for {column!r} must be distinct.")
