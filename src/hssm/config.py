@@ -264,13 +264,16 @@ class Config(BaseModelConfig):
                 if kind in default_config["likelihoods"]:
                     kind = cast("LoglikKind", kind)
                     loglik_config = default_config["likelihoods"][kind]
-                    choices = default_config.get("choices")
 
                     return Config(
                         model_name=model_name,
                         loglik_kind=kind,
                         response=list(default_config["response"]),
-                        choices=tuple(choices) if choices is not None else None,
+                        choices=(
+                            tuple(default_config["choices"])
+                            if default_config.get("choices") is not None
+                            else None
+                        ),
                         response_domains=deepcopy(
                             default_config.get("response_domains")
                         ),
@@ -295,14 +298,17 @@ class Config(BaseModelConfig):
             if model_name in default_model_config:
                 model_name = cast("SupportedModels", model_name)
                 default_config = deepcopy(default_model_config[model_name])
-                choices = default_config.get("choices")
                 if loglik_kind in default_config["likelihoods"]:
                     loglik_config = default_config["likelihoods"][loglik_kind]
                     return Config(
                         model_name=model_name,
                         loglik_kind=loglik_kind,
                         response=list(default_config["response"]),
-                        choices=tuple(choices) if choices is not None else None,
+                        choices=(
+                            tuple(default_config["choices"])
+                            if default_config.get("choices") is not None
+                            else None
+                        ),
                         response_domains=deepcopy(
                             default_config.get("response_domains")
                         ),
@@ -314,7 +320,11 @@ class Config(BaseModelConfig):
                     model_name=model_name,
                     loglik_kind=loglik_kind,
                     response=list(default_config["response"]),
-                    choices=tuple(choices) if choices is not None else None,
+                    choices=(
+                        tuple(default_config["choices"])
+                        if default_config.get("choices") is not None
+                        else None
+                    ),
                     response_domains=deepcopy(default_config.get("response_domains")),
                     list_params=default_config["list_params"],
                     description=default_config["description"],

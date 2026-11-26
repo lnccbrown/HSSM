@@ -81,7 +81,6 @@ def register_model(
         assert resolved_choices is not None
         config["choices"] = list(resolved_choices)
     else:
-        config["choices"] = None
         config["response_domains"] = resolved_domains
 
     # TODO: validate provided configs?
