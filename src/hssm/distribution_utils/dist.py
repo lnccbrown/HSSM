@@ -736,16 +736,7 @@ def make_distribution(
         rv_instance = rv()
     elif not isinstance(rv, type) and isinstance(rv, RandomVariable):
         rv_instance = rv
-    elif callable(rv):
-        random_variable = make_hssm_rv(
-            simulator_fun=cast("Callable[..., Any]", rv),
-            list_params=list_params,
-            lapse=lapse,
-            is_choice_only=is_choice_only,
-            expected_obs_dim=expected_obs_dim,
-        )
-        rv_instance = random_variable()
-    elif isinstance(rv, str):
+    elif isinstance(rv, str) or callable(rv):
         random_variable = make_hssm_rv(
             simulator_fun=rv,
             list_params=list_params,
