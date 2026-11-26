@@ -641,7 +641,7 @@ def predictive_dt_to_dataframe(
         A dataframe with the predictive samples.
     """
     predictive = dt[predictive_group].ds[response_str]
-    df = dt[predictive_group].ds.to_dataframe().reset_index(drop=False)
+    df = predictive.to_dataframe().reset_index()
     response_names = response_str.split(",")
     if response_dim not in df.columns:
         if any(dim not in {"chain", "draw", "__obs__"} for dim in predictive.dims):

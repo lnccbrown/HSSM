@@ -81,12 +81,19 @@ class DataValidatorMixin:
 
         for column, domain in self.response_domains.items():
             observed = self.data.loc[valid_rows, column].to_numpy()
-            if any(
-                isinstance(value, (bool, np.bool_))
-                or not isinstance(value, Real)
-                or (not isinstance(value, Integral) and not np.isfinite(value))
-                for value in observed
-            ):
+            for value in observed:
+                if (
+                    isinstance(value, Real)
+                    and not isinstance(value, (bool, np.bool_))
+                    and (isinstance(value, Integral) or np.isfinite(value))
+                ):
+                    continue
+                if domain["kind"] == "categorical" and isinstance(value, str):
+                    raise ValueError(
+                        f"Response column {column!r} contains the string label "
+                        f"{str(value)!r}. Map string labels to this model's integer "
+                        f"choice codes {domain['values']} before fitting."
+                    )
                 raise ValueError(
                     f"Response column {column!r} must contain finite numeric values."
                 )

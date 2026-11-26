@@ -57,7 +57,7 @@ from hssm.utils import (
 )
 
 from . import plotting, tracking
-from .config import BaseModelConfig
+from .config import BaseModelConfig, ModelConfig
 from .modelconfig import list_models
 from .param import Params
 from .param import UserParam as Param
@@ -73,12 +73,23 @@ from .param.utils import _clamp_default_initval_to_bounds
 
 _logger = logging.getLogger("hssm")
 
+
 # NOTE: Temporary mapping from old sampler names to new ones in bambi 0.16.0
 _new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
     "mcmc": "pymc",
     "nuts_numpyro": "numpyro",
     "nuts_blackjax": "blackjax",
 }
+
+
+def _copy_response_config[T: BaseModelConfig | ModelConfig | dict](config: T) -> T:
+    """Detach response declarations without copying likelihoods or other payloads."""
+    snapshot = copy(config)
+    fields = snapshot if isinstance(snapshot, dict) else vars(snapshot)
+    for name in ("response", "choices", "response_domains"):
+        if name in fields:
+            fields[name] = deepcopy(fields[name])
+    return snapshot
 
 
 def _validate_setting_preset(name: str, value: object, preset: str) -> None:
@@ -357,8 +368,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.initval_jitter = initval_jitter
 
         # region ===== Store the pre-built config =====
-        self.model_config: BaseModelConfig = copy(model_config)
-        self.model_config.response_domains = deepcopy(model_config.response_domains)
+        self.model_config = _copy_response_config(model_config)
         configured_response = self.model_config.response
         assert configured_response is not None
         self._obs_dim = len(configured_response)
@@ -627,22 +637,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         result = {k: v for k, v in local_vars.items() if k not in exclude_keys}
         result.update(extra_kwargs)
         model_config = result.get("model_config")
-        if (
-            isinstance(model_config, dict)
-            and model_config.get("response_domains") is not None
-        ):
-            model_config = model_config.copy()
-            model_config["response_domains"] = deepcopy(
-                model_config["response_domains"]
-            )
-            result["model_config"] = model_config
-        elif (
-            model_config is not None
-            and getattr(model_config, "response_domains", None) is not None
-        ):
-            model_config = copy(model_config)
-            model_config.response_domains = deepcopy(model_config.response_domains)
-            result["model_config"] = model_config
+        if isinstance(model_config, (BaseModelConfig, ModelConfig, dict)):
+            result["model_config"] = _copy_response_config(model_config)
         return result
 
     def find_MAP(self, **kwargs):

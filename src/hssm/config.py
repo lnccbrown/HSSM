@@ -43,6 +43,8 @@ _logger = logging.getLogger("hssm")
 # ====== Centralized SSM defaults =====
 DEFAULT_SSM_OBSERVED_DATA = ["rt", "response"]
 DEFAULT_SSM_CHOICES = (0, 1)
+# Constructor-only marker: explicitly passing None has never requested binary labels.
+_OMITTED_CHOICES = cast("tuple[int, ...]", ...)
 
 ParamSpec = Union[float, dict[str, Any], Prior, None]
 
@@ -150,7 +152,7 @@ class BaseModelConfig(ABC):
 
     # Data specification
     response: list[str] | None = field(default_factory=DEFAULT_SSM_OBSERVED_DATA.copy)
-    choices: tuple[int, ...] | None = None
+    choices: tuple[int, ...] | None = _OMITTED_CHOICES
 
     # Parameter specification
     list_params: list[str] | None = None
@@ -171,6 +173,13 @@ class BaseModelConfig(ABC):
     response_domains: dict[str, ResponseDomainSpec] | None = field(
         default=None, kw_only=True
     )
+
+    def __post_init__(self) -> None:
+        """Keep legacy binary defaults only when neither declaration was supplied."""
+        if self.choices is _OMITTED_CHOICES:
+            self.choices = (
+                DEFAULT_SSM_CHOICES if self.response_domains is None else None
+            )
 
     @abstractmethod
     def validate(self) -> None:
@@ -214,6 +223,7 @@ class Config(BaseModelConfig):
 
     def __post_init__(self):
         """Validate that loglik_kind is provided."""
+        super().__post_init__()
         if self.loglik_kind is None:
             raise ValueError("loglik_kind is required for Config")
 
@@ -254,13 +264,16 @@ class Config(BaseModelConfig):
                 if kind in default_config["likelihoods"]:
                     kind = cast("LoglikKind", kind)
                     loglik_config = default_config["likelihoods"][kind]
-                    choices = default_config.get("choices")
 
                     return Config(
                         model_name=model_name,
                         loglik_kind=kind,
                         response=list(default_config["response"]),
-                        choices=tuple(choices) if choices is not None else None,
+                        choices=(
+                            tuple(default_config["choices"])
+                            if default_config.get("choices") is not None
+                            else None
+                        ),
                         response_domains=deepcopy(
                             default_config.get("response_domains")
                         ),
@@ -285,14 +298,17 @@ class Config(BaseModelConfig):
             if model_name in default_model_config:
                 model_name = cast("SupportedModels", model_name)
                 default_config = deepcopy(default_model_config[model_name])
-                choices = default_config.get("choices")
                 if loglik_kind in default_config["likelihoods"]:
                     loglik_config = default_config["likelihoods"][loglik_kind]
                     return Config(
                         model_name=model_name,
                         loglik_kind=loglik_kind,
                         response=list(default_config["response"]),
-                        choices=tuple(choices) if choices is not None else None,
+                        choices=(
+                            tuple(default_config["choices"])
+                            if default_config.get("choices") is not None
+                            else None
+                        ),
                         response_domains=deepcopy(
                             default_config.get("response_domains")
                         ),
@@ -304,7 +320,11 @@ class Config(BaseModelConfig):
                     model_name=model_name,
                     loglik_kind=loglik_kind,
                     response=list(default_config["response"]),
-                    choices=tuple(choices) if choices is not None else None,
+                    choices=(
+                        tuple(default_config["choices"])
+                        if default_config.get("choices") is not None
+                        else None
+                    ),
                     response_domains=deepcopy(default_config.get("response_domains")),
                     list_params=default_config["list_params"],
                     description=default_config["description"],
@@ -331,7 +351,6 @@ class Config(BaseModelConfig):
                 model_name=model_name,
                 loglik_kind=loglik_kind,
                 response=list(DEFAULT_SSM_OBSERVED_DATA),
-                choices=DEFAULT_SSM_CHOICES,
             )
 
     def update_loglik(self, loglik: Any | None) -> None:
@@ -654,7 +673,11 @@ def _resolve_response_domains(
                 isinstance(value, bool) or not isinstance(value, Integral)
                 for value in values
             ):
-                raise ValueError(f"Categorical values for {column!r} must be integers.")
+                raise ValueError(
+                    f"Categorical values for {column!r} must be integers. "
+                    "Map string labels in the data to the model's integer choice "
+                    "codes and declare those codes here."
+                )
             normalized_values = tuple(int(value) for value in values)
             if len(set(normalized_values)) != len(normalized_values):
                 raise ValueError(f"Categorical values for {column!r} must be distinct.")

@@ -22,7 +22,7 @@ The key difference from `hssm.hssm.HSSM` is the likelihood:
 """
 
 import logging
-from dataclasses import replace
+from copy import copy
 from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
@@ -150,7 +150,8 @@ class _RLSSM(HSSMBase):
         # ===== save/load serialisation =====
         self._init_args = self._store_init_args(locals(), kwargs)
 
-        # Validate config (ensures ssm_logp_func is present, etc.)
+        # Validation resolves response metadata; keep the caller's inputs unchanged.
+        model_config = copy(model_config)
         model_config.validate()
 
         # RLSSM reshapes rows into (n_participants, n_trials, ...) by position,
@@ -207,14 +208,8 @@ class _RLSSM(HSSMBase):
             extra_fields=list(model_config.extra_fields or []),
         )
 
-        # Build a new RLSSMConfig with the Op and backend injected, leaving
-        # the caller's object unmodified (dataclasses.replace creates a shallow
-        # copy with only the specified fields overridden).
-        #
-        # backend is hardcoded to "jax" because the entire RLSSM likelihood
-        # stack is JAX-only. See ssm_logp_func, make_rl_logp_op, and
-        #  _make_model_distribution for details.
-        model_config = replace(model_config, loglik=loglik_op, backend="jax")
+        model_config.loglik = loglik_op
+        model_config.backend = "jax"  # The RLSSM likelihood stack is JAX-only.
 
         # missing_data and deadline are guaranteed False, and
         # loglik_missing_data guaranteed None, at this point (guards above

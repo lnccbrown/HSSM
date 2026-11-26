@@ -80,7 +80,7 @@ class DefaultConfig(TypedDict):
 
     response: list[str]
     list_params: list[str]
-    choices: NotRequired[list[int] | None]
+    choices: NotRequired[list[int]]
     response_domains: NotRequired[dict[str, ResponseDomainSpec]]
     description: Optional[str]
     likelihoods: LoglikConfigs

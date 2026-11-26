@@ -9,6 +9,7 @@ import bambi as bmb
 import numpy as np
 import pandas as pd
 import pymc as pm
+import pytensor
 import pytensor.tensor as pt
 import pytest
 
@@ -33,7 +34,20 @@ from hssm.likelihoods.analytical import DDM, logp_ddm
 from hssm.likelihoods.blackbox import logp_full_ddm
 from hssm.register import register_model
 
-hssm.set_floatX("float32")
+
+@pytest.fixture(autouse=True)
+def _float32():
+    """Run every test in this file in float32, whatever ran before it.
+
+    The expected values below are float32 ones. Setting floatX at import does
+    not give the tests that precision: pytest imports every test module before
+    the first test runs, and any earlier test can leave another floatX behind.
+    """
+    floatX = pytensor.config.floatX
+    hssm.set_floatX("float32")
+    yield
+    hssm.set_floatX(floatX)
+
 
 # LOGP_LB as these float32 graphs store it.
 FLOOR = np.float32(LOGP_LB)
@@ -105,6 +119,39 @@ def test_make_hssm_rv():
     assert random_sample.shape == (100, 2)
 
 
+def test_likelihood_only_model_uses_configured_width():
+    """An unregistered simulator prevents prediction, not fitting."""
+    data = pd.DataFrame({"rt": [1.0, 2.0], "x": [2.0, 3.0], "y": [3.0, 4.0]})
+    model = hssm.HSSM(
+        data=data,
+        model="likelihood_only_test",
+        model_config={
+            "response": list(data),
+            "response_domains": {k: {"kind": "continuous"} for k in ("x", "y")},
+            "list_params": ["v"],
+            "default_priors": {"v": {"name": "Normal", "mu": 0, "sigma": 1}},
+        },
+        loglik=lambda data, v: -pt.sum(pt.square(data - v[..., None]), axis=-1),
+        loglik_kind="analytical",
+        p_outlier=None,
+    )
+    assert model.model_distribution.rv_op.signature == "()->(3)"
+    assert np.isfinite(
+        model.pymc_model.compile_logp()(model.pymc_model.initial_point())
+    )
+    with pytest.raises(ValueError, match="likelihood_only_test"):
+        model.sample_prior_predictive(draws=1)
+
+
+@pytest.mark.parametrize("name", ["ddm", "ddm_deadline"])
+def test_named_simulator_still_checks_its_width(name):
+    """A real simulator, including a generated variant, must match the config."""
+    with pytest.raises(
+        ValueError, match="observation width 2.*configured response width 3"
+    ):
+        distribution_utils.make_hssm_rv(name, ["v"], expected_obs_dim=3)
+
+
 def test_lapse_responses_use_a_registered_models_choices(registered_ssms_model):
     """A model registered in ssm-simulators after import draws lapse responses
     from its own choices, not from ssm-simulators' fallback [0, 1, 2]."""
@@ -163,6 +210,51 @@ def test_apply_lapse_model_rejects_numeric_lapse_distribution():
             lapse_dist=0.5,
             choices=[0, 1],
         )
+
+
+@pytest.mark.parametrize("shape", [(2000,), (3, 2000), (2, 3, 500)])
+@pytest.mark.parametrize("trialwise", [False, True], ids=["scalar", "trialwise"])
+@pytest.mark.parametrize("is_choice_only", [False, True], ids=["rt", "choice_only"])
+def test_apply_lapse_model_gives_each_lapse_row_its_own_draw(
+    shape, trialwise, is_choice_only
+):
+    """Lapse rows hold independent draws, and the same rows lapse as before (#1507).
+
+    `np.putmask` handed out the lapse draws by flat position in `sims_out`, so
+    several lapse rows shared one (rt, response) pair.
+    """
+    p_outlier = np.broadcast_to(
+        np.linspace(0.0, 0.1, shape[-1]) if trialwise else 0.05, shape
+    ).copy()
+    # 0.5 is neither a choice nor inside the lapse RT support: it marks non-lapse rows.
+    sims_out = np.full(shape if is_choice_only else (*shape, 2), 0.5)
+
+    out = _apply_lapse_model(
+        sims_out=sims_out.copy(),
+        p_outlier=p_outlier if trialwise else 0.05,
+        rng=np.random.default_rng(0),
+        lapse_dist=0.5
+        if is_choice_only
+        else bmb.Prior("Uniform", lower=5.0, upper=20.0),
+        choices=[-1, 1],
+        is_choice_only=is_choice_only,
+    )
+
+    # Which rows lapse is the function's first draw from the generator.
+    expected_lapse = (
+        np.random.default_rng(0).binomial(n=1, p=p_outlier, size=shape).astype(bool)
+    )
+    is_lapse = out != 0.5 if is_choice_only else out[..., 0] != 0.5
+    np.testing.assert_array_equal(is_lapse, expected_lapse)
+    np.testing.assert_array_equal(out[~is_lapse], sims_out[~is_lapse])
+
+    lapse_rows = out[is_lapse]
+    responses = lapse_rows if is_choice_only else lapse_rows[:, 1]
+    assert set(np.unique(responses)) == {-1.0, 1.0}
+    if not is_choice_only:
+        lapse_rt = lapse_rows[:, 0]
+        assert ((lapse_rt >= 5.0) & (lapse_rt <= 20.0)).all()
+        assert np.unique(lapse_rt).size == lapse_rt.size
 
 
 @pytest.mark.parametrize("rv", ["choice_only_model", lambda *args, **kwargs: None])
@@ -224,7 +316,7 @@ def test_apply_param_bounds_to_loglik():
         apply_param_bounds_to_loglik(
             logp, list_params, scalar_in_bound, scalar_out_of_bound, bounds=bounds
         ).eval(),
-        -66.1,
+        FLOOR,
     )
 
     results_vector = np.asarray(
@@ -233,7 +325,7 @@ def test_apply_param_bounds_to_loglik():
         ).eval(),
     )
 
-    np.testing.assert_array_equal(results_vector[out_of_bound_indices], -66.1)
+    np.testing.assert_array_equal(results_vector[out_of_bound_indices], FLOOR)
 
     np.testing.assert_array_equal(
         results_vector[~out_of_bound_indices], logp[~out_of_bound_indices]
@@ -272,12 +364,12 @@ def test_make_distribution():
 
     np.testing.assert_array_equal(
         Dist.logp(data, scalar_in_bound, scalar_out_of_bound).eval(),
-        -66.1,
+        FLOOR,
     )
 
     results_vector = np.asarray(Dist.logp(data, scalar_in_bound, random_vector).eval())
 
-    np.testing.assert_array_equal(results_vector[out_of_bound_indices], -66.1)
+    np.testing.assert_array_equal(results_vector[out_of_bound_indices], FLOOR)
 
     np.testing.assert_array_equal(
         results_vector[~out_of_bound_indices],
@@ -392,9 +484,11 @@ def test_extra_fields(data_ddm):
 
     true_values = dict(v=0.5, a=1.5, z=0.5, t=0.5)
 
-    np.testing.assert_almost_equal(
+    # rtol, not decimals: one float32 ulp of these values is about 2.4e-7.
+    np.testing.assert_allclose(
         pm.logp(DDM.dist(**true_values), data_ddm).eval(),
         pm.logp(DDM_WITH_XY.dist(**true_values), data_ddm).eval() / 2.0,
+        rtol=1e-6,
     )
 
     data_ddm_copy = data_ddm.copy()
@@ -409,10 +503,11 @@ def test_extra_fields(data_ddm):
         lapse=None,
     )
 
-    np.testing.assert_almost_equal(
+    np.testing.assert_allclose(
         pm.logp(DDM.dist(**true_values), data_ddm).eval(),
         pm.logp(ddm_model_xy.model_distribution.dist(**true_values), data_ddm).eval()
         / 2.0,
+        rtol=1e-6,
     )
 
     ddm_model = hssm.HSSM(data=data_ddm)
@@ -433,11 +528,12 @@ def test_extra_fields(data_ddm):
         + 0.05
         * pt.exp(pm.logp(pm.Uniform.dist(lower=0.0, upper=20.0), data_ddm["rt"].values))
     )
-    np.testing.assert_almost_equal(
+    np.testing.assert_allclose(
         pm.logp(
             ddm_model.model_distribution.dist(**true_values, p_outlier=0.05), data_ddm
         ).eval(),
         ddm_model_p_logp_lapse.eval(),
+        rtol=1e-6,
     )
 
 
