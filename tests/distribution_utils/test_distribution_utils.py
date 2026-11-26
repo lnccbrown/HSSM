@@ -119,6 +119,39 @@ def test_make_hssm_rv():
     assert random_sample.shape == (100, 2)
 
 
+def test_likelihood_only_model_uses_configured_width():
+    """An unregistered simulator prevents prediction, not fitting."""
+    data = pd.DataFrame({"rt": [1.0, 2.0], "x": [2.0, 3.0], "y": [3.0, 4.0]})
+    model = hssm.HSSM(
+        data=data,
+        model="likelihood_only_test",
+        model_config={
+            "response": list(data),
+            "response_domains": {k: {"kind": "continuous"} for k in ("x", "y")},
+            "list_params": ["v"],
+            "default_priors": {"v": {"name": "Normal", "mu": 0, "sigma": 1}},
+        },
+        loglik=lambda data, v: -pt.sum(pt.square(data - v[..., None]), axis=-1),
+        loglik_kind="analytical",
+        p_outlier=None,
+    )
+    assert model.model_distribution.rv_op.signature == "()->(3)"
+    assert np.isfinite(
+        model.pymc_model.compile_logp()(model.pymc_model.initial_point())
+    )
+    with pytest.raises(ValueError, match="likelihood_only_test"):
+        model.sample_prior_predictive(draws=1)
+
+
+@pytest.mark.parametrize("name", ["ddm", "ddm_deadline"])
+def test_named_simulator_still_checks_its_width(name):
+    """A real simulator, including a generated variant, must match the config."""
+    with pytest.raises(
+        ValueError, match="observation width 2.*configured response width 3"
+    ):
+        distribution_utils.make_hssm_rv(name, ["v"], expected_obs_dim=3)
+
+
 def test_lapse_responses_use_a_registered_models_choices(registered_ssms_model):
     """A model registered in ssm-simulators after import draws lapse responses
     from its own choices, not from ssm-simulators' fallback [0, 1, 2]."""
@@ -326,8 +359,10 @@ def test_make_distribution_forwards_choice_only_to_generated_rv(monkeypatch, rv)
         lapse=None,
         is_choice_only=False,
         fixed_vector_params=None,
+        expected_obs_dim=None,
     ):
         captured["is_choice_only"] = is_choice_only
+        captured["expected_obs_dim"] = expected_obs_dim
 
         class FakeRV:
             def __call__(self):
@@ -345,6 +380,7 @@ def test_make_distribution_forwards_choice_only_to_generated_rv(monkeypatch, rv)
     )
 
     assert captured["is_choice_only"] is True
+    assert captured["expected_obs_dim"] is None
 
 
 @pytest.mark.slow

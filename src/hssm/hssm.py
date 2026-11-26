@@ -57,8 +57,9 @@ class HSSM(HSSMBase):
     Parameters
     ----------
     data
-        A pandas DataFrame with the minimum requirements of containing the data with the
-        columns "rt" and "response".
+        A pandas DataFrame containing the physical response columns declared in
+        `hssm.ModelConfig.response`, plus any configured extra fields. Built-in RT
+        models typically use the columns "rt" and "response".
     model
         The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
         "full_ddm", "angle", "angle_extended", "levy", "ornstein", "weibull",
@@ -71,14 +72,12 @@ class HSSM(HSSMBase):
         default to its ssm-simulators config; otherwise `model_config` has to
         provide at least `list_params`.
     choices : optional
-        The choices that participants can make. An integer (Python `int` or numpy
-        integer) gives the number of choices: `2` means [-1, 1] and any `n > 2`
-        means [0, 1, ..., n - 1]. A `list` or `tuple` gives the choice values
-        directly. Ignored for supported models unless `model_config` is also passed,
-        and choices set in `model_config` take precedence. Defaults to `None`, which
-        uses the model's default choices (from ssm-simulators for custom models it
-        knows). If any value other than the choices provided is found in the
-        "response" column of the data, an error will be raised.
+        Legacy shorthand for the allowed labels of one categorical non-RT response.
+        An integer gives the number of choices: `2` means [-1, 1] and `n > 2` means
+        [0, 1, ..., n - 1]. A list or tuple gives the labels directly. Defaults to
+        the model's choices. For supported models this argument is ignored unless
+        `model_config` is also passed; choices in `model_config` take precedence.
+        Omit this argument when declaring `model_config.response_domains`.
     include : optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
@@ -255,8 +254,8 @@ class HSSM(HSSMBase):
     Attributes
     ----------
     data
-        A pandas DataFrame with at least two columns of "rt" and "response" indicating
-        the response time and responses.
+        The pandas DataFrame containing the physical response columns declared by the
+        model configuration.
     list_params
         The list of strs of parameter names.
     model_name
@@ -503,4 +502,5 @@ class HSSM(HSSMBase):
             ndt_edge_shift=ndt_edge_shift,
             n_choices=self.n_choices,
             has_deadline=bool(self.deadline),
+            expected_obs_dim=self._obs_dim,
         )

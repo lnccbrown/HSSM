@@ -10,7 +10,7 @@ import datetime
 import logging
 import warnings
 from abc import ABC, abstractmethod
-from copy import deepcopy
+from copy import copy, deepcopy
 from os import PathLike
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal, Union, cast
@@ -58,7 +58,7 @@ from hssm.utils import (
 )
 
 from . import plotting, tracking
-from .config import BaseModelConfig
+from .config import BaseModelConfig, ModelConfig
 from .modelconfig import list_models
 from .param import Params
 from .param import UserParam as Param
@@ -74,12 +74,23 @@ from .param.utils import _clamp_default_initval_to_bounds
 
 _logger = logging.getLogger("hssm")
 
+
 # NOTE: Temporary mapping from old sampler names to new ones in bambi 0.16.0
 _new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
     "mcmc": "pymc",
     "nuts_numpyro": "numpyro",
     "nuts_blackjax": "blackjax",
 }
+
+
+def _copy_response_config[T: BaseModelConfig | ModelConfig | dict](config: T) -> T:
+    """Detach response declarations without copying likelihoods or other payloads."""
+    snapshot = copy(config)
+    fields = snapshot if isinstance(snapshot, dict) else vars(snapshot)
+    for name in ("response", "choices", "response_domains"):
+        if name in fields:
+            fields[name] = deepcopy(fields[name])
+    return snapshot
 
 
 def _validate_setting_preset(name: str, value: object, preset: str) -> None:
@@ -388,21 +399,21 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.initval_jitter = initval_jitter
 
         # region ===== Store the pre-built config =====
-        self.model_config: BaseModelConfig = model_config
+        self.model_config = _copy_response_config(model_config)
+        configured_response = self.model_config.response
+        assert configured_response is not None
+        self._obs_dim = len(configured_response)
         # endregion
 
         # region ===== Set up shortcuts so old code will work ======
-        self.response: list[str] = (  # type: ignore[assignment]
-            list(self.model_config.response)
-            if self.model_config.response is not None
-            else []
-        )
+        self.response: list[str] = list(configured_response)  # type: ignore[assignment]
         self.list_params = (
             list(self.model_config.list_params)
             if self.model_config.list_params is not None
             else None
         )
         self.choices = self.model_config.choices  # type: ignore[assignment]
+        self.response_domains = self.model_config.response_domains or {}
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
@@ -412,13 +423,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # TODO: add to HSSMBase
         self.is_choice_only: bool = self.model_config.is_choice_only
 
-        if self.choices is None:
-            raise ValueError(
-                "`choices` must be provided either in `model_config` or as an argument."
-            )
-
-        self._validate_choices()
-
         # region Avoid mypy error later (None.append). Should list_params be Optional?
         if self.list_params is None:
             raise ValueError(
@@ -426,7 +430,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             )
         # endregion
 
-        self.n_choices = len(self.choices)  # type: ignore[arg-type]
+        self.n_choices = len(self.choices) if self.choices is not None else None
 
         self._pre_check_data_sanity()
 
@@ -500,7 +504,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self.list_params,
             self.link,
             self._parent,
-            is_choice_only=self.is_choice_only,
+            obs_dim=self._obs_dim,
         )
 
         # Targeted statistical-identifiability warnings for common/group or
@@ -663,6 +667,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         exclude_keys = {"self", "kwargs", "__class__"}
         result = {k: v for k, v in local_vars.items() if k not in exclude_keys}
         result.update(extra_kwargs)
+        model_config = result.get("model_config")
+        if isinstance(model_config, (BaseModelConfig, ModelConfig, dict)):
+            result["model_config"] = _copy_response_config(model_config)
         return result
 
     def find_MAP(self, **kwargs):
@@ -1590,18 +1597,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         )
         do_dt = pm.sample_prior_predictive(model=do_model, draws=draws, **kwargs)
 
-        # clean up `rt,response_mean` to `v`
-        do_dt = self._drop_parent_str_from_datatree(dt=do_dt)
-
-        # rename otherwise inconsistent dims and coords
-        if "rt,response_extra_dim_0" in do_dt["prior_predictive"].dims:
-            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_dims(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
-        if "rt,response_extra_dim_0" in do_dt["prior_predictive"].coords:
-            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_vars(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
+        do_dt = self._clean_predictive_datatree(dt=do_dt)
 
         if return_model:
             return do_dt, do_model
@@ -1704,18 +1700,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     continue
                 self._inference_obj[group_name] = prior_predictive[group_name]
 
-        # clean up `rt,response_mean` to `v`
-        dt = self._drop_parent_str_from_datatree(dt=self._inference_obj)
-
-        # rename otherwise inconsistent dims and coords
-        if "rt,response_extra_dim_0" in dt["prior_predictive"].dims:
-            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_dims(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
-        if "rt,response_extra_dim_0" in dt["prior_predictive"].coords:
-            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_vars(
-                name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
-            )
+        dt = self._clean_predictive_datatree(dt=self._inference_obj)
 
         # Update self._inference_obj to match the cleaned datatree
         self._inference_obj = dt
@@ -2341,9 +2326,21 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     + "parameter is not None"
                 )
         if self.has_lapse:
+            domain = (
+                next(iter(self.response_domains.values()))
+                if len(self.response_domains) == 1
+                else None
+            )
+            supports_lapse = domain is not None and domain["kind"] == "categorical"
+            if not supports_lapse:
+                raise ValueError(
+                    "`p_outlier` is supported only for one categorical response "
+                    "column. Set `p_outlier=None` or `p_outlier=0` for this model."
+                )
             if self.is_choice_only:
                 # Choice-only lapses are simulated as uniform random choices, so
                 # the likelihood must use the same uniform probability.
+                assert self.n_choices is not None
                 uniform = 1 / self.n_choices
                 if lapse is not None and not (
                     isinstance(lapse, int | float | np.floating)
@@ -2392,8 +2389,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         return var_names
 
-    def _drop_parent_str_from_datatree(self, dt: DataTree | None) -> DataTree:
-        """Drop the parent_str variable from a DataTree object.
+    def _clean_predictive_datatree(self, dt: DataTree | None) -> DataTree:
+        """Normalize generated response names and dimensions.
 
         Parameters
         ----------
@@ -2402,20 +2399,32 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        xr.Dataset
+        DataTree
             The modified DataTree object.
         """
         if dt is None:
             raise ValueError("Please provide a DataTree (traces) object.")
-        else:
-            for group in dt.groups:
-                if group == "/":
-                    continue
-                if ("rt,response_mean" in dt[group].data_vars) and (
-                    self._parent not in dt[group].data_vars
-                ):
-                    dt[group] = dt[group].ds.rename({"rt,response_mean": self._parent})
-            return dt
+
+        response_mean = f"{self.response_str}_mean"
+        raw_response_dim = f"{self.response_str}_extra_dim_0"
+        response_dim = f"{self.response_str}_dim"
+        for group in dt.groups:
+            if group == "/":
+                continue
+            dataset = dt[group].ds
+            rename = {}
+            if response_mean in dataset.data_vars and self._parent not in dataset:
+                rename[response_mean] = self._parent
+            if group.rsplit("/", maxsplit=1)[-1] in {
+                "posterior_predictive",
+                "prior_predictive",
+            } and (
+                raw_response_dim in dataset.dims or raw_response_dim in dataset.coords
+            ):
+                rename[raw_response_dim] = response_dim
+            if rename:
+                dt[group] = dataset.rename(rename)
+        return dt
 
     def _postprocess_initvals_deterministic(
         self, initval_settings: dict = INITVAL_SETTINGS

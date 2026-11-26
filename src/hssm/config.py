@@ -5,16 +5,23 @@ from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
-from numbers import Real
+from numbers import Integral, Real
 from os import PathLike
 from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
 
 import numpy as np
 from bambi import Prior
 
-from ._types import LogLik, LoglikKind, NDTEdgeShift, SupportedModels
+from ._types import (
+    LogLik,
+    LoglikKind,
+    NDTEdgeShift,
+    ResponseDomainSpec,
+    SupportedModels,
+)
 from .defaults import (
     default_model_config,
 )
@@ -36,6 +43,8 @@ _logger = logging.getLogger("hssm")
 # ====== Centralized SSM defaults =====
 DEFAULT_SSM_OBSERVED_DATA = ["rt", "response"]
 DEFAULT_SSM_CHOICES = (0, 1)
+# Constructor-only marker: explicitly passing None has never requested binary labels.
+_OMITTED_CHOICES = cast("tuple[int, ...]", ...)
 
 ParamSpec = Union[float, dict[str, Any], Prior, None]
 
@@ -143,7 +152,7 @@ class BaseModelConfig(ABC):
 
     # Data specification
     response: list[str] | None = field(default_factory=DEFAULT_SSM_OBSERVED_DATA.copy)
-    choices: tuple[int, ...] | None = DEFAULT_SSM_CHOICES
+    choices: tuple[int, ...] | None = _OMITTED_CHOICES
 
     # Parameter specification
     list_params: list[str] | None = None
@@ -159,6 +168,18 @@ class BaseModelConfig(ABC):
 
     # Random variable (simulator) for posterior predictive sampling
     rv: Any | None = None
+
+    # Canonical per-column response metadata. Appended for positional compatibility.
+    response_domains: dict[str, ResponseDomainSpec] | None = field(
+        default=None, kw_only=True
+    )
+
+    def __post_init__(self) -> None:
+        """Keep legacy binary defaults only when neither declaration was supplied."""
+        if self.choices is _OMITTED_CHOICES:
+            self.choices = (
+                DEFAULT_SSM_CHOICES if self.response_domains is None else None
+            )
 
     @abstractmethod
     def validate(self) -> None:
@@ -202,6 +223,7 @@ class Config(BaseModelConfig):
 
     def __post_init__(self):
         """Validate that loglik_kind is provided."""
+        super().__post_init__()
         if self.loglik_kind is None:
             raise ValueError("loglik_kind is required for Config")
 
@@ -247,7 +269,14 @@ class Config(BaseModelConfig):
                         model_name=model_name,
                         loglik_kind=kind,
                         response=list(default_config["response"]),
-                        choices=tuple(default_config["choices"]),
+                        choices=(
+                            tuple(default_config["choices"])
+                            if default_config.get("choices") is not None
+                            else None
+                        ),
+                        response_domains=deepcopy(
+                            default_config.get("response_domains")
+                        ),
                         list_params=default_config["list_params"],
                         description=default_config["description"],
                         **loglik_config,
@@ -275,7 +304,14 @@ class Config(BaseModelConfig):
                         model_name=model_name,
                         loglik_kind=loglik_kind,
                         response=list(default_config["response"]),
-                        choices=tuple(default_config["choices"]),
+                        choices=(
+                            tuple(default_config["choices"])
+                            if default_config.get("choices") is not None
+                            else None
+                        ),
+                        response_domains=deepcopy(
+                            default_config.get("response_domains")
+                        ),
                         list_params=default_config["list_params"],
                         description=default_config["description"],
                         **loglik_config,
@@ -284,7 +320,12 @@ class Config(BaseModelConfig):
                     model_name=model_name,
                     loglik_kind=loglik_kind,
                     response=list(default_config["response"]),
-                    choices=tuple(default_config["choices"]),
+                    choices=(
+                        tuple(default_config["choices"])
+                        if default_config.get("choices") is not None
+                        else None
+                    ),
+                    response_domains=deepcopy(default_config.get("response_domains")),
                     list_params=default_config["list_params"],
                     description=default_config["description"],
                 )
@@ -309,7 +350,7 @@ class Config(BaseModelConfig):
             return Config(
                 model_name=model_name,
                 loglik_kind=loglik_kind,
-                response=DEFAULT_SSM_OBSERVED_DATA,
+                response=list(DEFAULT_SSM_OBSERVED_DATA),
             )
 
     def update_loglik(self, loglik: Any | None) -> None:
@@ -335,6 +376,10 @@ class Config(BaseModelConfig):
         """
         if choices is None:
             return
+        if self.response_domains is not None:
+            raise ValueError(
+                "Provide either `response_domains` or legacy `choices`, not both."
+            )
 
         self.choices = choices
 
@@ -350,7 +395,18 @@ class Config(BaseModelConfig):
             self.response = list(user_config.response)  # type: ignore[assignment]
         if user_config.list_params is not None:
             self.list_params = user_config.list_params
-        if user_config.choices is not None:
+        if user_config.response_domains is not None:
+            if user_config.choices is not None:
+                raise ValueError(
+                    "Provide either `response_domains` or legacy `choices`, not both."
+                )
+            self.response_domains = deepcopy(user_config.response_domains)
+            self.choices = None
+        elif user_config.choices is not None:
+            if self.response_domains is not None:
+                raise ValueError(
+                    "Provide either `response_domains` or legacy `choices`, not both."
+                )
             self.choices = user_config.choices
         if user_config.rv is not None:
             self.rv = user_config.rv
@@ -371,10 +427,11 @@ class Config(BaseModelConfig):
         """Ensure that mandatory fields are not None."""
         if self.response is None:
             raise ValueError("Please provide `response` columns in the configuration.")
+        self.response_domains, self.choices = _resolve_response_domains(
+            self.response, self.response_domains, self.choices
+        )
         if self.list_params is None:
             raise ValueError("Please provide `list_params`.")
-        if self.choices is None:
-            raise ValueError("Please provide `choices`.")
         if self.loglik is None:
             raise ValueError("Please provide a log-likelihood function via `loglik`.")
         if self.loglik_kind == "approx_differentiable" and self.backend is None:
@@ -438,8 +495,10 @@ class Config(BaseModelConfig):
         ):
             if choices is not None:
                 config.update_choices(choices)
-            elif (ssms_config := _get_ssms_model_config(model)) is not None and (
-                "choices" in ssms_config
+            elif (
+                config.response_domains is None
+                and (ssms_config := _get_ssms_model_config(model)) is not None
+                and "choices" in ssms_config
             ):
                 config.update_choices(tuple(ssms_config["choices"]))
                 _logger.info(
@@ -477,6 +536,7 @@ class ModelConfig:
     extra_fields: list[str] | None = None
     # Overrides the likelihood's own declaration when not None; see Config.
     ndt_edge_shift: NDTEdgeShift | None = None
+    response_domains: dict[str, ResponseDomainSpec] | None = None
 
 
 def _normalize_model_config_with_choices(
@@ -499,6 +559,16 @@ def _normalize_model_config_with_choices(
     else:
         mc = model_config.copy()
 
+    if mc.get("response_domains") is not None:
+        mc["response_domains"] = deepcopy(mc["response_domains"])
+
+    if mc.get("response_domains") is not None and (
+        mc.get("choices") is not None or choices is not None
+    ):
+        raise ValueError(
+            "Provide either `response_domains` or legacy `choices`, not both."
+        )
+
     # Coerce any existing choices on the input to a tuple for immutability
     if mc.get("choices") is not None:
         mc["choices"] = tuple(mc["choices"])
@@ -520,3 +590,134 @@ def _normalize_model_config_with_choices(
 
     mc["choices"] = tuple(choices)
     return ModelConfig(**{k: v for k, v in mc.items() if v is not None})
+
+
+def _resolve_response_domains(
+    response: list[str] | tuple[str, ...] | None,
+    response_domains: Mapping[str, Mapping[str, object]] | None,
+    choices: list[int] | tuple[int, ...] | None,
+) -> tuple[dict[str, ResponseDomainSpec], tuple[int, ...] | None]:
+    """Return detached, response-ordered domain metadata and legacy choices."""
+    if not response:
+        raise ValueError("Please provide at least one `response` column.")
+    if any(not isinstance(name, str) or not name for name in response):
+        raise ValueError("Every `response` column name must be a non-empty string.")
+    if len(set(response)) != len(response):
+        raise ValueError("`response` column names must be unique.")
+
+    rt_count = response.count("rt")
+    if rt_count:
+        if rt_count != 1 or response[0] != "rt":
+            raise ValueError("RT-based models require `rt` exactly once at index zero.")
+    elif len(response) != 1:
+        raise ValueError(
+            "Models without `rt` currently support exactly one response column."
+        )
+
+    response_columns = [name for name in response if name != "rt"]
+    if not response_columns:
+        raise ValueError("At least one non-RT response column is required.")
+
+    if response_domains is None:
+        if len(response_columns) != 1 or choices is None:
+            raise ValueError(
+                "Provide `response_domains`; legacy `choices` can describe only one "
+                "non-RT response column."
+            )
+        raw_domains: Mapping[str, Mapping[str, object]] = {
+            response_columns[0]: {"kind": "categorical", "values": choices}
+        }
+    else:
+        if not isinstance(response_domains, Mapping):
+            raise ValueError("`response_domains` must be a mapping.")
+        missing = set(response_columns) - set(response_domains)
+        extra = set(response_domains) - set(response_columns)
+        if missing or extra:
+            details = []
+            if missing:
+                details.append(f"missing {sorted(missing)}")
+            if extra:
+                details.append(f"unexpected {sorted(extra)}")
+            raise ValueError(
+                "`response_domains` keys must match non-RT response columns: "
+                + ", ".join(details)
+                + "."
+            )
+        raw_domains = response_domains
+
+    resolved: dict[str, ResponseDomainSpec] = {}
+    for column in response_columns:
+        raw_spec = raw_domains[column]
+        if not isinstance(raw_spec, Mapping):
+            raise ValueError(f"Response domain for {column!r} must be a mapping.")
+        kind = raw_spec.get("kind")
+        if kind not in {"categorical", "continuous", "circular"}:
+            raise ValueError(
+                f"Response domain for {column!r} has invalid kind {kind!r}."
+            )
+
+        allowed = {"kind", "values"} if kind == "categorical" else {"kind", "bounds"}
+        unknown = set(raw_spec) - allowed
+        if unknown:
+            raise ValueError(
+                f"Response domain for {column!r} has unknown fields {sorted(unknown)}."
+            )
+
+        if kind == "categorical":
+            values = raw_spec.get("values")
+            if not isinstance(values, (list, tuple)) or not values:
+                raise ValueError(
+                    f"Categorical response domain for {column!r} requires values."
+                )
+            if any(
+                isinstance(value, bool) or not isinstance(value, Integral)
+                for value in values
+            ):
+                raise ValueError(
+                    f"Categorical values for {column!r} must be integers. "
+                    "Map string labels in the data to the model's integer choice "
+                    "codes and declare those codes here."
+                )
+            normalized_values = tuple(int(value) for value in values)
+            if len(set(normalized_values)) != len(normalized_values):
+                raise ValueError(f"Categorical values for {column!r} must be distinct.")
+            resolved[column] = {
+                "kind": "categorical",
+                "values": normalized_values,
+            }
+            continue
+
+        bounds = raw_spec.get("bounds")
+        if "bounds" not in raw_spec and kind == "continuous":
+            resolved[column] = {"kind": "continuous"}
+            continue
+        if not isinstance(bounds, (list, tuple)) or len(bounds) != 2:
+            raise ValueError(
+                f"{kind.capitalize()} response domain for {column!r} requires "
+                "two bounds."
+            )
+        if any(
+            isinstance(bound, bool) or not isinstance(bound, Real) for bound in bounds
+        ):
+            raise ValueError(f"Bounds for {column!r} must be real numbers.")
+        lower, upper = (float(bounds[0]), float(bounds[1]))
+        if not math.isfinite(lower) or not math.isfinite(upper) or lower >= upper:
+            raise ValueError(
+                f"Bounds for {column!r} must be finite and strictly increasing."
+            )
+        if kind == "continuous":
+            resolved[column] = {"kind": "continuous", "bounds": (lower, upper)}
+        else:
+            resolved[column] = {"kind": "circular", "bounds": (lower, upper)}
+
+    only_domain = next(iter(resolved.values())) if len(resolved) == 1 else None
+    resolved_choices = (
+        tuple(only_domain["values"])
+        if only_domain is not None and only_domain["kind"] == "categorical"
+        else None
+    )
+    if choices is not None and tuple(choices) != resolved_choices:
+        raise ValueError(
+            "Provide either `response_domains` or legacy `choices`, not both."
+        )
+    return resolved, resolved_choices

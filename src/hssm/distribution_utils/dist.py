@@ -7,6 +7,7 @@ generation ops.
 
 import logging
 from collections.abc import Callable, Sequence
+from functools import partial
 from os import PathLike
 from typing import Any, Literal, Protocol, cast, get_args
 
@@ -17,7 +18,7 @@ import pytensor
 import pytensor.tensor as pt
 from bambi.backend.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
-from ssms.config import get_model_registry
+from ssms.config import ModelConfigBuilder
 from ssms.hssm_support import (
     get_simulator_fun_internal,
     validate_simulator_fun,
@@ -235,6 +236,7 @@ def make_hssm_rv(
     lapse: bmb.Prior | float | None = None,
     is_choice_only: bool = False,
     fixed_vector_params: dict[str, np.ndarray] | None = None,
+    expected_obs_dim: int | None = None,
 ) -> type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
 
@@ -252,6 +254,9 @@ def make_hssm_rv(
         A dictionary mapping parameter names to their fixed ``np.ndarray``
         values, one per row of the data. ``rng_fn`` simulates with these vectors
         in place of the scalar placeholders it receives for these parameters.
+    expected_obs_dim : int, optional
+        Configured number of physical response columns. This is checked against
+        a real simulator and sets the support width of a likelihood-only model.
 
     Returns
     -------
@@ -259,15 +264,30 @@ def make_hssm_rv(
         A class of RandomVariable that are to be used in a `pm.Distribution`.
     """
     simulator_fun_internal = get_simulator_fun_internal(simulator_fun)
-    model_name, choices, obs_dim_int = validate_simulator_fun(simulator_fun_internal)
-
-    # ssm-simulators up to 0.16.0 reports its fallback choices [0, 1, 2] for a
-    # model registered after import. Lapse responses are drawn from `choices`,
-    # so a model named by a string takes its own from the live registry.
+    model_name, choices, declared_obs_dim = validate_simulator_fun(
+        simulator_fun_internal
+    )
     if isinstance(simulator_fun, str):
-        registry = get_model_registry()
-        if registry.has_model(simulator_fun):
-            choices = registry.get(simulator_fun).get("choices", choices)
+        try:
+            config = ModelConfigBuilder.from_model(simulator_fun)
+        except ValueError:
+            # ssms supplies a non-sampling placeholder for unknown names. Its
+            # default width of two says nothing about a custom likelihood.
+            if expected_obs_dim is not None:
+                declared_obs_dim = expected_obs_dim
+        else:
+            # Older ssms adapters miss the choices of models registered at runtime.
+            choices = config.get("choices", choices)
+
+    # A named choice-only simulator is checked after its legacy choice projection.
+    comparison_obs_dim = (
+        1 if is_choice_only and isinstance(simulator_fun, str) else declared_obs_dim
+    )
+    if expected_obs_dim is not None and comparison_obs_dim != expected_obs_dim:
+        raise ValueError(
+            f"The simulator observation width {comparison_obs_dim} does not match "
+            f"the configured response width {expected_obs_dim}."
+        )
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
@@ -297,16 +317,8 @@ def make_hssm_rv(
         """
 
         name = model_name + "_RV"
-        # New in PyMC 5.16+: instead of using `ndims_supp`, we use `signature` to define
-        # the signature of the random variable. The string to the left of the `->` sign
-        # describes the input signature, which is `()` for each parameter, meaning each
-        # parameter is a scalar. The string to the right of the
-        # `->` sign describes the output signature, which is `(2)`, which means the
-        # random variable is a length-2 array.
-
-        # Override the output from ssm_simulator based on whether the model is
-        # choice-only.
-        output = "()" if is_choice_only else f"({obs_dim_int})"
+        # Scalar parameters; the observation is scalar only for choice-only models.
+        output = "()" if is_choice_only else f"({declared_obs_dim})"
         signature = f"{','.join(['()'] * len(list_params))}->{output}"
 
         dtype = "floatX"
@@ -416,13 +428,13 @@ def make_hssm_rv(
                 size,
                 rng,
                 simulator_fun_internal,
-                obs_dim_int,
+                declared_obs_dim,
                 *args,
                 **kwargs,
             )
 
             # ssm-simulators returns (rt, response) pairs; keep only the response.
-            if is_choice_only and obs_dim_int > 1:
+            if is_choice_only and declared_obs_dim > 1:
                 sims_out = sims_out[..., -1]
 
             # With all-scalar parameters ssm-simulators squeezes a single draw's
@@ -433,7 +445,7 @@ def make_hssm_rv(
                     if requested_size is None
                     else tuple(np.atleast_1d(requested_size))
                 )
-                support_shape = () if is_choice_only else (obs_dim_int,)
+                support_shape = () if is_choice_only else (declared_obs_dim,)
                 sims_out = sims_out.reshape(batch_shape + support_shape)
 
             sims_out = _apply_lapse_model(
@@ -682,6 +694,7 @@ def make_distribution(
     ndt_edge_shift: NDTEdgeShift | None = None,
     n_choices: int | None = None,
     has_deadline: bool = False,
+    expected_obs_dim: int | None = None,
 ) -> type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
@@ -745,6 +758,9 @@ def make_distribution(
         ``True``, rows with ``rt == -999.0`` are omissions and the lapse process
         contributes its survival probability at the deadline,
         ``1 - CDF_lapse(deadline)``. Defaults to ``False``.
+    expected_obs_dim : int, optional
+        Configured number of physical response columns. This is checked against
+        generated RandomVariable metadata.
 
     Returns
     -------
@@ -770,22 +786,14 @@ def make_distribution(
         rv_instance = rv()
     elif not isinstance(rv, type) and isinstance(rv, RandomVariable):
         rv_instance = rv
-    elif callable(rv):
-        random_variable = make_hssm_rv(
-            simulator_fun=cast("Callable[..., Any]", rv),
-            list_params=list_params,
-            lapse=lapse,
-            is_choice_only=is_choice_only,
-            fixed_vector_params=fixed_vector_params,
-        )
-        rv_instance = random_variable()
-    elif isinstance(rv, str):
+    elif isinstance(rv, str) or callable(rv):
         random_variable = make_hssm_rv(
             simulator_fun=rv,
             list_params=list_params,
             lapse=lapse,
             is_choice_only=is_choice_only,
             fixed_vector_params=fixed_vector_params,
+            expected_obs_dim=expected_obs_dim,
         )
         rv_instance = random_variable()
     else:
@@ -998,6 +1006,7 @@ def make_family(
     likelihood_name: str = "SSM Likelihood",
     family_name="SSM Family",
     is_choice_only: bool = False,
+    obs_dim: int = 2,
 ) -> bmb.Family:
     """Build a family in bambi.
 
@@ -1018,6 +1027,8 @@ def make_family(
     is_choice_only : optional
         Whether the model is choice-only. Choice-only draws have no (rt, response)
         axis, so the family must not add one to the posterior predictive coords.
+    obs_dim
+        Number of physical response columns in posterior-predictive draws.
 
     Returns
     -------
@@ -1028,8 +1039,12 @@ def make_family(
         likelihood_name, parent=parent, params=list_params, dist=dist
     )
 
-    family_cls = OrderedFamily if is_choice_only else SSMFamily
-    family = family_cls(family_name, likelihood=likelihood, link=link)
+    family = SSMFamily(
+        family_name,
+        likelihood=likelihood,
+        link=link,
+        obs_dim=1 if is_choice_only else obs_dim,
+    )
 
     return family
 
@@ -1055,9 +1070,10 @@ class OrderedFamily(bmb.Family):
 class SSMFamily(OrderedFamily):
     """Extends bmb.Family to get around the dimensionality mismatch."""
 
-    def create_extra_pps_coord(self):
-        """Create an extra dimension."""
-        return np.arange(2)
+    def __init__(self, name, likelihood, link, obs_dim: int = 2):
+        super().__init__(name, likelihood, link)
+        if obs_dim > 1:
+            self.create_extra_pps_coord = partial(np.arange, obs_dim)
 
 
 def make_likelihood_callable(

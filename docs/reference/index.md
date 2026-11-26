@@ -11,8 +11,8 @@ This section records the public HSSM interfaces and project metadata. Use the
   attentional drift-diffusion interface.
 - [`hssm.Param`](../api/param.md), [`hssm.Prior`](../api/prior.md), and
   [`hssm.Link`](../api/link.md) describe parameter formulas, priors, and links.
-- [`hssm.ModelConfig`](../api/model_config.md) describes registered model
-  configurations.
+- [Model configuration and response domains](../api/model_config.md) defines
+  physical response-column ordering and canonical domain metadata.
 - [`hssm.rl`](../api/rl.md) contains the reinforcement-learning interfaces.
 - [Built-in models and likelihoods](models-and-likelihoods.md) records every
   `hssm.HSSM(model=...)` name, configured likelihood kind, parameter, and choice.
