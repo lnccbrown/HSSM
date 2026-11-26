@@ -21,6 +21,7 @@ from .utils import (
     _get_plotting_df,
     _get_title,
     _hdi_to_intervals,
+    _set_facet_suptitle,
     _subset_df,
     _use_traces_or_sample,
 )
@@ -400,8 +401,7 @@ def _plot_predictive_2D(
             )
 
     if title:
-        g.figure.subplots_adjust(top=0.9)
-        g.figure.suptitle(title)
+        _set_facet_suptitle(g, title)
 
     g.set_xlabels(xlabel)
     g.set_ylabels(ylabel)

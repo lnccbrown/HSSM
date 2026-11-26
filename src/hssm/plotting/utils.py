@@ -4,9 +4,11 @@ import logging
 import numbers
 from typing import Any, Iterable, Literal, cast
 
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
 import xarray as xr
+from seaborn import FacetGrid
 
 from ..utils import _random_sample
 
@@ -395,6 +397,27 @@ def _get_title(cols: Iterable["str"], col_values: Iterable[Any]) -> str:
     )
 
     return title
+
+
+def _set_facet_suptitle(g: FacetGrid, title: str) -> None:
+    """Put a figure title above the facet titles of a FacetGrid.
+
+    `tight_layout` reserves the height of the figure title plus two pads above
+    the facet titles, so the title goes one pad below the top edge. That distance
+    is set in inches: at a fixed fraction of the figure height the title lands on
+    the facet titles of a short figure and on the panels of a tall one.
+
+    Parameters
+    ----------
+    g
+        The grid to title.
+    title
+        The figure title.
+    """
+    fig = g.figure
+    pad = 1.08 * mpl.rcParams["font.size"] / 72  # tight_layout's default pad
+    fig.suptitle(title, y=1 - pad / fig.get_figheight())
+    g.tight_layout()
 
 
 def _process_df_for_qp_plot(
