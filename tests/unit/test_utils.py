@@ -13,7 +13,6 @@ import pytensor
 import pytest
 import xarray as xr
 from jax import config
-from scipy import stats
 from ssms.basic_simulators.simulator import simulator
 
 import hssm
@@ -301,225 +300,21 @@ def test_compute_log_likelihood_warns_and_replaces_existing_group(
     assert "Replacing existing log_likelihood group in dt." in caplog.text
 
 
-@pytest.mark.parametrize("bounds", [{"lb": -2.0, "ub": 2.0}, {"lb": -2.0}, {"ub": 2.0}])
-@pytest.mark.parametrize("response", ["model", "explicit_y", "new_data"])
-def test_log_likelihood_constrained_response(bounds, response):
-    """A Bambi `constrained` response is evaluated as a truncated Normal at each draw.
+@pytest.mark.parametrize(
+    "response",
+    [
+        "constrained(y, lb=-2.0, ub=2.0)",
+        "truncated(y, lb=-2.0, ub=2.0)",
+        "censored(y, status)",
+    ],
+)
+def test_log_likelihood_refuses_multi_column_bambi_responses(response):
+    """HSSM never builds these Bambi responses, so `log_likelihood` refuses them."""
+    df = pd.DataFrame({"y": [0.1, -0.4, 0.8], "status": ["none", "left", "right"]})
+    model = bmb.Model(f"{response} ~ 1", df, family="gaussian")
 
-    The response is read from the first column of the term's data, not from the
-    bound columns, and every draw uses its own parameters rather than the first
-    draw's. scipy's truncnorm is the reference.
-    """
-    rng = np.random.default_rng(1452)
-    y = rng.uniform(-1.5, 1.5, 6)
-    mu = rng.normal(0.0, 1.0, (2, 3))
-    sigma = rng.uniform(0.5, 2.0, (2, 3))
-    bound_args = ", ".join(f"{key}={value}" for key, value in bounds.items())
-    model = bmb.Model(
-        f"constrained(y, {bound_args}) ~ 1", pd.DataFrame({"y": y}), family="gaussian"
-    )
-    model.build()
-    posterior = xr.Dataset(
-        {
-            "Intercept": (("chain", "draw"), mu),
-            "sigma": (("chain", "draw"), sigma),
-        },
-        coords={"chain": [0, 1], "draw": [0, 1, 2]},
-    )
-
-    kwargs = {}
-    data = None
-    y_eval = y
-    if response == "explicit_y":
-        kwargs["y"] = y
-    elif response == "new_data":
-        y_eval = rng.uniform(-1.5, 1.5, 4)
-        data = pd.DataFrame({"y": y_eval})
-    dt = model._compute_likelihood_params(
-        xr.DataTree.from_dict({"posterior": posterior}), data, True, False
-    )
-    result = log_likelihood(
-        model.family, model, dt.children["posterior"], data=data, **kwargs
-    )
-
-    loc, scale = mu[..., None], sigma[..., None]
-    lower, upper = bounds.get("lb", -np.inf), bounds.get("ub", np.inf)
-    expected = stats.truncnorm.logpdf(
-        y_eval, (lower - loc) / scale, (upper - loc) / scale, loc=loc, scale=scale
-    )
-    np.testing.assert_allclose(result.values, expected, rtol=1e-5)
-
-
-def _gaussian_posterior(rng):
-    """Two chains and three draws of an intercept-only Gaussian model."""
-    mu = rng.normal(0.0, 1.0, (2, 3))
-    sigma = rng.uniform(0.5, 2.0, (2, 3))
-    posterior = xr.Dataset(
-        {
-            "Intercept": (("chain", "draw"), mu),
-            "sigma": (("chain", "draw"), sigma),
-        },
-        coords={"chain": [0, 1], "draw": [0, 1, 2]},
-    )
-    return posterior, mu[..., None], sigma[..., None]
-
-
-def _evaluate_log_likelihood(model, posterior, data=None):
-    dt = model._compute_likelihood_params(
-        xr.DataTree.from_dict({"posterior": posterior}), data, True, False
-    )
-    return log_likelihood(model.family, model, dt.children["posterior"], data=data)
-
-
-@pytest.mark.parametrize("kind", ["constrained", "truncated"])
-@pytest.mark.parametrize("n_new", [None, 1, 4])
-def test_log_likelihood_truncated_response(kind, n_new):
-    """`truncated` and `constrained` responses are truncated Normals.
-
-    `n_new` is the number of rows of new data (None: the model's data). A single
-    row must give one log-likelihood per draw, not one per column of the
-    response. scipy's truncnorm is the reference.
-    """
-    rng = np.random.default_rng(1452)
-    df = pd.DataFrame({"y": rng.uniform(-1.5, 1.5, 5)})
-    model = bmb.Model(f"{kind}(y, lb=-2.0) ~ 1", df, family="gaussian")
-    model.build()
-    posterior, loc, scale = _gaussian_posterior(rng)
-
-    data = None if n_new is None else pd.DataFrame({"y": rng.uniform(-1.5, 1.5, n_new)})
-    n_obs = len(df if data is None else data)
-    y_eval = (df if data is None else data)["y"].to_numpy()
-    result = _evaluate_log_likelihood(model, posterior, data)
-
-    expected = stats.truncnorm.logpdf(
-        y_eval, (-2.0 - loc) / scale, np.inf, loc=loc, scale=scale
-    )
-    assert result.shape == (2, 3, n_obs)
-    np.testing.assert_allclose(result.values, expected, rtol=1e-5)
-
-
-def test_log_likelihood_truncated_response_row_bounds():
-    """A `truncated` response with one lower bound per row uses each row's bound."""
-    rng = np.random.default_rng(14521)
-    lb = np.array([-2.0, -1.0, -0.5, -2.0, -1.0])
-    df = pd.DataFrame({"y": lb + rng.uniform(0.1, 1.5, 5), "lb": lb})
-    model = bmb.Model("truncated(y, lb=lb) ~ 1", df, family="gaussian")
-    model.build()
-    posterior, loc, scale = _gaussian_posterior(rng)
-
-    result = _evaluate_log_likelihood(model, posterior)
-
-    expected = stats.truncnorm.logpdf(
-        df["y"].to_numpy(), (lb - loc) / scale, np.inf, loc=loc, scale=scale
-    )
-    np.testing.assert_allclose(result.values, expected, rtol=1e-5)
-
-
-@pytest.mark.parametrize("new_data", [False, True])
-def test_log_likelihood_censored_response(new_data):
-    """A `censored` response uses the CDF, survival function or density per row."""
-    rng = np.random.default_rng(14522)
-    status = ["none", "left", "right", "none", "right", "left"]
-    df = pd.DataFrame({"y": rng.uniform(-1.5, 1.5, 6), "status": status})
-    model = bmb.Model("censored(y, status) ~ 1", df, family="gaussian")
-    model.build()
-    posterior, loc, scale = _gaussian_posterior(rng)
-
-    data = None
-    if new_data:
-        data = pd.DataFrame(
-            {"y": rng.uniform(-1.5, 1.5, 3), "status": ["right", "none", "left"]}
-        )
-    eval_df = df if data is None else data
-    result = _evaluate_log_likelihood(model, posterior, data)
-
-    y_eval = eval_df["y"].to_numpy()
-    by_status = {
-        "none": stats.norm.logpdf(y_eval, loc, scale),
-        "left": stats.norm.logcdf(y_eval, loc, scale),
-        "right": stats.norm.logsf(y_eval, loc, scale),
-    }
-    expected = np.stack(
-        [by_status[s][..., i] for i, s in enumerate(eval_df["status"])], axis=-1
-    )
-    np.testing.assert_allclose(result.values, expected, rtol=1e-5)
-
-
-def _log_likelihood_with_y(model, posterior, data, y):
-    dt = model._compute_likelihood_params(
-        xr.DataTree.from_dict({"posterior": posterior}), data, True, False
-    )
-    return log_likelihood(model.family, model, dt.children["posterior"], data=data, y=y)
-
-
-def test_log_likelihood_constrained_explicit_y_with_predictor_only_data():
-    """`constrained` bounds are scalars, so `data` needs no response column with `y`."""
-    rng = np.random.default_rng(14523)
-    df = pd.DataFrame({"y": rng.uniform(-1.5, 1.5, 5), "other": 0.0})
-    model = bmb.Model("constrained(y, lb=-2.0) ~ 1", df, family="gaussian")
-    model.build()
-    posterior, loc, scale = _gaussian_posterior(rng)
-    y_new = rng.uniform(-1.5, 1.5, 4)
-
-    result = _log_likelihood_with_y(
-        model, posterior, pd.DataFrame({"other": np.zeros(4)}), y_new
-    )
-
-    expected = stats.truncnorm.logpdf(
-        y_new, (-2.0 - loc) / scale, np.inf, loc=loc, scale=scale
-    )
-    np.testing.assert_allclose(result.values, expected, rtol=1e-5)
-
-
-def test_log_likelihood_truncated_explicit_y_needs_response_columns():
-    """Per-row bounds come from `data`, so predictor-only `data` raises clearly."""
-    rng = np.random.default_rng(14524)
-    df = pd.DataFrame({"y": rng.uniform(-1.5, 1.5, 5), "lb": -2.0, "other": 0.0})
-    model = bmb.Model("truncated(y, lb=lb) ~ 1", df, family="gaussian")
-    model.build()
-    posterior, _, _ = _gaussian_posterior(rng)
-
-    with pytest.raises(ValueError, match="every column of the response term"):
-        _log_likelihood_with_y(
-            model, posterior, pd.DataFrame({"other": np.zeros(4)}), np.zeros(4)
-        )
-
-
-def test_log_likelihood_censored_explicit_y_is_the_censoring_point():
-    """With `y` passed, a censored row is censored at its value of `y`."""
-    rng = np.random.default_rng(14525)
-    status = ["none", "left", "right", "left"]
-    df = pd.DataFrame({"y": rng.uniform(-1.5, 1.5, 4), "status": status})
-    model = bmb.Model("censored(y, status) ~ 1", df, family="gaussian")
-    model.build()
-    posterior, loc, scale = _gaussian_posterior(rng)
-    y_new = df["y"].to_numpy() + 0.25
-
-    result = _log_likelihood_with_y(model, posterior, df, y_new)
-
-    by_status = {
-        "none": stats.norm.logpdf(y_new, loc, scale),
-        "left": stats.norm.logcdf(y_new, loc, scale),
-        "right": stats.norm.logsf(y_new, loc, scale),
-    }
-    expected = np.stack([by_status[s][..., i] for i, s in enumerate(status)], axis=-1)
-    np.testing.assert_allclose(result.values, expected, rtol=1e-5)
-
-
-def test_log_likelihood_truncated_response_unbounded_new_rows():
-    """New rows that are all unbounded get the untruncated Normal density."""
-    rng = np.random.default_rng(14526)
-    lb = np.array([-2.0, -np.inf, -1.0, -np.inf, -2.0])
-    df = pd.DataFrame({"y": rng.uniform(-0.5, 1.5, 5), "lb": lb})
-    model = bmb.Model("truncated(y, lb=lb) ~ 1", df, family="gaussian")
-    model.build()
-    posterior, loc, scale = _gaussian_posterior(rng)
-    data = pd.DataFrame({"y": rng.uniform(-1.5, 1.5, 3), "lb": -np.inf})
-
-    result = _evaluate_log_likelihood(model, posterior, data)
-
-    expected = stats.norm.logpdf(data["y"].to_numpy(), loc, scale)
-    np.testing.assert_allclose(result.values, expected, rtol=1e-5)
+    with pytest.raises(NotImplementedError, match="constrained"):
+        log_likelihood(model.family, model, xr.Dataset())
 
 
 def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
@@ -547,12 +342,7 @@ def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
     )
     model = SimpleNamespace(
         response_component=SimpleNamespace(
-            term=SimpleNamespace(
-                data=np.array([0.0, 1.0]),
-                is_constrained=False,
-                is_truncated=False,
-                is_censored=False,
-            )
+            term=SimpleNamespace(data=np.array([0.0, 1.0]), is_constrained=False)
         ),
         family=family,
     )

@@ -247,45 +247,21 @@ def log_likelihood(
     """
     # Child classes pass "y_values" through the "y" kwarg
     y_values = kwargs.pop("y", None)
-    response_term = _get_response_term(model)
-    # Bambi stores constrained(...) and truncated(...) responses as three columns
-    # (observed value, lower bound, upper bound) and censored(...) responses as
-    # two (observed value, censoring status). Only the first column is the
-    # response; the others define the bounds of the likelihood.
-    is_multi_column = (
-        response_term.is_constrained
-        or response_term.is_truncated
-        or response_term.is_censored
-    )
 
-    if is_multi_column:
-        if data is None or (y_values is not None and response_term.is_constrained):
-            # Bambi only allows scalar bounds in constrained(...), so the model's
-            # data holds them, and an explicit `y` may come with `data` that has
-            # only the predictors.
-            response_data = response_term.data
-        else:
-            try:
-                response_data = response_evaluate_new_data(model, data)
-            except KeyError as err:
-                if y_values is None:
-                    raise
-                raise ValueError(
-                    "The bounds of a truncated(...) response and the statuses of a "
-                    "censored(...) response are read per row, so `data` must hold "
-                    "every column of the response term, even when `y` is passed."
-                ) from err
-        # Keep the row axis: np.squeeze would turn a single observation of shape
-        # (1, k) into (k,), and the bounds into observations.
-        response_data = np.asarray(response_data).reshape(
-            -1, response_term.data.shape[-1]
+    response_term = _get_response_term(model)
+    # HSSM builds its own response, so Bambi's multi-column responses are
+    # refused here instead of re-implementing Bambi's PyMC backend (#1452).
+    if any(
+        getattr(response_term, flag, False)
+        for flag in ("is_constrained", "is_truncated", "is_censored")
+    ):
+        raise NotImplementedError(
+            "`log_likelihood` does not support Bambi's `constrained(...)`, "
+            "`truncated(...)` and `censored(...)` responses."
         )
-        if y_values is None:
-            y_values = response_data[:, 0]
-        lower, upper = _response_bounds(
-            response_term, response_data, np.asarray(y_values)
-        )
-    elif y_values is None:  # when it's not handled by the specific family
+
+    # Get the values of the outcome variable
+    if y_values is None:  # when it's not handled by the specific family
         if data is None:
             y_values = np.squeeze(response_term.data)
         else:
@@ -312,26 +288,8 @@ def log_likelihood(
     # on_unused_input="ignore" is needed because fixed-vector parameters
     # are substituted with constants inside HSSMDistribution.logp(), making
     # the corresponding input variable unused in the compiled graph.
-    # The distribution is built from the symbolic inputs in every branch: built
-    # from the first draw's values, it would compile them in as constants, and
-    # every draw would return the first draw's log-likelihood.
     # pyrefly: ignore[no-matching-overload]
-    rv_dist = response_dist.dist(**pt_dict)
-    # Wrap the distribution as Bambi's PyMC backend does when it builds the
-    # model (bambi/backend/terms.py, ResponseTerm.build_distribution).
-    if response_term.is_censored:
-        # pyrefly: ignore[no-matching-overload]
-        rv_dist = pm.Censored.dist(rv_dist, lower=lower, upper=upper)
-    elif (response_term.is_truncated or response_term.is_constrained) and (
-        lower is not None or upper is not None
-    ):
-        # Rows that are all unbounded (e.g. new rows of a truncated(y, lb=lb)
-        # model that all have lb=-inf) keep the base density: pm.Truncated
-        # rejects lower=upper=None.
-        # pyrefly: ignore[no-matching-overload]
-        rv_dist = pm.Truncated.dist(rv_dist, lower=lower, upper=upper)
-
-    rv_logp = pm.logp(rv_dist, y_values)
+    rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
     logp_compiled = pm.compile(
         [val for key_, val in pt_dict.items()],
         rv_logp,
@@ -367,58 +325,6 @@ def _get_response_term(model: bmb.Model) -> Any:
     if hasattr(type(model), "response_term"):
         return model.response_term
     return model.response_component.term
-
-
-def _response_bounds(
-    response_term: Any, response_data: np.ndarray, observed: np.ndarray
-) -> tuple[Any, Any]:
-    """Get the likelihood bounds of a multi-column Bambi response.
-
-    Mirrors ``ResponseTerm.build_distribution`` in Bambi's PyMC backend, so the
-    log-likelihood is evaluated with the distribution the model was fitted with.
-
-    Parameters
-    ----------
-    response_term
-        The Bambi response term. It is censored, truncated or constrained.
-    response_data
-        The response as a 2-D array: one row per observation, with the columns
-        Bambi builds for that kind of response.
-    observed
-        The values the likelihood is evaluated at: the first column of
-        `response_data`, or the `y` passed to `log_likelihood`. A censored row is
-        censored at its observed value.
-
-    Returns
-    -------
-    tuple
-        ``(lower, upper)``. Each is ``None`` when unbounded, a scalar when every
-        row has the same bound, and an array with one value per row otherwise.
-    """
-    if response_term.is_censored:
-        if response_data.shape[1] != 2:
-            # censored(lower, upper, status) is interval censoring, which
-            # neither Bambi nor PyMC supports.
-            raise NotImplementedError(
-                "Interval-censored responses are not supported: Bambi and PyMC "
-                "do not support interval censoring."
-            )
-        # Bambi encodes the censoring status as -1 (left), 0 (none), 1 (right).
-        status = response_data[:, 1]
-        lower = np.where(status == -1, observed, -np.inf)
-        upper = np.where(status == 1, observed, np.inf)
-    else:
-        lower = response_data[:, 1]
-        upper = response_data[:, 2]
-
-    def _simplify(bound: np.ndarray, unbounded: float) -> Any:
-        if np.all(bound == unbounded):
-            return None
-        if np.all(bound == bound[0]):
-            return bound[0]
-        return bound
-
-    return _simplify(lower, -np.inf), _simplify(upper, np.inf)
 
 
 def get_response_dist(family: bmb.Family) -> type[pm.Distribution]:
