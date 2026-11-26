@@ -5,6 +5,7 @@ import subprocess
 import sys
 from types import SimpleNamespace
 
+import bambi as bmb
 import numpy as np
 import pandas as pd
 import pymc as pm
@@ -303,6 +304,23 @@ def test_compute_log_likelihood_warns_and_replaces_existing_group(
     assert "Replacing existing log_likelihood group in dt." in caplog.text
 
 
+@pytest.mark.parametrize(
+    "response",
+    [
+        "constrained(y, lb=-2.0, ub=2.0)",
+        "truncated(y, lb=-2.0, ub=2.0)",
+        "censored(y, status)",
+    ],
+)
+def test_log_likelihood_refuses_multi_column_bambi_responses(response):
+    """HSSM never builds these Bambi responses, so `log_likelihood` refuses them."""
+    df = pd.DataFrame({"y": [0.1, -0.4, 0.8], "status": ["none", "left", "right"]})
+    model = bmb.Model(f"{response} ~ 1", df, family="gaussian")
+
+    with pytest.raises(NotImplementedError, match="constrained"):
+        log_likelihood(model.family, model, xr.Dataset())
+
+
 def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
     """Post-sampling likelihoods honor the requested JAX compiler."""
     compile_calls = []
@@ -344,6 +362,40 @@ def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
     assert result.shape == (1, 1, 2)
     assert len(compile_calls) == 1
     assert compile_calls[0][2]["mode"] == "JAX"
+
+
+def test_log_likelihood_indexes_draws_by_position():
+    """Chain and draw coordinates need not start at 0 or be contiguous.
+
+    A posterior with burn-in dropped or thinned keeps its original coordinate
+    values (here chains 2, 3 and draws 10, 20, 30), so each draw must be read and
+    written by position, not by its coordinate value.
+    """
+    y = np.array([0.5, -1.0])
+    mu = np.arange(6.0).reshape(2, 3, 1) * np.ones((1, 1, 2))
+    family = SimpleNamespace(
+        likelihood=SimpleNamespace(dist=pm.Normal, name="Normal"),
+        _make_dist_kwargs_and_coords=lambda model, posterior, **kwargs: (
+            {"mu": mu, "sigma": np.ones((1, 1, 2))},
+            {
+                "chain": pd.Index([2, 3]),
+                "draw": pd.Index([10, 20, 30]),
+                "__obs__": pd.Index([0, 1]),
+            },
+        ),
+    )
+    model = SimpleNamespace(
+        response_component=SimpleNamespace(
+            term=SimpleNamespace(data=y, is_constrained=False)
+        ),
+        family=family,
+    )
+
+    result = log_likelihood(family, model, posterior=xr.DataArray())
+
+    expected = -0.5 * np.log(2 * np.pi) - 0.5 * (y - mu) ** 2
+    np.testing.assert_allclose(result.values, expected)
+    assert result.coords["draw"].values.tolist() == [10, 20, 30]
 
 
 @pytest.mark.parametrize(
