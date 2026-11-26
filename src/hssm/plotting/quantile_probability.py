@@ -21,11 +21,15 @@ from .utils import (
     _get_plotting_df,
     _get_title,
     _process_df_for_qp_plot,
+    _set_facet_suptitle,
     _subset_df,
     _use_traces_or_sample,
 )
 
 _logger = logging.getLogger("hssm")
+
+# The quantiles conventionally shown in quantile-probability plots.
+DEFAULT_QUANTILES = (0.1, 0.3, 0.5, 0.7, 0.9)
 
 
 def _confidence_to_n_std(confidence: float, n_dim: int = 2) -> float:
@@ -141,7 +145,7 @@ def _plot_quantile_probability_1D(
     ellipse_confidence: float = 0.95,
     ellipse_min_points: int = 5,
     correct: str | None = None,
-    q: int | Iterable[float] = 5,
+    q: int | Iterable[float] = DEFAULT_QUANTILES,
     quantile_by: list[str] | str | None = None,
     title: str | None = "Quantile Probability Plot",
     xlabel: str | None = "Proportion",
@@ -391,7 +395,7 @@ def _plot_quantile_probability_2D(
     ellipse_confidence: float = 0.95,
     ellipse_min_points: int = 5,
     correct: str | None = None,
-    q: int | Iterable[float] = 5,
+    q: int | Iterable[float] = DEFAULT_QUANTILES,
     quantile_by: list[str] | str | None = None,
     title: str | None = "Quantile Probability Plot",
     xlabel: str | None = "Proportion",
@@ -445,8 +449,7 @@ def _plot_quantile_probability_2D(
 
     g.add_legend()
     if title:
-        g.figure.subplots_adjust(top=0.85)
-        g.figure.suptitle(title)
+        _set_facet_suptitle(g, title)
 
     g.set_xlabels(xlabel)
     g.set_ylabels(ylabel)
@@ -480,7 +483,7 @@ def plot_quantile_probability(
     ellipse_confidence: float = 0.95,
     ellipse_min_points: int = 5,
     correct: str | None = None,
-    q: int | Iterable[float] = 5,
+    q: int | Iterable[float] = DEFAULT_QUANTILES,
     quantile_by: list[str] | str | None = None,
     title: str | None = "Quantile Probability Plot",
     xlabel: str | None = "Proportion",
@@ -490,6 +493,7 @@ def plot_quantile_probability(
     data_kwargs: dict[str, Any] | None = None,
     predictive_samples_kwargs: dict[str, Any] | None = None,
     ellipse_kwargs: dict[str, Any] | None = None,
+    random_seed: int | np.random.Generator | None = None,
     **kwargs,
 ) -> Axes | FacetGrid | list[FacetGrid]:
     """Plot the quantile probabilities against the observed data.
@@ -569,9 +573,9 @@ def plot_quantile_probability(
         column from `data` indicates whether the response is correct or not. By default
         None.
     q : optional
-        If an `int`, quantiles will be determined using np.linspace(0, 1, q) (0 and 1
-        will be excluded. If an iterable, will generate quantiles according to this
-        iterable.
+        The quantiles to plot, by default (0.1, 0.3, 0.5, 0.7, 0.9). If an `int`,
+        quantiles will be determined using np.linspace(0, 1, q), with 0 and 1
+        excluded, so `q=5` gives the three quantiles 0.25, 0.5 and 0.75.
     title : optional
         The title of the plot, by default "Quantile Probability Plot". Ignored
         when `groups` is provided.
@@ -591,6 +595,11 @@ def plot_quantile_probability(
     ellipse_kwargs : optional
         Keyword arguments passed to matplotlib.patches.Ellipse. Useful for customizing
         ellipse appearance (e.g., facecolor, edgecolor, alpha, linewidth).
+    random_seed : optional
+        Seeds the samples the plot draws itself (an `int` or a
+        `numpy.random.Generator`): which posterior draws are used, and, when `dt` has
+        no predictive group yet, the simulated responses. The same seed gives the same
+        plot. Defaults to None, which keeps the previous, unseeded behavior.
     kwargs : optional
         Keyword arguments passed to both seaborn.lineplot and seaborn.scatterplot.
 
@@ -625,8 +634,9 @@ def plot_quantile_probability(
 
     if predictive_group is not None:
         # Use the model's trace if dt is None
+        rng = None if random_seed is None else np.random.default_rng(random_seed)
         dt, sampled = _use_traces_or_sample(
-            model, data, dt, n_samples, predictive_group
+            model, data, dt, n_samples, predictive_group, rng=rng
         )
 
         plotting_df = _get_plotting_df(
@@ -637,6 +647,7 @@ def plot_quantile_probability(
             n_samples=None if sampled else n_samples,
             response_str=model.response_str,
             predictive_group=predictive_group,
+            rng=rng,
         )
     else:
         # Note if dt is passed as None,

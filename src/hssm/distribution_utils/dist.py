@@ -7,6 +7,7 @@ generation ops.
 
 import logging
 from collections.abc import Callable, Sequence
+from functools import partial
 from os import PathLike
 from typing import Any, Literal, Protocol, cast, get_args
 
@@ -17,6 +18,7 @@ import pytensor
 import pytensor.tensor as pt
 from bambi.backend.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
+from ssms.config import ModelConfigBuilder
 from ssms.hssm_support import (
     get_simulator_fun_internal,
     validate_simulator_fun,
@@ -37,7 +39,7 @@ _logger = logging.getLogger("hssm")
 # The placeholder `rt` value that marks missing-RT and omission (deadline) rows.
 MISSING_RT = -999.0
 
-LOGP_LB = pm.pytensorf.floatX(-66.1)
+LOGP_LB = -66.1  # a Python float takes the graph's dtype (see likelihoods.analytical)
 
 
 def apply_param_bounds_to_loglik(
@@ -233,6 +235,7 @@ def make_hssm_rv(
     list_params: list[str],
     lapse: bmb.Prior | float | None = None,
     is_choice_only: bool = False,
+    expected_obs_dim: int | None = None,
 ) -> type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
 
@@ -246,6 +249,9 @@ def make_hssm_rv(
         A bmb.Prior object representing the lapse distribution.
     is_choice_only : bool
         Whether the model is a choice-only model.
+    expected_obs_dim : int, optional
+        Configured number of physical response columns. This is checked against
+        a real simulator and sets the support width of a likelihood-only model.
 
     Returns
     -------
@@ -253,7 +259,30 @@ def make_hssm_rv(
         A class of RandomVariable that are to be used in a `pm.Distribution`.
     """
     simulator_fun_internal = get_simulator_fun_internal(simulator_fun)
-    model_name, choices, obs_dim_int = validate_simulator_fun(simulator_fun_internal)
+    model_name, choices, declared_obs_dim = validate_simulator_fun(
+        simulator_fun_internal
+    )
+    if isinstance(simulator_fun, str):
+        try:
+            config = ModelConfigBuilder.from_model(simulator_fun)
+        except ValueError:
+            # ssms supplies a non-sampling placeholder for unknown names. Its
+            # default width of two says nothing about a custom likelihood.
+            if expected_obs_dim is not None:
+                declared_obs_dim = expected_obs_dim
+        else:
+            # Older ssms adapters miss the choices of models registered at runtime.
+            choices = config.get("choices", choices)
+
+    # A named choice-only simulator is checked after its legacy choice projection.
+    comparison_obs_dim = (
+        1 if is_choice_only and isinstance(simulator_fun, str) else declared_obs_dim
+    )
+    if expected_obs_dim is not None and comparison_obs_dim != expected_obs_dim:
+        raise ValueError(
+            f"The simulator observation width {comparison_obs_dim} does not match "
+            f"the configured response width {expected_obs_dim}."
+        )
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
@@ -278,16 +307,8 @@ def make_hssm_rv(
         """
 
         name = model_name + "_RV"
-        # New in PyMC 5.16+: instead of using `ndims_supp`, we use `signature` to define
-        # the signature of the random variable. The string to the left of the `->` sign
-        # describes the input signature, which is `()` for each parameter, meaning each
-        # parameter is a scalar. The string to the right of the
-        # `->` sign describes the output signature, which is `(2)`, which means the
-        # random variable is a length-2 array.
-
-        # Override the output from ssm_simulator based on whether the model is
-        # choice-only.
-        output = "()" if is_choice_only else f"({obs_dim_int})"
+        # Scalar parameters; the observation is scalar only for choice-only models.
+        output = "()" if is_choice_only else f"({declared_obs_dim})"
         signature = f"{','.join(['()'] * len(list_params))}->{output}"
 
         dtype = "floatX"
@@ -365,13 +386,13 @@ def make_hssm_rv(
                 size,
                 rng,
                 simulator_fun_internal,
-                obs_dim_int,
+                declared_obs_dim,
                 *args,
                 **kwargs,
             )
 
             # ssm-simulators returns (rt, response) pairs; keep only the response.
-            if is_choice_only and obs_dim_int > 1:
+            if is_choice_only and declared_obs_dim > 1:
                 sims_out = sims_out[..., -1]
 
             # With all-scalar parameters ssm-simulators squeezes a single draw's
@@ -382,7 +403,7 @@ def make_hssm_rv(
                     if requested_size is None
                     else tuple(np.atleast_1d(requested_size))
                 )
-                support_shape = () if is_choice_only else (obs_dim_int,)
+                support_shape = () if is_choice_only else (declared_obs_dim,)
                 sims_out = sims_out.reshape(batch_shape + support_shape)
 
             sims_out = _apply_lapse_model(
@@ -477,28 +498,24 @@ def _apply_lapse_model(
 
     lapse_prior = cast("bmb.Prior", lapse_dist)  # numeric lapse rejected above
 
-    replace_shape = (*out_shape[:-1], replace_n)
-    replace_mask = np.stack([replace, replace], axis=-1)
-    n_draws = np.prod(replace_shape)
+    # One (rt, response) draw per lapse row, assigned through the row mask.
+    # `np.putmask` picks values by flat position in `sims_out` instead, which
+    # wrote the same draw to several rows (#1507).
     lapse_rt = cast(
         "np.ndarray",
         pm.draw(
             get_distribution_from_prior(lapse_prior).dist(**lapse_prior.args),
-            n_draws,
+            replace_n,
             random_seed=rng,
         ),
-    ).reshape(replace_shape)
+    ).reshape(replace_n)
 
     lapse_response = rng.choice(
         choices,
         p=1 / len(choices) * np.ones(len(choices)),
-        size=replace_shape,
+        size=replace_n,
     )
-    lapse_output = np.stack(
-        [lapse_rt, lapse_response],
-        axis=-1,
-    )
-    np.putmask(sims_out, replace_mask, lapse_output)
+    sims_out[replace] = np.stack([lapse_rt, lapse_response], axis=-1)
     return sims_out
 
 
@@ -635,6 +652,7 @@ def make_distribution(
     ndt_edge_shift: NDTEdgeShift | None = None,
     n_choices: int | None = None,
     has_deadline: bool = False,
+    expected_obs_dim: int | None = None,
 ) -> type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
@@ -697,6 +715,9 @@ def make_distribution(
         ``True``, rows with ``rt == -999.0`` are omissions and the lapse process
         contributes its survival probability at the deadline,
         ``1 - CDF_lapse(deadline)``. Defaults to ``False``.
+    expected_obs_dim : int, optional
+        Configured number of physical response columns. This is checked against
+        generated RandomVariable metadata.
 
     Returns
     -------
@@ -707,20 +728,13 @@ def make_distribution(
         rv_instance = rv()
     elif not isinstance(rv, type) and isinstance(rv, RandomVariable):
         rv_instance = rv
-    elif callable(rv):
-        random_variable = make_hssm_rv(
-            simulator_fun=cast("Callable[..., Any]", rv),
-            list_params=list_params,
-            lapse=lapse,
-            is_choice_only=is_choice_only,
-        )
-        rv_instance = random_variable()
-    elif isinstance(rv, str):
+    elif isinstance(rv, str) or callable(rv):
         random_variable = make_hssm_rv(
             simulator_fun=rv,
             list_params=list_params,
             lapse=lapse,
             is_choice_only=is_choice_only,
+            expected_obs_dim=expected_obs_dim,
         )
         rv_instance = random_variable()
     else:
@@ -833,8 +847,9 @@ def make_distribution(
                     )
                 # The lapse term is a graph constant: it is evaluated once on
                 # the (constant) observed data, and p_outlier's gradient flows
-                # through the mixture weights only.
-                lapse_logp = lapse_func(_to_numpy(data))
+                # through the mixture weights only. In floatX: a float64
+                # constant would upcast a float32 graph.
+                lapse_logp = lapse_func(_to_numpy(data)).astype(pytensor.config.floatX)
 
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
@@ -932,6 +947,7 @@ def make_family(
     likelihood_name: str = "SSM Likelihood",
     family_name="SSM Family",
     is_choice_only: bool = False,
+    obs_dim: int = 2,
 ) -> bmb.Family:
     """Build a family in bambi.
 
@@ -952,6 +968,8 @@ def make_family(
     is_choice_only : optional
         Whether the model is choice-only. Choice-only draws have no (rt, response)
         axis, so the family must not add one to the posterior predictive coords.
+    obs_dim
+        Number of physical response columns in posterior-predictive draws.
 
     Returns
     -------
@@ -962,18 +980,41 @@ def make_family(
         likelihood_name, parent=parent, params=list_params, dist=dist
     )
 
-    family_cls = bmb.Family if is_choice_only else SSMFamily
-    family = family_cls(family_name, likelihood=likelihood, link=link)
+    family = SSMFamily(
+        family_name,
+        likelihood=likelihood,
+        link=link,
+        obs_dim=1 if is_choice_only else obs_dim,
+    )
 
     return family
 
 
-class SSMFamily(bmb.Family):
+class OrderedFamily(bmb.Family):
+    """A bmb.Family whose auxiliary parameters keep the likelihood's order.
+
+    bambi returns them as a set, so the components that bambi builds from them,
+    and the free random variables of the PyMC model, follow Python's string-hash
+    seed. NUTS then explores a different ordering in each process, and a seeded
+    ``sample()`` gives different draws (#1492). Drop this override once the bambi
+    floor reaches a release that keeps the order
+    (bambinos/bambi#1091).
+    """
+
+    @property
+    def auxiliary_parameters(self):
+        """Get the likelihood's parameters other than the parent, in order."""
+        parent = self.likelihood.parent
+        return [param for param in self.likelihood.params if param != parent]
+
+
+class SSMFamily(OrderedFamily):
     """Extends bmb.Family to get around the dimensionality mismatch."""
 
-    def create_extra_pps_coord(self):
-        """Create an extra dimension."""
-        return np.arange(2)
+    def __init__(self, name, likelihood, link, obs_dim: int = 2):
+        super().__init__(name, likelihood, link)
+        if obs_dim > 1:
+            self.create_extra_pps_coord = partial(np.arange, obs_dim)
 
 
 def make_likelihood_callable(

@@ -2,9 +2,12 @@
 
 import logging
 import warnings
+from numbers import Integral, Real
 
 import numpy as np
 import pandas as pd
+
+from ._types import ResponseDomainSpec
 
 _logger = logging.getLogger("hssm")
 
@@ -14,8 +17,9 @@ class DataValidatorMixin:
 
     data: pd.DataFrame
     response: list[str]
-    choices: list[int]
-    n_choices: int
+    response_domains: dict[str, ResponseDomainSpec]
+    choices: tuple[int, ...] | None
+    n_choices: int | None
     extra_fields: list[str] | None
     deadline: bool
     deadline_name: str
@@ -49,42 +53,107 @@ class DataValidatorMixin:
     def _post_check_data_sanity(self):
         """Check if the data is clean enough for the model."""
         if self.is_choice_only:
-            return
-        if self.deadline or self.missing_data:
-            if -999.0 not in self.data["rt"].unique():
-                raise ValueError(
-                    "You have no missing data in your dataset, "
-                    + "which is not allowed when `missing_data` or `deadline` is set to"
-                    + " True."
-                )
-            rt_filtered = self.data.rt[self.data.rt != -999.0]
+            valid_rows = np.ones(len(self.data), dtype=bool)
         else:
-            rt_filtered = self.data.rt
+            if self.deadline or self.missing_data:
+                if -999.0 not in self.data["rt"].unique():
+                    raise ValueError(
+                        "You have no missing data in your dataset, "
+                        + "which is not allowed when `missing_data` or `deadline` "
+                        "is set to True."
+                    )
+                rt_filtered = self.data.rt[self.data.rt != -999.0]
+            else:
+                rt_filtered = self.data.rt
 
-        if np.any(rt_filtered.isna(), axis=None):
-            raise ValueError(
-                "You have NaN response times in your dataset, "
-                + "which is not allowed."
+            if np.any(rt_filtered.isna(), axis=None):
+                raise ValueError(
+                    "You have NaN response times in your dataset, "
+                    + "which is not allowed."
+                )
+
+            if not np.all(rt_filtered >= 0):
+                raise ValueError(
+                    "You have negative response times in your dataset, "
+                    + "which is not allowed."
+                )
+            valid_rows = self.data["rt"].to_numpy() != -999.0
+
+        for column, domain in self.response_domains.items():
+            observed = self.data.loc[valid_rows, column].to_numpy()
+            for value in observed:
+                if (
+                    isinstance(value, Real)
+                    and not isinstance(value, (bool, np.bool_))
+                    and (isinstance(value, Integral) or np.isfinite(value))
+                ):
+                    continue
+                if domain["kind"] == "categorical" and isinstance(value, str):
+                    raise ValueError(
+                        f"Response column {column!r} contains the string label "
+                        f"{str(value)!r}. Map string labels to this model's integer "
+                        f"choice codes {domain['values']} before fitting."
+                    )
+                raise ValueError(
+                    f"Response column {column!r} must contain finite numeric values."
+                )
+            if domain["kind"] == "categorical":
+                allowed = domain["values"]
+                observed_values = set(observed.tolist())
+                invalid = sorted(observed_values - set(allowed))
+                if invalid:
+                    invalid_responses = [
+                        int(value)
+                        if isinstance(value, Integral) or float(value).is_integer()
+                        else float(value)
+                        for value in invalid
+                    ]
+                    if column == "response" and len(self.response_domains) == 1:
+                        raise ValueError(
+                            "Invalid responses found in your dataset: "
+                            f"{invalid_responses}"
+                        )
+                    raise ValueError(
+                        f"Invalid responses found in column {column!r}: "
+                        f"{invalid_responses}"
+                    )
+
+                missing = sorted(set(allowed) - observed_values)
+                if missing:
+                    if column == "response" and len(self.response_domains) == 1:
+                        message = (
+                            f"You set choices to be {allowed}, but {missing} "
+                            "are missing from your dataset."
+                        )
+                    else:
+                        message = (
+                            f"Categorical response domain for {column!r} declares "
+                            f"{allowed}, but {missing} are missing from your dataset."
+                        )
+                    warnings.warn(message, UserWarning, stacklevel=2)
+                continue
+
+            numeric = observed.astype(float, copy=False)
+            bounds = domain.get("bounds")
+            if bounds is None:
+                continue
+            lower, upper = bounds
+            outside = (numeric < lower) | (
+                numeric >= upper if domain["kind"] == "circular" else numeric > upper
             )
+            if np.any(outside):
+                interval = "half-open" if domain["kind"] == "circular" else "closed"
+                raise ValueError(
+                    f"Response column {column!r} has values outside its {interval} "
+                    f"bounds {bounds}."
+                )
 
-        if not np.all(rt_filtered >= 0):
-            raise ValueError(
-                "You have negative response times in your dataset, "
-                + "which is not allowed."
-            )
-
-        valid_responses = self.data.loc[self.data["rt"] != -999.0, "response"]
-        unique_responses = valid_responses.unique().astype(int)
-
-        if np.any(~np.isin(unique_responses, self.choices)):
-            invalid_responses = sorted(
-                unique_responses[~np.isin(unique_responses, self.choices)].tolist()
-            )
-            raise ValueError(
-                f"Invalid responses found in your dataset: {invalid_responses}"
-            )
-
-        if self.missing_data and not self.deadline:
+        if (
+            self.missing_data
+            and not self.deadline
+            and not self.is_choice_only
+            and self.choices is not None
+        ):
             # Missing-RT rows (no deadline) still carry an observed choice: the
             # choice-probability network receives it as its last input, so it
             # must be a valid response code (lnccbrown/HSSM#1324).
@@ -105,19 +174,6 @@ class DataValidatorMixin:
                     f"choices are {list(self.choices)}. See "
                     "https://github.com/lnccbrown/HSSM/issues/1324."
                 )
-
-        if len(unique_responses) != self.n_choices:
-            missing_responses = sorted(
-                np.setdiff1d(self.choices, unique_responses).tolist()
-            )
-            warnings.warn(
-                (
-                    f"You set choices to be {self.choices}, but {missing_responses} "
-                    "are missing from your dataset."
-                ),
-                UserWarning,
-                stacklevel=2,
-            )
 
     # AF-TODO: We probably want to incorporate some of the
     # remaining check on missing data
@@ -144,14 +200,3 @@ class DataValidatorMixin:
             self.model_distribution.extra_fields = [  # type: ignore[attr-defined]
                 new_data[field].values for field in self.extra_fields
             ]
-
-    def _validate_choices(self):
-        """
-        Ensure that `choices` is provided (not None).
-
-        Raises ValueError if choices is None.
-        """
-        if self.choices is None:
-            raise ValueError(
-                "`choices` must be provided either in `model_config` or as an argument."
-            )

@@ -9,7 +9,6 @@ import logging
 from collections.abc import Generator
 from copy import deepcopy
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import bambi as bmb
@@ -198,6 +197,19 @@ class TestRLSSMInit:
         model = RLSSM(data=rldm_data, model_config=rlssm_config)
         assert isinstance(model, RLSSM)
         assert model.model_config.model_name == "rldm_test"
+
+    def test_caller_choices_do_not_change_reconstruction(self, rldm_data, rlssm_config):
+        """A reused legacy config must not change the serialized response contract."""
+        cfg = deepcopy(rlssm_config)
+        labels = [0, 1]
+        cfg.response_domains = None
+        cfg.choices = labels
+        model = RLSSM(data=rldm_data, model_config=cfg)
+        assert cfg.response_domains is None and cfg.choices is labels
+
+        labels[0] = 42
+        restored = cloudpickle.loads(cloudpickle.dumps(model))
+        assert restored.choices == model.choices == (0, 1)
 
     def test_rlssm_panel_attrs(self, rldm_data, rlssm_config) -> None:
         """n_participants and n_trials should match the fixture data structure."""
@@ -467,34 +479,10 @@ class TestRLSSMModelStructure:
         )
 
         below = rt <= 0.4
-        np.testing.assert_array_equal(logp[below], LOGP_LB)
+        floor = logp.dtype.type(LOGP_LB)  # LOGP_LB in the graph's precision
+        np.testing.assert_array_equal(logp[below], floor)
         assert np.all(np.isfinite(logp[~below]))
-        assert np.all(logp[~below] != LOGP_LB)
-
-    def test_choice_only_response_validation_exits_when_metadata_is_incomplete(
-        self,
-    ) -> None:
-        """Choice-only validation is a no-op until response metadata is complete."""
-        data = pd.DataFrame({"response": [0, 1], "feedback": [1.0, 0.0]})
-
-        assert (
-            _RLSSM._validate_choice_only_responses(
-                data, SimpleNamespace(response=[], choices=[0, 1])
-            )
-            is None
-        )
-        assert (
-            _RLSSM._validate_choice_only_responses(
-                data, SimpleNamespace(response=["missing"], choices=[0, 1])
-            )
-            is None
-        )
-        assert (
-            _RLSSM._validate_choice_only_responses(
-                data, SimpleNamespace(response=["response"], choices=None)
-            )
-            is None
-        )
+        assert np.all(logp[~below] != floor)
 
 
 class TestRLSSMSerialization:

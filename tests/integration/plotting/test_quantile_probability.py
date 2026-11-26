@@ -111,6 +111,17 @@ def _qp_df_with_wide_predictions():
     return pd.concat(frames, ignore_index=True)
 
 
+def test__plot_quantile_probability_1D_default_quantiles():
+    """By default the plot shows the conventional five quantiles."""
+    fig, ax = plt.subplots()
+
+    _plot_quantile_probability_1D(_qp_df_with_wide_predictions(), cond="stim", ax=ax)
+
+    labels = set(ax.get_legend_handles_labels()[1])
+    assert labels == {"0.1", "0.3", "0.5", "0.7", "0.9"}
+    plt.close(fig)
+
+
 def test__plot_quantile_probability_1D_ignores_legend_entries_without_color():
     """Labelled artists already in the axes do not break the ellipse colors."""
     fig, ax = plt.subplots()

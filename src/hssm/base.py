@@ -10,7 +10,7 @@ import datetime
 import logging
 import warnings
 from abc import ABC, abstractmethod
-from copy import deepcopy
+from copy import copy, deepcopy
 from os import PathLike
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal, Union, cast
@@ -27,6 +27,7 @@ import seaborn as sns
 import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
+from bambi.utils import get_aliased_name
 from pymc.model.transform.conditioning import do
 from pymc.pytensorf import resolve_backend_compile_kwargs
 from pymc.variational import Approximation
@@ -56,7 +57,7 @@ from hssm.utils import (
 )
 
 from . import plotting, tracking
-from .config import BaseModelConfig
+from .config import BaseModelConfig, ModelConfig
 from .modelconfig import list_models
 from .param import Params
 from .param import UserParam as Param
@@ -72,12 +73,23 @@ from .param.utils import _clamp_default_initval_to_bounds
 
 _logger = logging.getLogger("hssm")
 
+
 # NOTE: Temporary mapping from old sampler names to new ones in bambi 0.16.0
 _new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
     "mcmc": "pymc",
     "nuts_numpyro": "numpyro",
     "nuts_blackjax": "blackjax",
 }
+
+
+def _copy_response_config[T: BaseModelConfig | ModelConfig | dict](config: T) -> T:
+    """Detach response declarations without copying likelihoods or other payloads."""
+    snapshot = copy(config)
+    fields = snapshot if isinstance(snapshot, dict) else vars(snapshot)
+    for name in ("response", "choices", "response_domains"):
+        if name in fields:
+            fields[name] = deepcopy(fields[name])
+    return snapshot
 
 
 def _validate_setting_preset(name: str, value: object, preset: str) -> None:
@@ -211,7 +223,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         following:
 
         - `"safe"`: fills eligible missing common and group-specific regression-term
-        priors with HSSM's weakly informative defaults.
+        priors with HSSM's weakly informative defaults. An identity-link intercept
+        of a parameter with finite bounds gets a Normal centered in the bounds,
+        with an SD of a quarter of their width (`ddm`, `ddm_sdv` and `full_ddm`
+        without a LAN likelihood use HDDM-based priors instead). If the bounds are
+        much wider than the parameter's plausible values, that prior is nearly
+        flat: give the parameter an explicit `prior`.
         - `None`: leaves missing regression-term priors to Bambi. This is not
         recommended for hierarchical models.
 
@@ -368,21 +385,21 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.initval_jitter = initval_jitter
 
         # region ===== Store the pre-built config =====
-        self.model_config: BaseModelConfig = model_config
+        self.model_config = _copy_response_config(model_config)
+        configured_response = self.model_config.response
+        assert configured_response is not None
+        self._obs_dim = len(configured_response)
         # endregion
 
         # region ===== Set up shortcuts so old code will work ======
-        self.response: list[str] = (  # type: ignore[assignment]
-            list(self.model_config.response)
-            if self.model_config.response is not None
-            else []
-        )
+        self.response: list[str] = list(configured_response)  # type: ignore[assignment]
         self.list_params = (
             list(self.model_config.list_params)
             if self.model_config.list_params is not None
             else None
         )
         self.choices = self.model_config.choices  # type: ignore[assignment]
+        self.response_domains = self.model_config.response_domains or {}
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
@@ -392,13 +409,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # TODO: add to HSSMBase
         self.is_choice_only: bool = self.model_config.is_choice_only
 
-        if self.choices is None:
-            raise ValueError(
-                "`choices` must be provided either in `model_config` or as an argument."
-            )
-
-        self._validate_choices()
-
         # region Avoid mypy error later (None.append). Should list_params be Optional?
         if self.list_params is None:
             raise ValueError(
@@ -406,7 +416,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             )
         # endregion
 
-        self.n_choices = len(self.choices)  # type: ignore[arg-type]
+        self.n_choices = len(self.choices) if self.choices is not None else None
 
         self._pre_check_data_sanity()
 
@@ -480,7 +490,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self.list_params,
             self.link,
             self._parent,
-            is_choice_only=self.is_choice_only,
+            obs_dim=self._obs_dim,
         )
 
         # Targeted statistical-identifiability warnings for common/group or
@@ -643,6 +653,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         exclude_keys = {"self", "kwargs", "__class__"}
         result = {k: v for k, v in local_vars.items() if k not in exclude_keys}
         result.update(extra_kwargs)
+        model_config = result.get("model_config")
+        if isinstance(model_config, (BaseModelConfig, ModelConfig, dict)):
+            result["model_config"] = _copy_response_config(model_config)
         return result
 
     def find_MAP(self, **kwargs):
@@ -1143,6 +1156,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         kind: Literal["response", "response_params"] = "response",
         draws: int | float | list[int] | np.ndarray | None = None,
         safe_mode: bool = True,
+        random_seed: int | np.random.Generator | None = None,
     ) -> DataTree | None:
         """Perform posterior predictive sampling from the HSSM model.
 
@@ -1183,6 +1197,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         safe_mode: bool
             If True, the function will split the draws into chunks of 10 to avoid memory
             issues. Defaults to True.
+        random_seed: optional
+            Seed for the simulated responses, an `int` or a `numpy.random.Generator`.
+            The same seed and posterior draws give the same posterior predictive draws.
+            Defaults to None, which is not reproducible.
 
         Raises
         ------
@@ -1249,12 +1267,24 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 # memory issues (TODO: Figure out the source of memory issues)
                 split_draws = _split_array(dt_copy["posterior"].draw.values, divisor=10)
 
+                # One independent seed per chunk, so chunks don't repeat each other
+                chunk_seeds = (
+                    [None] * len(split_draws)
+                    if random_seed is None
+                    else np.random.default_rng(random_seed).spawn(len(split_draws))
+                )
+
                 posterior_predictive_list = []
-                for samples_tmp in split_draws:
+                for samples_tmp, chunk_seed in zip(split_draws, chunk_seeds):
                     tmp_posterior = dt["posterior"].sel(draw=samples_tmp)
                     dt_copy["posterior"] = tmp_posterior
                     self.model.predict(
-                        dt_copy, kind, data, True, include_group_specific
+                        dt_copy,
+                        kind,
+                        data,
+                        True,
+                        include_group_specific,
+                        random_seed=chunk_seed,
                     )
                     posterior_predictive_list.append(dt_copy["posterior_predictive"])
 
@@ -1285,7 +1315,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     # .predict() is called on the copy of dt
                     # since we still subsampled (or assigned) the draws
                     self.model.predict(
-                        dt_copy, kind, data, True, include_group_specific
+                        dt_copy,
+                        kind,
+                        data,
+                        True,
+                        include_group_specific,
+                        random_seed=random_seed,
                     )
 
                     # posterior predictive group added to dt
@@ -1298,7 +1333,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     # .predict(). It just operates on the
                     # dt_copy object
                     return self.model.predict(
-                        dt_copy, kind, data, False, include_group_specific
+                        dt_copy,
+                        kind,
+                        data,
+                        False,
+                        include_group_specific,
+                        random_seed=random_seed,
                     )
         elif kind == "response_params":
             # If kind == 'response_params', we don't need to run the RV directly,
@@ -1366,30 +1406,114 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return self.model.predict(**kwargs)
 
     def sample_do(
-        self, params: dict[str, Any], draws: int = 100, return_model=False, **kwargs
+        self,
+        params: dict[str, Any],
+        draws: int = 100,
+        return_model=False,
+        strict: bool = False,
+        **kwargs,
     ) -> DataTree | tuple[DataTree, pm.Model]:
-        """Generate samples from the predictive distribution using the `do-operator`."""
+        """Simulate data with some or all parameters fixed, using the `do-operator`.
+
+        Fixes the model's free variables named in `params` with `pymc.do`, then
+        draws from the prior predictive of the resulting model.
+
+        Parameters
+        ----------
+        params
+            Values for the PyMC model's free variables, by name, as listed by
+            `{rv.name for rv in model.pymc_model.free_RVs}`: for example
+            `v_Intercept`, `v_x`, `v_1|participant_id_sigma`, and
+            `v_1|participant_id` (with `noncentered=False`) or
+            `v_1|participant_id_offset` (with `noncentered=True`). A term with
+            several columns takes one value per column, e.g. `"v_stim": [0.4, -0.1]`
+            for the non-reference levels of `stim`, and a group-specific term one
+            value per group. Intercepts are on the original scale of the
+            predictors, as the posterior reports them, even though the model
+            centers its predictors (bambi's `center_predictors=True`, the default).
+            Free variables not in `params` are drawn from their priors.
+        draws : optional
+            The number of draws. Defaults to 100.
+        return_model : optional
+            Whether to also return the intervened PyMC model. Defaults to False.
+        strict : optional
+            If True, raise an error when a free variable of the model is not in
+            `params`, instead of drawing it from its prior. Defaults to False.
+        kwargs
+            Passed to `pymc.sample_prior_predictive` (e.g. `random_seed`).
+
+        Returns
+        -------
+        DataTree | tuple[DataTree, pm.Model]
+            The simulated draws (the `prior` group holds the trial-wise parameters,
+            the `prior_predictive` group the responses), and the intervened model if
+            `return_model` is True.
+        """
+        if strict:
+            unfixed = sorted(
+                {rv.name for rv in self.pymc_model.free_RVs}.difference(params)
+            )
+            if unfixed:
+                raise ValueError(
+                    "`strict=True`, but these free variables are not in `params` "
+                    f"and would be drawn from their priors: {unfixed}"
+                )
+        params = self._center_do_intercepts(params)
         do_model = do(
             self.pymc_model, cast("Mapping[str | TensorVariable, Any]", params)
         )
         do_dt = pm.sample_prior_predictive(model=do_model, draws=draws, **kwargs)
 
-        # clean up `rt,response_mean` to `v`
-        do_dt = self._drop_parent_str_from_datatree(dt=do_dt)
-
-        # rename otherwise inconsistent dims and coords
-        if "rt,response_extra_dim_0" in do_dt["prior_predictive"].dims:
-            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_dims(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
-        if "rt,response_extra_dim_0" in do_dt["prior_predictive"].coords:
-            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_vars(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
+        do_dt = self._clean_predictive_datatree(dt=do_dt)
 
         if return_model:
             return do_dt, do_model
         return do_dt
+
+    def _center_do_intercepts(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Translate original-scale intercepts in `params` to the centered design.
+
+        With bambi's `center_predictors=True`, the PyMC intercept of a component with
+        common predictors belongs to the centered design, and bambi adds the
+        centering back only when it reports a posterior. Fixing that variable to an
+        original-scale value would therefore simulate a different intercept. This
+        adds `mean(X) @ slopes` to each fixed intercept, the inverse of bambi's
+        `Model._re_center_intercept`.
+        """
+        if not self.model.center_predictors or self.model.backend is None:
+            return params
+        params = dict(params)
+        for pymc_component in self.model.backend.distributional_components.values():
+            component = pymc_component.component
+            x = pymc_component.design_matrix_without_intercept
+            if not (component.intercept_term and component.common_terms):
+                continue
+            if x is None:
+                continue
+            intercept = get_aliased_name(component.intercept_term)
+            if intercept not in params:
+                continue
+            slopes = [get_aliased_name(t) for t in component.common_terms.values()]
+            unfixed = [s for s in slopes if s not in params]
+            if unfixed:
+                _logger.warning(
+                    "%s is fixed but %s are not, so %s is applied to the centered "
+                    "predictors and the simulated intercept depends on the drawn "
+                    "slopes. Fix all slopes, or build the model with "
+                    "`center_predictors=False`.",
+                    intercept,
+                    unfixed,
+                    intercept,
+                )
+                continue
+            coefs = np.concatenate(
+                [np.atleast_1d(np.asarray(params[s], dtype=float)) for s in slopes]
+            )
+            centered = np.asarray(params[intercept], dtype=float) + (
+                np.asarray(x).mean(0) @ coefs
+            )
+            params[intercept] = centered.astype(self.pymc_model[intercept].dtype)
+        return params
 
     def sample_prior_predictive(
         self,
@@ -1443,18 +1567,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     continue
                 self._inference_obj[group_name] = prior_predictive[group_name]
 
-        # clean up `rt,response_mean` to `v`
-        dt = self._drop_parent_str_from_datatree(dt=self._inference_obj)
-
-        # rename otherwise inconsistent dims and coords
-        if "rt,response_extra_dim_0" in dt["prior_predictive"].dims:
-            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_dims(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
-        if "rt,response_extra_dim_0" in dt["prior_predictive"].coords:
-            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_vars(
-                name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
-            )
+        dt = self._clean_predictive_datatree(dt=self._inference_obj)
 
         # Update self._inference_obj to match the cleaned datatree
         self._inference_obj = dt
@@ -2080,9 +2193,21 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     + "parameter is not None"
                 )
         if self.has_lapse:
+            domain = (
+                next(iter(self.response_domains.values()))
+                if len(self.response_domains) == 1
+                else None
+            )
+            supports_lapse = domain is not None and domain["kind"] == "categorical"
+            if not supports_lapse:
+                raise ValueError(
+                    "`p_outlier` is supported only for one categorical response "
+                    "column. Set `p_outlier=None` or `p_outlier=0` for this model."
+                )
             if self.is_choice_only:
                 # Choice-only lapses are simulated as uniform random choices, so
                 # the likelihood must use the same uniform probability.
+                assert self.n_choices is not None
                 uniform = 1 / self.n_choices
                 if lapse is not None and not (
                     isinstance(lapse, int | float | np.floating)
@@ -2131,8 +2256,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         return var_names
 
-    def _drop_parent_str_from_datatree(self, dt: DataTree | None) -> DataTree:
-        """Drop the parent_str variable from a DataTree object.
+    def _clean_predictive_datatree(self, dt: DataTree | None) -> DataTree:
+        """Normalize generated response names and dimensions.
 
         Parameters
         ----------
@@ -2141,20 +2266,32 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        xr.Dataset
+        DataTree
             The modified DataTree object.
         """
         if dt is None:
             raise ValueError("Please provide a DataTree (traces) object.")
-        else:
-            for group in dt.groups:
-                if group == "/":
-                    continue
-                if ("rt,response_mean" in dt[group].data_vars) and (
-                    self._parent not in dt[group].data_vars
-                ):
-                    dt[group] = dt[group].ds.rename({"rt,response_mean": self._parent})
-            return dt
+
+        response_mean = f"{self.response_str}_mean"
+        raw_response_dim = f"{self.response_str}_extra_dim_0"
+        response_dim = f"{self.response_str}_dim"
+        for group in dt.groups:
+            if group == "/":
+                continue
+            dataset = dt[group].ds
+            rename = {}
+            if response_mean in dataset.data_vars and self._parent not in dataset:
+                rename[response_mean] = self._parent
+            if group.rsplit("/", maxsplit=1)[-1] in {
+                "posterior_predictive",
+                "prior_predictive",
+            } and (
+                raw_response_dim in dataset.dims or raw_response_dim in dataset.coords
+            ):
+                rename[raw_response_dim] = response_dim
+            if rename:
+                dt[group] = dataset.rename(rename)
+        return dt
 
     def _postprocess_initvals_deterministic(
         self, initval_settings: dict = INITVAL_SETTINGS
@@ -2347,20 +2484,30 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     def _jitter_initvals(
         self, jitter_epsilon: float = 0.01, vector_only: bool = False
     ) -> None:
-        """Apply controlled jitter to initial values."""
-        if vector_only:
-            self.__jitter_initvals_vector_only(jitter_epsilon)
-        else:
-            self.__jitter_initvals_all(jitter_epsilon)
+        """Apply controlled jitter to initial values.
 
-    def __jitter_initvals_vector_only(self, jitter_epsilon: float) -> None:
+        The jitter comes from a fixed-seed generator, not the global numpy RNG,
+        so the jittered initvals (and so a seeded ``sample()``) are the same in
+        every process.
+        """
+        # ponytail: fixed seed; the jitter only breaks symmetry, and `initvals=`
+        # overrides it when a different start is wanted.
+        rng = np.random.default_rng(0)
+        if vector_only:
+            self.__jitter_initvals_vector_only(jitter_epsilon, rng)
+        else:
+            self.__jitter_initvals_all(jitter_epsilon, rng)
+
+    def __jitter_initvals_vector_only(
+        self, jitter_epsilon: float, rng: np.random.Generator
+    ) -> None:
         # Note: Calling our initial point function here
         # --> operate on untransformed variables
         initial_point_dict = self.initvals
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             if starting_value.ndim != 0 and starting_value.shape[0] != 1:
-                starting_value_tmp = starting_value + np.random.uniform(
+                starting_value_tmp = starting_value + rng.uniform(
                     -jitter_epsilon, jitter_epsilon, starting_value.shape
                 ).astype(np.float32)
 
@@ -2368,14 +2515,16 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 dtype = self._initvals[name_tmp].dtype
                 self._initvals[name_tmp] = np.array(starting_value_tmp).astype(dtype)
 
-    def __jitter_initvals_all(self, jitter_epsilon: float) -> None:
+    def __jitter_initvals_all(
+        self, jitter_epsilon: float, rng: np.random.Generator
+    ) -> None:
         # Note: Calling our initial point function here
         # --> operate on untransformed variables
         initial_point_dict = self.initvals
         # initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
-            starting_value_tmp = starting_value + np.random.uniform(
+            starting_value_tmp = starting_value + rng.uniform(
                 -jitter_epsilon, jitter_epsilon, starting_value.shape
             ).astype(np.float32)
 
