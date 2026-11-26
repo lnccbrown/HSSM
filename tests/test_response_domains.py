@@ -160,6 +160,12 @@ def test_single_categorical_domain_derives_legacy_choices():
             "must be integers",
         ),
         (
+            ["rt", "action"],
+            {"action": {"kind": "categorical", "values": ["left", "right"]}},
+            None,
+            "values for 'action' must be integers.*Map string labels",
+        ),
+        (
             ["rt", "response"],
             {"response": {"kind": "circular"}},
             None,
@@ -228,7 +234,7 @@ def test_model_config_detaches_nested_domain_input():
 
 
 def test_registered_domains_are_detached_and_resolve_canonically():
-    """Registration detaches caller input and reconstructs canonical config."""
+    """Canonical registration needs no choices and owns its resolved metadata."""
     name = "custom_registered_response_domains"
     domains: dict[str, Any] = {"response": {"kind": "continuous", "bounds": [0.0, 1.0]}}
     likelihoods = {
@@ -244,7 +250,6 @@ def test_registered_domains_are_detached_and_resolve_canonically():
         name=name,  # type: ignore[arg-type]
         response=["rt", "response"],
         list_params=["v"],
-        choices=None,
         response_domains=domains,
         likelihoods=likelihoods,  # type: ignore[arg-type]
         description=None,
@@ -260,6 +265,19 @@ def test_registered_domains_are_detached_and_resolve_canonically():
         assert config.choices is None
     finally:
         default_model_config.pop(name, None)  # type: ignore[arg-type]
+
+
+def test_registration_keeps_legacy_positional_arguments_and_requires_likelihoods():
+    """Omitting choices must not break positional registration or omit likelihoods."""
+    name = "custom_legacy_positional"
+    with pytest.raises(TypeError, match="likelihoods"):
+        register_model(name, ["rt", "response"], ["v"], [-1, 1])
+    register_model(name, ["rt", "response"], ["v"], [-1, 1], {}, "Legacy model")
+    try:
+        assert default_model_config[name]["choices"] == [-1, 1]
+        assert default_model_config[name]["description"] == "Legacy model"
+    finally:
+        default_model_config.pop(name)
 
 
 def test_registered_canonical_model_rejects_top_level_choices_override():

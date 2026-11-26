@@ -18,7 +18,7 @@ import pytensor
 import pytensor.tensor as pt
 from bambi.backend.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
-from ssms.config import get_model_registry
+from ssms.config import ModelConfigBuilder
 from ssms.hssm_support import (
     get_simulator_fun_internal,
     validate_simulator_fun,
@@ -250,8 +250,8 @@ def make_hssm_rv(
     is_choice_only : bool
         Whether the model is a choice-only model.
     expected_obs_dim : int, optional
-        Configured number of physical response columns. When supplied, it must
-        agree with the simulator's effective observation width.
+        Configured number of physical response columns. This is checked against
+        a real simulator and sets the support width of a likelihood-only model.
 
     Returns
     -------
@@ -262,23 +262,27 @@ def make_hssm_rv(
     model_name, choices, declared_obs_dim = validate_simulator_fun(
         simulator_fun_internal
     )
-    effective_obs_dim = 1 if is_choice_only else declared_obs_dim
+    if isinstance(simulator_fun, str):
+        try:
+            config = ModelConfigBuilder.from_model(simulator_fun)
+        except ValueError:
+            # ssms supplies a non-sampling placeholder for unknown names. Its
+            # default width of two says nothing about a custom likelihood.
+            if expected_obs_dim is not None:
+                declared_obs_dim = expected_obs_dim
+        else:
+            # Older ssms adapters miss the choices of models registered at runtime.
+            choices = config.get("choices", choices)
+
+    # A named choice-only simulator is checked after its legacy choice projection.
     comparison_obs_dim = (
-        declared_obs_dim if callable(simulator_fun) else effective_obs_dim
+        1 if is_choice_only and isinstance(simulator_fun, str) else declared_obs_dim
     )
     if expected_obs_dim is not None and comparison_obs_dim != expected_obs_dim:
         raise ValueError(
             f"The simulator observation width {comparison_obs_dim} does not match "
             f"the configured response width {expected_obs_dim}."
         )
-
-    # ssm-simulators up to 0.16.0 reports its fallback choices [0, 1, 2] for a
-    # model registered after import. Lapse responses are drawn from `choices`,
-    # so a model named by a string takes its own from the live registry.
-    if isinstance(simulator_fun, str):
-        registry = get_model_registry()
-        if registry.has_model(simulator_fun):
-            choices = registry.get(simulator_fun).get("choices", choices)
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
@@ -303,16 +307,8 @@ def make_hssm_rv(
         """
 
         name = model_name + "_RV"
-        # New in PyMC 5.16+: instead of using `ndims_supp`, we use `signature` to define
-        # the signature of the random variable. The string to the left of the `->` sign
-        # describes the input signature, which is `()` for each parameter, meaning each
-        # parameter is a scalar. The string to the right of the
-        # `->` sign describes the output signature, which is `(2)`, which means the
-        # random variable is a length-2 array.
-
-        # Override the output from ssm_simulator based on whether the model is
-        # choice-only.
-        output = "()" if is_choice_only else f"({effective_obs_dim})"
+        # Scalar parameters; the observation is scalar only for choice-only models.
+        output = "()" if is_choice_only else f"({declared_obs_dim})"
         signature = f"{','.join(['()'] * len(list_params))}->{output}"
 
         dtype = "floatX"
@@ -407,7 +403,7 @@ def make_hssm_rv(
                     if requested_size is None
                     else tuple(np.atleast_1d(requested_size))
                 )
-                support_shape = () if is_choice_only else (effective_obs_dim,)
+                support_shape = () if is_choice_only else (declared_obs_dim,)
                 sims_out = sims_out.reshape(batch_shape + support_shape)
 
             sims_out = _apply_lapse_model(
@@ -502,28 +498,24 @@ def _apply_lapse_model(
 
     lapse_prior = cast("bmb.Prior", lapse_dist)  # numeric lapse rejected above
 
-    replace_shape = (*out_shape[:-1], replace_n)
-    replace_mask = np.stack([replace, replace], axis=-1)
-    n_draws = np.prod(replace_shape)
+    # One (rt, response) draw per lapse row, assigned through the row mask.
+    # `np.putmask` picks values by flat position in `sims_out` instead, which
+    # wrote the same draw to several rows (#1507).
     lapse_rt = cast(
         "np.ndarray",
         pm.draw(
             get_distribution_from_prior(lapse_prior).dist(**lapse_prior.args),
-            n_draws,
+            replace_n,
             random_seed=rng,
         ),
-    ).reshape(replace_shape)
+    ).reshape(replace_n)
 
     lapse_response = rng.choice(
         choices,
         p=1 / len(choices) * np.ones(len(choices)),
-        size=replace_shape,
+        size=replace_n,
     )
-    lapse_output = np.stack(
-        [lapse_rt, lapse_response],
-        axis=-1,
-    )
-    np.putmask(sims_out, replace_mask, lapse_output)
+    sims_out[replace] = np.stack([lapse_rt, lapse_response], axis=-1)
     return sims_out
 
 
@@ -736,16 +728,7 @@ def make_distribution(
         rv_instance = rv()
     elif not isinstance(rv, type) and isinstance(rv, RandomVariable):
         rv_instance = rv
-    elif callable(rv):
-        random_variable = make_hssm_rv(
-            simulator_fun=cast("Callable[..., Any]", rv),
-            list_params=list_params,
-            lapse=lapse,
-            is_choice_only=is_choice_only,
-            expected_obs_dim=expected_obs_dim,
-        )
-        rv_instance = random_variable()
-    elif isinstance(rv, str):
+    elif isinstance(rv, str) or callable(rv):
         random_variable = make_hssm_rv(
             simulator_fun=rv,
             list_params=list_params,

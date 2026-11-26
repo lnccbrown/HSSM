@@ -207,7 +207,11 @@ def test_inv_temp_softmax_preserves_lan_matrix_float_dtype():
     ("responses", "match"),
     [
         ([0, 1.5, 0, 1], "Invalid responses"),
-        ([0, "left", 0, 1], "finite numeric"),
+        (
+            [0, "left", 0, 1],
+            r"column 'response'.*string label 'left'.*integer choice codes \(0, 1\)",
+        ),
+        (["0", "1", "0", "1"], r"string label '0'.*integer choice codes \(0, 1\)"),
         ([0, np.inf, 0, 1], "finite numeric"),
         ([0, 2, 0, 1], "Invalid responses"),
     ],
