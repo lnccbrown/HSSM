@@ -92,19 +92,23 @@ def test_get_alias_dict():
     assert alias_regression_a["1|group"] == "a_1|group"
 
 
-def test_set_floatX():
+def test_set_floatX(precision_env):
     """Synchronize floating-point precision across computational backends."""
     # Should raise error when wrong value is passed.
     with pytest.raises(ValueError):
         set_floatX("bad_value")
 
-    set_floatX("float32")
-    assert pytensor.config.floatX == "float32"
-    assert not config.read("jax_enable_x64")
+    floatX = pytensor.config.floatX
+    try:
+        set_floatX("float32")
+        assert pytensor.config.floatX == "float32"
+        assert not config.read("jax_enable_x64")
 
-    set_floatX("float64")
-    assert pytensor.config.floatX == "float64"
-    assert config.read("jax_enable_x64")
+        set_floatX("float64")
+        assert pytensor.config.floatX == "float64"
+        assert config.read("jax_enable_x64")
+    finally:
+        set_floatX(floatX)
 
 
 @pytest.fixture
