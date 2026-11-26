@@ -24,6 +24,7 @@ from ..config import (
     DEFAULT_SSM_OBSERVED_DATA,
     BaseModelConfig,
     ModelConfig,
+    _resolve_response_domains,
     _validate_ndt_edge_shift,
 )
 from ..utils import annotate_function
@@ -131,6 +132,7 @@ class RLSSMConfig(BaseModelConfig):
     _ssms_participant_contract: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self):  # noqa: D105
+        super().__post_init__()
         if self.loglik_kind is None:
             self.loglik_kind = "approx_differentiable"
             _logger.debug(
@@ -198,7 +200,15 @@ class RLSSMConfig(BaseModelConfig):
             init_kwargs[key] = config_dict.get(key, default)
 
         _get_or_warn("response", DEFAULT_SSM_OBSERVED_DATA)
-        _get_or_warn("choices", DEFAULT_SSM_CHOICES)
+        response_domains = config_dict.get("response_domains")
+        if response_domains is not None:
+            if config_dict.get("choices") is not None:
+                raise ValueError(
+                    "Provide either `response_domains` or legacy `choices`, not both."
+                )
+            init_kwargs["response_domains"] = deepcopy(response_domains)
+        else:
+            _get_or_warn("choices", DEFAULT_SSM_CHOICES)
 
         return cls(**init_kwargs)
 
@@ -312,6 +322,13 @@ class RLSSMConfig(BaseModelConfig):
     def validate(self) -> None:  # noqa: D102
         if self.response is None:
             raise ValueError("Please provide `response` columns in the configuration.")
+        if self.response_domains is None and self.choices is None:
+            raise ValueError(
+                "Please provide `choices` or `response_domains` in the configuration."
+            )
+        self.response_domains, self.choices = _resolve_response_domains(
+            self.response, self.response_domains, self.choices
+        )
         if self.list_params is None:
             raise ValueError("Please provide `list_params` in the configuration.")
         if self.choices is None:
