@@ -61,16 +61,15 @@ HSSM uses the normalized `("rt", "polar", "azimuth")` order for likelihood
 observations and predictive output labels. Custom predictive generators must
 return exactly `len(response)` scalars in that declared order. HSSM checks a
 callable generator's declared width against `len(response)`, but it cannot infer
-the semantic meaning of each position. Authors who pass a prebuilt random
-variable or distribution own both its width and order contract.
+the semantic meaning of each position. A custom likelihood can be fitted without
+a simulator; prior and posterior predictive draws require one. Authors who pass
+a prebuilt random variable or distribution own both its width and order contract.
 
 ## Migrating from `choices`
 
 `choices` remains a legacy shorthand only for a configuration with exactly one
-categorical non-RT response. Canonical `ModelConfig` callers declare
-`response_domains` and omit `choices`; never provide both. The current
-`register_model` signature retains the compatibility argument, so canonical
-registrations pass `choices=None` alongside `response_domains`.
+categorical non-RT response. In both `ModelConfig` and `register_model`, declare
+`response_domains` and omit `choices` when using canonical metadata.
 
 After resolution, a derived `choices` view exists only when there is exactly one
 response domain and it is categorical. Continuous, circular, mixed, and

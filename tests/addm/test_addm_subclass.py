@@ -120,15 +120,38 @@ def test_is_hssmbase_subclass():
 
 
 def test_loglik_op_injected():
-    """The JAX log-likelihood ``Op`` is injected into the config at construction."""
+    """The JAX log-likelihood ``Op`` is injected into the private config."""
     cfg = aDDMConfig()
-    assert cfg.loglik is None and cfg.backend is None
     model = hssm.aDDM(data=make_addm_dataframe(20), model_config=cfg)
-    assert model.model_config.loglik is not None
     assert isinstance(model.model_config.loglik, Op)
     assert model.model_config.backend == "jax"
-    # Caller's config object must be untouched by dataclasses.replace.
     assert cfg.loglik is None and cfg.backend is None
+
+
+@pytest.mark.parametrize("canonical", [False, True])
+def test_caller_response_config_is_detached(canonical):
+    """Construction and subsequent caller edits cannot change each other's metadata."""
+    labels = [-1, 1]
+    domains = {"response": {"kind": "categorical", "values": labels}}
+    cfg = (
+        aDDMConfig(response_domains=domains, choices=None)
+        if canonical
+        else aDDMConfig(choices=labels)
+    )
+    model = hssm.aDDM(data=make_addm_dataframe(20), model_config=cfg)
+    assert cfg.response_domains is (domains if canonical else None)
+    assert cfg.choices is (None if canonical else labels)
+
+    labels[0] = 42
+    cfg.response[1] = "renamed"
+    snapshot = model.__getstate__()["constructor_args"]["model_config"]
+    assert snapshot.response == model.model_config.response == ["rt", "response"]
+    assert model.choices == (-1, 1)
+    assert (
+        snapshot.response_domains["response"]["values"]
+        if canonical
+        else snapshot.choices
+    ) == [-1, 1]
 
 
 def test_bad_columns_raise():
@@ -243,3 +266,66 @@ if __name__ == "__main__":
         fn()
         print(f"PASSED: {fn.__name__}")
     print("\nAll Commit 4 subclass checks passed.")
+
+
+def _addm_lapse_terms(model, p_outlier):
+    """Solve the mixture for the per-row lapse term at ``p_outlier``."""
+    import pymc as pm
+
+    data = model.data[model.response].to_numpy(dtype=float)
+    params = dict(
+        zip(
+            [name for name in model.list_params if name != "p_outlier"],
+            model.model_config.params_default,
+            strict=True,
+        )
+    )
+    dist = model.model_distribution
+    logp_p = pm.logp(dist.dist(**params, p_outlier=p_outlier), data).eval()
+    logp_0 = pm.logp(dist.dist(**params, p_outlier=0.0), data).eval()
+    assert np.all(np.isfinite(logp_p)) and np.all(np.isfinite(logp_0))
+    lapse_terms = (np.exp(logp_p) - (1.0 - p_outlier) * np.exp(logp_0)) / p_outlier
+    return data, lapse_terms
+
+
+def test_missing_data_lapse_uses_uniform_choice():
+    """aDDM(missing_data=True) builds under the default lapse (#1322).
+
+    Missing-RT rows contribute ``1 / n_choices`` to the lapse mixture; observed
+    rows keep the ``Uniform(0, 20)`` density.
+    """
+    df = make_addm_dataframe(30, seed=1)
+    df.loc[[0, 5, 9], "rt"] = -999.0
+
+    model = hssm.aDDM(data=df, missing_data=True)
+    assert np.isfinite(
+        model.pymc_model.compile_logp()(model.pymc_model.initial_point())
+    )
+
+    data, lapse_terms = _addm_lapse_terms(model, p_outlier=0.05)
+    is_missing = data[:, 0] == -999.0
+    assert is_missing.sum() == 3
+    np.testing.assert_allclose(lapse_terms[is_missing], 1.0 / model.n_choices)
+    np.testing.assert_allclose(lapse_terms[~is_missing], 1.0 / 20.0)
+
+
+def test_deadline_lapse_uses_survival_at_deadline():
+    """aDDM(deadline=True) builds under the default lapse (#1322).
+
+    Omission rows contribute the lapse survival ``1 - deadline / 20``.
+    """
+    df = make_addm_dataframe(30, seed=1)
+    df["deadline"] = 0.3
+    assert (df["rt"] >= 0.3).any()
+
+    model = hssm.aDDM(data=df, deadline=True)
+    assert model.response == ["rt", "response", "deadline"]
+    assert np.isfinite(
+        model.pymc_model.compile_logp()(model.pymc_model.initial_point())
+    )
+
+    data, lapse_terms = _addm_lapse_terms(model, p_outlier=0.05)
+    is_missing = data[:, 0] == -999.0
+    assert is_missing.any() and not is_missing.all()
+    np.testing.assert_allclose(lapse_terms[is_missing], 1.0 - 0.3 / 20.0)
+    np.testing.assert_allclose(lapse_terms[~is_missing], 1.0 / 20.0)

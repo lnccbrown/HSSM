@@ -6,12 +6,15 @@ import pytest
 
 import jax
 import numpy as np
+import pandas as pd
 import pymc as pm
 import pytensor
+import pytensor.tensor as pt
 
 import hssm
 from hssm.likelihoods.analytical import (
     LOGP_LB,
+    logp_ddm,
     logp_ddm_sdv,
     logp_lba2,
     logp_lba3,
@@ -209,6 +212,16 @@ class TestDdmSdvStability:
                 f"log_pdf_sv() returned non-finite values for {param_name} = {value}."
             )
 
+    def test_tensor_sv_zero_matches_logp_ddm(self, data_ddm):
+        """sv=0 as a tensor (as inside a model) reduces to logp_ddm, not an error."""
+        params = {
+            name: pt.as_tensor_variable(value)
+            for name, value in {"v": 1.0, "a": 1.5, "z": 0.5, "t": 0.2}.items()
+        }
+        logp = logp_ddm_sdv(data_ddm, sv=pt.as_tensor_variable(0.0), **params).eval()
+        expected = logp_ddm(data_ddm, **params).eval()
+        np.testing.assert_allclose(logp, expected, rtol=1e-5, atol=1e-5)
+
 
 class TestPoissonRaceLikelihood:
     theta_poisson_race = dict(r1=2.5, r2=3.5, k1=1.3, k2=1.6, t=0.05)
@@ -337,3 +350,36 @@ class TestRdmLikelihood:
         assert np.isclose(logp[0], LOGP_LB)
         assert np.all(np.isfinite(logp))
         assert not np.any(np.isnan(logp))
+
+
+def _value_point(pm_model, values):
+    """Map parameter values onto the model's (transformed) value variables."""
+    point = {}
+    for rv in pm_model.free_RVs:
+        value_var = pm_model.rvs_to_values[rv]
+        value = np.asarray(values[rv.name], dtype=value_var.dtype)
+        transform = pm_model.rvs_to_transforms.get(rv)
+        if transform is not None:
+            value = transform.forward(value, *rv.owner.inputs).eval()
+        point[value_var.name] = np.asarray(value, dtype=value_var.dtype)
+    return point
+
+
+@pytest.mark.parametrize("model", ["ddm", "ddm_sdv"])
+@pytest.mark.parametrize("p_outlier", [None, 0.05], ids=["no_lapse", "lapse"])
+def test_float32_gradient_is_finite_just_above_t(model, p_outlier):
+    """The float32 gradient stays finite when the fastest RT is just above t.
+
+    There the density underflows to the LOGP_LB floor; dividing by the fast
+    series' 1 / sqrt(2π tt³) normalization overflowed float32 to inf, and the
+    log-sum-exp max mask turned it into NaN gradients for a and t.
+    """
+    rt = 0.5
+    data = pd.DataFrame({"rt": [rt, rt + 0.3, rt + 0.6], "response": [1, -1, 1]})
+    pm_model = hssm.HSSM(data=data, model=model, p_outlier=p_outlier).pymc_model
+    assert pm_model.logp().dtype == "float32"
+    dlogp = pm_model.compile_dlogp()
+    for gap in np.geomspace(1e-6, 4e-3, 60):
+        values = dict(v=1.0, a=2.0, z=0.5, t=rt - gap, sv=0.5)
+        grad = dlogp(_value_point(pm_model, values))
+        assert np.all(np.isfinite(grad)), f"gap {gap:.2e}: {grad}"

@@ -1,15 +1,15 @@
 import bambi as bmb
 import numpy as np
+import pytensor.tensor as pt
 import pytest
 
 import hssm
 from hssm import Prior
-from hssm.modelconfig import get_default_model_config
 from hssm.link import Link
+from hssm.modelconfig import get_default_model_config
 from hssm.param import UserParam
 from hssm.param.regression_param import RegressionParam, _make_priors_recursive
-from hssm.prior import HSSM_SETTINGS_DISTRIBUTIONS, HDDM_SETTINGS_GROUP
-
+from hssm.prior import HDDM_SETTINGS_GROUP, HSSM_SETTINGS_DISTRIBUTIONS
 
 v_reg = UserParam(
     name="v",
@@ -390,7 +390,7 @@ def test_safe_priors_exact_terms_take_precedence_over_wildcards(cavanagh_test):
 
 
 def test_safe_priors_preserve_unmatched_group_location(cavanagh_test):
-    """Retain the existing free-mean policy for a genuinely group-only slope."""
+    """Retain the free-mean family while centering a generated group-only slope."""
     param = RegressionParam(
         name="v",
         formula="v ~ 1 + (0 + theta | participant_id)",
@@ -401,6 +401,298 @@ def test_safe_priors_preserve_unmatched_group_location(cavanagh_test):
 
     assert param._group_terms_with_common == set()
     _check_group_prior(param.prior["theta|participant_id"])
+
+
+@pytest.mark.parametrize(
+    ("noncentered", "expect_warning"),
+    [
+        (True, True),
+        (False, False),
+        (None, False),
+        ({"v": True}, True),
+        ({"v": False}, False),
+        ({"a": False}, True),
+    ],
+)
+def test_safe_priors_warn_when_centering_overrides_model_setting(
+    cavanagh_test, caplog, noncentered, expect_warning
+):
+    """Explain a generated term-level centered fallback only when it overrides."""
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + (0 + theta | participant_id)",
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=noncentered)
+
+    messages = [
+        record.message
+        for record in caplog.records
+        if "generated location-bearing group-only term" in record.message
+    ]
+    assert bool(messages) is expect_warning
+    if expect_warning:
+        assert len(messages) == 1
+        assert "parameter 'v'" in messages[0]
+        assert "'theta|participant_id' (expression 'theta')" in messages[0]
+        assert "noncentered=False" in messages[0]
+        assert "response/parameter scale" in messages[0]
+        assert "common formula term(s) ['theta']" in messages[0]
+
+
+def test_safe_priors_warn_once_for_all_generated_group_locations(cavanagh_test, caplog):
+    """Aggregate every generated unmatched term for a component into one warning."""
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + (0 + theta + dbs | participant_id)",
+        link="log",
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=True)
+
+    messages = [
+        record.message
+        for record in caplog.records
+        if "generated location-bearing group-only term" in record.message
+    ]
+    assert len(messages) == 1
+    assert "theta|participant_id" in messages[0]
+    assert "dbs|participant_id" in messages[0]
+    assert "linear-predictor scale before the inverse link" in messages[0]
+    assert "common formula term(s) ['dbs', 'theta']" in messages[0]
+    assert param.prior["theta|participant_id"].noncentered is False
+    assert param.prior["dbs|participant_id"].noncentered is False
+
+
+def test_safe_priors_do_not_rewrite_explicit_unmatched_group_prior(cavanagh_test):
+    """An explicit group-only prior remains authoritative and unchanged."""
+    explicit = bmb.Prior(
+        "Normal",
+        mu=bmb.Prior("Normal", mu=1.0, sigma=0.5),
+        sigma=bmb.Prior("HalfNormal", sigma=0.75),
+        noncentered=True,
+    )
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + (0 + theta | participant_id)",
+        prior={"theta|participant_id": explicit},
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=True)
+
+    assert param.prior["theta|participant_id"] is explicit
+    assert explicit.noncentered is True
+
+
+def test_safe_priors_do_not_rewrite_unmatched_group_wildcard(cavanagh_test, caplog):
+    """A group wildcard owns an unmatched term without a generated fallback."""
+    wildcard = bmb.Prior(
+        "Normal",
+        mu=0.0,
+        sigma=bmb.Prior("HalfNormal", sigma=0.75),
+        noncentered=True,
+    )
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + (0 + theta | participant_id)",
+        prior={"group_specific": wildcard},
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=True)
+
+    assert param.prior["group_specific"] is wildcard
+    assert "theta|participant_id" not in param.prior
+    assert not any(
+        "generated location-bearing group-only term" in record.message
+        for record in caplog.records
+    )
+
+
+def _explicit_group_prior(scale=0.75):
+    """Return a valid explicit hierarchical group prior for ownership tests."""
+    return bmb.Prior(
+        "Normal",
+        mu=0.0,
+        sigma=bmb.Prior("HalfNormal", sigma=scale),
+    )
+
+
+def test_safe_priors_reject_repeated_unmatched_group_location(cavanagh_test):
+    """Do not choose a population owner between two grouping factors."""
+    param = RegressionParam(
+        name="v",
+        formula=("v ~ 1 + (0 + theta | participant_id) + (0 + theta | conf)"),
+        bounds=(-3.0, 3.0),
+    )
+
+    with pytest.raises(ValueError) as error:
+        param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    message = str(error.value)
+    assert "parameter 'v'" in message
+    assert "expression 'theta'" in message
+    assert "theta|participant_id" in message
+    assert "theta|conf" in message
+    assert "common formula term(s) ['theta']" in message
+    assert "non-None hierarchical explicit prior" in message
+    assert "does not support numeric fixed coefficients" in message
+
+
+def test_safe_priors_render_intercept_remedy_as_formula_one(cavanagh_test):
+    """Suggest formula term ``1`` for an ambiguous Formulae Intercept."""
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 0 + (1 | participant_id) + (1 | conf)",
+        bounds=(-3.0, 3.0),
+    )
+
+    with pytest.raises(ValueError) as error:
+        param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    message = str(error.value)
+    assert "expression 'Intercept'" in message
+    assert "1|participant_id" in message
+    assert "1|conf" in message
+    assert "common formula term(s) ['1']" in message
+
+
+def test_safe_priors_reject_partially_explicit_group_ownership(cavanagh_test):
+    """One exact prior does not assign every competing group location."""
+    explicit = _explicit_group_prior()
+    param = RegressionParam(
+        name="v",
+        formula=("v ~ 1 + (0 + theta | participant_id) + (0 + theta | conf)"),
+        prior={"theta|participant_id": explicit},
+        bounds=(-3.0, 3.0),
+    )
+
+    with pytest.raises(ValueError, match="theta\\|conf"):
+        param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+
+def test_safe_priors_allow_fully_explicit_group_ownership(cavanagh_test):
+    """Preserve exact priors when users own every repeated group location."""
+    participant_prior = _explicit_group_prior(0.5)
+    conf_prior = _explicit_group_prior(1.25)
+    param = RegressionParam(
+        name="v",
+        formula=("v ~ 1 + (0 + theta | participant_id) + (0 + theta | conf)"),
+        prior={
+            "theta|participant_id": participant_prior,
+            "theta|conf": conf_prior,
+        },
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    assert param.prior["theta|participant_id"] is participant_prior
+    assert param.prior["theta|conf"] is conf_prior
+
+
+def test_safe_priors_allow_explicit_group_wildcard_ownership(cavanagh_test):
+    """Treat a non-None wildcard as explicit coverage with exact precedence."""
+    wildcard = _explicit_group_prior(0.5)
+    exact = _explicit_group_prior(1.25)
+    param = RegressionParam(
+        name="v",
+        formula=("v ~ 1 + (0 + theta | participant_id) + (0 + theta | conf)"),
+        prior={"group_specific": wildcard, "theta|conf": exact},
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    assert param.prior["group_specific"] is wildcard
+    assert param.prior["theta|conf"] is exact
+    assert "theta|participant_id" not in param.prior
+
+
+@pytest.mark.parametrize(
+    "prior",
+    [
+        {"group_specific": None},
+        {"theta|participant_id": None, "theta|conf": _explicit_group_prior()},
+    ],
+    ids=["none-wildcard", "none-exact"],
+)
+def test_safe_priors_none_does_not_assign_group_location(cavanagh_test, prior):
+    """Delegation to Bambi is not an explicit population-location choice."""
+    param = RegressionParam(
+        name="v",
+        formula=("v ~ 1 + (0 + theta | participant_id) + (0 + theta | conf)"),
+        prior=prior,
+        bounds=(-3.0, 3.0),
+    )
+
+    with pytest.raises(ValueError, match="non-None hierarchical explicit prior"):
+        param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+
+def test_safe_priors_allow_repeated_matched_group_deviations(cavanagh_test):
+    """One common effect supports zero-mean deviations for many factors."""
+    param = RegressionParam(
+        name="v",
+        formula=("v ~ 1 + theta + (0 + theta | participant_id) + (0 + theta | conf)"),
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    for term_name in ("theta|participant_id", "theta|conf"):
+        assert term_name in param._group_terms_with_common
+        assert param.prior[term_name].args["mu"] == 0.0
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [
+        "v ~ 1 + (0 + theta | participant_id) + (0 + dbs | conf)",
+        ("v ~ 1 + (0 + theta:dbs | participant_id) + (0 + dbs:theta | conf)"),
+    ],
+    ids=["different-expressions", "interaction-order-is-exact"],
+)
+def test_safe_priors_keep_distinct_unmatched_expressions_separate(
+    cavanagh_test, formula
+):
+    """Do not infer symbolic equivalence or unrelated location collisions."""
+    param = RegressionParam(name="v", formula=formula, bounds=(-3.0, 3.0))
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    assert len(param._group_term_names) == 2
+    assert set(param.prior).issuperset(param._group_term_names)
+
+
+def test_safe_priors_aggregate_expanded_ambiguous_expressions(cavanagh_test):
+    """Report every repeated term produced by a Formulae interaction expansion."""
+    param = RegressionParam(
+        name="v",
+        formula=(
+            "v ~ 1 + (0 + theta * dbs | participant_id) + (0 + theta * dbs | conf)"
+        ),
+        bounds=(-3.0, 3.0),
+    )
+
+    with pytest.raises(ValueError) as error:
+        param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    message = str(error.value)
+    for expression in ("'theta'", "'dbs'", "'theta:dbs'"):
+        assert f"expression {expression}" in message
+    for term in (
+        "theta|participant_id",
+        "theta|conf",
+        "dbs|participant_id",
+        "dbs|conf",
+        "theta:dbs|participant_id",
+        "theta:dbs|conf",
+    ):
+        assert term in message
 
 
 angle_config = get_default_model_config("angle")
@@ -512,6 +804,19 @@ def _assert_scalar_prior_contract(
         np.testing.assert_allclose(effective_args[key], expected)
 
 
+def _assert_hierarchical_prior_contract(prior, specification):
+    """Recursively compare a group prior against an HSSM settings tree."""
+    if isinstance(specification, dict) and "dist" in specification:
+        expected = specification.copy()
+        assert isinstance(prior, bmb.Prior)
+        assert prior.name == expected.pop("dist")
+        assert set(prior.args) == set(expected)
+        for key, value in expected.items():
+            _assert_hierarchical_prior_contract(prior.args[key], value)
+        return
+    assert prior == specification
+
+
 @pytest.mark.parametrize("link", IDENTITY_LINK_CASES)
 @pytest.mark.parametrize(
     ("param_name", "bounds", "prior_name", "prior_args", "is_truncated"),
@@ -552,6 +857,149 @@ def test_hddm_safe_common_intercept_uses_response_scale_prior_for_identity_links
         is_truncated=False,
     )
     assert getattr(param.link, "name", param.link) == "identity"
+
+
+@pytest.mark.parametrize("link", IDENTITY_LINK_CASES)
+@pytest.mark.parametrize(
+    ("param_name", "bounds", "_prior_name", "_prior_args", "_is_truncated"),
+    HDDM_LOCATION_PRIOR_CASES,
+)
+def test_hddm_safe_group_only_intercept_uses_identity_scale_hierarchy(
+    cavanagh_test,
+    param_name,
+    bounds,
+    _prior_name,
+    _prior_args,
+    _is_truncated,
+    link,
+):
+    """Route every identity spelling through group-only safe-prior generation."""
+    param = RegressionParam(
+        name=param_name,
+        formula=f"{param_name} ~ 0 + (1 | participant_id)",
+        bounds=bounds,
+        link=link,
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=True, noncentered=False)
+    param.process_prior()
+
+    prior = param.prior["1|participant_id"]
+    assert prior.noncentered is False
+    _assert_hierarchical_prior_contract(prior, HDDM_SETTINGS_GROUP[param_name])
+    assert getattr(param.link, "name", param.link) == "identity"
+
+
+def test_hddm_safe_group_only_intercept_uses_preset_identity(cavanagh_test):
+    """Treat identity selected by the log-logit preset like omitted identity."""
+    param = RegressionParam.from_defaults(
+        name="v",
+        formula="v ~ 0 + (1 | participant_id)",
+        bounds=(-np.inf, np.inf),
+        link_settings="log_logit",
+    )
+    assert param.link == "identity"
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=True, noncentered=False)
+
+    prior = param.prior["1|participant_id"]
+    assert prior.noncentered is False
+    _assert_hierarchical_prior_contract(prior, HDDM_SETTINGS_GROUP["v"])
+
+
+@pytest.mark.parametrize(
+    ("link", "expect_error"),
+    [
+        pytest.param(None, True, id="omitted-identity"),
+        pytest.param("identity", True, id="string-identity"),
+        pytest.param(bmb.Link("identity"), True, id="bambi-identity"),
+        pytest.param(hssm.Link("identity"), True, id="hssm-identity"),
+        pytest.param("log", False, id="log"),
+        pytest.param(
+            hssm.Link("gen_logit", bounds=(0.0, 1.0)),
+            False,
+            id="gen-logit",
+        ),
+        pytest.param(
+            hssm.Link(
+                "custom_log",
+                link=np.log,
+                linkinv=np.exp,
+                linkinv_backend=pt.exp,
+            ),
+            False,
+            id="custom",
+        ),
+    ],
+)
+def test_bounded_group_only_default_requires_explicit_identity_decision(
+    cavanagh_test, link, expect_error
+):
+    """Fail closed only when a generated group location lives on bounded scale."""
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 0 + (1 | participant_id)",
+        bounds=(0.0, 1.0),
+        link=link,
+    )
+
+    if expect_error:
+        with pytest.raises(ValueError) as error:
+            param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=False)
+        message = str(error.value)
+        assert "cannot generate a qualified default" in message
+        assert "'1|participant_id'" in message
+        assert "bounded parameter 'v'" in message
+        assert "(0.0, 1.0)" in message
+        assert "support-respecting transformed link" in message
+        assert "explicit centered hierarchical group prior" in message
+    else:
+        param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=False)
+        assert "1|participant_id" in param.prior
+
+
+@pytest.mark.parametrize(
+    "bounds", [None, (-np.inf, np.inf)], ids=["no-bounds", "unbounded"]
+)
+def test_group_only_default_guard_requires_finite_bounds(cavanagh_test, bounds):
+    """Keep the generic group default when response support is unbounded."""
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 0 + (1 | participant_id)",
+        bounds=bounds,
+        link="identity",
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=False)
+
+    assert "1|participant_id" in param.prior
+
+
+@pytest.mark.parametrize(
+    "prior_key", ["1|participant_id", "group_specific"], ids=["exact", "wildcard"]
+)
+def test_bounded_group_only_default_guard_preserves_explicit_prior(
+    cavanagh_test, prior_key
+):
+    """Leave exact and wildcard centered hierarchies authoritative."""
+    explicit = bmb.Prior(
+        "Normal",
+        mu=bmb.Prior("Normal", mu=0.5, sigma=0.2),
+        sigma=bmb.Prior("HalfNormal", sigma=0.1),
+        noncentered=False,
+    )
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 0 + (1 | participant_id)",
+        prior={prior_key: explicit},
+        bounds=(0.0, 1.0),
+        link="identity",
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=True)
+
+    assert param.prior == {prior_key: explicit}
+    assert param.prior[prior_key] is explicit
 
 
 @pytest.mark.parametrize(
@@ -608,7 +1056,7 @@ def test_make_safe_priors(cavanagh_test, caplog, param_name, bounds, is_ddm):
         assert _mu.item() == (lower + upper) / 2
     else:
         assert _mu == (lower + upper) / 2
-    assert intercept_prior._args["sigma"] == 0.25
+    assert intercept_prior._args["sigma"] == (upper - lower) / 4
 
     assert isinstance(slope_prior, bmb.Prior)
     assert slope_prior.dist is None
@@ -665,15 +1113,8 @@ def test_make_safe_priors(cavanagh_test, caplog, param_name, bounds, is_ddm):
         bounds=bounds,
     )
 
-    param_no_common_intercept.make_safe_priors(cavanagh_test, {}, is_ddm=False)
-
-    assert "limitation" in caplog.records[-1].msg
-    assert "Intercept" not in param_no_common_intercept.prior
-    group_intercept_prior = param_no_common_intercept.prior["1|participant_id"]
-    group_slope_prior = param_no_common_intercept.prior["theta|participant_id"]
-
-    _check_group_prior(group_intercept_prior)
-    _check_group_prior(group_slope_prior)
+    with pytest.raises(ValueError, match="cannot generate a qualified default"):
+        param_no_common_intercept.make_safe_priors(cavanagh_test, {}, is_ddm=False)
 
     # Change back after testing
     hssm.set_floatX("float32")
@@ -683,6 +1124,7 @@ def _check_group_prior(group_prior):
     assert isinstance(group_prior, bmb.Prior)
     assert group_prior.dist is None
     assert group_prior.name == "Normal"
+    assert group_prior.noncentered is False
 
     mu = group_prior.args["mu"]
     sigma = group_prior.args["sigma"]
@@ -702,6 +1144,7 @@ def _check_group_prior_with_common(group_prior):
     assert isinstance(group_prior, bmb.Prior)
     assert group_prior.dist is None
     assert group_prior.name == "Normal"
+    assert group_prior.noncentered is None
 
     mu = group_prior.args["mu"]
     sigma = group_prior.args["sigma"]
@@ -826,6 +1269,7 @@ def test_make_safe_priors_ddm(cavanagh_test, caplog, param_name, mu, prior):
     def _check_group_prior_intercept_ddm(group_prior, prior):
         assert isinstance(group_prior, bmb.Prior)
         assert group_prior.dist is None
+        assert group_prior.noncentered is False
         prior1 = prior.copy()
         assert group_prior.name == prior1.pop("name")
         for key, val in prior1.items():
@@ -845,7 +1289,7 @@ def test_make_safe_priors_ddm(cavanagh_test, caplog, param_name, mu, prior):
     )
 
     param_no_common_intercept.make_safe_priors(cavanagh_test, {}, is_ddm=True)
-    assert "limitation" in caplog.records[-1].msg
+    assert any("limitation" in record.msg for record in caplog.records)
 
     assert "Intercept" not in param_no_common_intercept.prior
     group_intercept_prior = param_no_common_intercept.prior["1|participant_id"]

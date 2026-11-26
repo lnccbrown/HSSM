@@ -8,8 +8,7 @@ resolved through ``get_default_model_config``.
 
 Every field carries a default, so ``aDDMConfig()`` yields a complete default
 configuration (the factory the subclass uses). ``loglik`` and ``backend`` are
-inherited as ``None`` and injected by ``aDDM.__init__`` via
-``dataclasses.replace`` in Commit 4.
+inherited as ``None``; ``aDDM.__init__`` sets them on a private config copy.
 """
 
 from collections.abc import Callable
@@ -90,8 +89,6 @@ class aDDMConfig(BaseModelConfig):
     # aDDM.sample_posterior_predictive. See ssms.basic_simulators.fixation_continuation.
     continuation_mode: str = "prolong_last_fixation"
     continuation_params: dict | None = None
-    # ``loglik`` and ``backend`` are inherited (default ``None``) and injected by
-    # ``aDDM.__init__`` via ``dataclasses.replace`` — not redeclared here.
 
     def validate(self) -> None:
         """Validate the configuration (mirrors ``RLSSMConfig.validate``)."""

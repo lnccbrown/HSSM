@@ -1,5 +1,5 @@
 from .._types import DefaultConfig  # noqa: D100
-from ..likelihoods.analytical import ddm_bounds, ddm_params, logp_ddm
+from ..likelihoods.analytical import ddm_bounds, ddm_params, logp_ddm, logp_ddm_jax
 from ..likelihoods.blackbox import logp_ddm_bbox
 
 
@@ -23,6 +23,7 @@ def get_ddm_config() -> DefaultConfig:
             "analytical": {
                 "loglik": logp_ddm,
                 "backend": None,
+                "jax_loglik": logp_ddm_jax,
                 "bounds": ddm_bounds,
                 "default_priors": {
                     "t": {
@@ -41,10 +42,12 @@ def get_ddm_config() -> DefaultConfig:
                         "sigma": 2.0,
                     },
                 },
+                # The network's training box (ssms `ddm` param_bounds, Fengler
+                # et al. 2021); outside it the LAN extrapolates (#1440).
                 "bounds": {
                     "v": (-3.0, 3.0),
                     "a": (0.3, 2.5),
-                    "z": (0.0, 1.0),
+                    "z": (0.1, 0.9),
                     "t": (0.0, 2.0),
                 },
                 "extra_fields": None,

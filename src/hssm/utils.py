@@ -178,13 +178,17 @@ def _compute_log_likelihood(
 
     required_kwargs = {
         "model": model,
-        "posterior": dt["posterior"],
+        # `.children[...]` is typed as DataTree; `dt[...]` is DataTree | DataArray
+        "posterior": dt.children["posterior"],
         "data": data,
         "compile_mode": compile_mode,
     }
 
     if not model.family:
         raise ValueError("Model family is not defined. Cannot compute log-likelihood.")
+    # bambi annotates `posterior` as a DataArray, but a DataTree's "posterior"
+    # child is itself a DataTree, which is what it is handed and handles.
+    # pyrefly: ignore[bad-argument-type]
     log_likelihood_out = log_likelihood(model.family, **required_kwargs).to_dataset(
         name=response_aliased_name
     )
@@ -206,7 +210,7 @@ def _compute_log_likelihood(
 def log_likelihood(
     family: bmb.Family,
     model: bmb.Model,
-    posterior: xr.DataArray,
+    posterior: xr.Dataset | xr.DataTree,
     data: pd.DataFrame | None = None,
     compile_mode: str | None = None,
     **kwargs,
@@ -221,9 +225,9 @@ def log_likelihood(
     ----------
     model : bambi.Model
         The model
-    posterior : xr.Dataset
-        The xarray dataset that contains the draws for
-        all the parameters in the posterior.
+    posterior : xr.Dataset | xr.DataTree
+        The xarray dataset (or the `posterior` group of a DataTree) that
+        contains the draws for all the parameters in the posterior.
         It must contain the parameters that are needed
         in the distribution of the response, or
         the parameters that allow to derive them.
@@ -358,12 +362,51 @@ def set_floatX(dtype: Literal["float32", "float64"], update_jax: bool = True):
     update_jax : optional
         Whether this function also sets float type for JAX by changing the
         `jax_enable_x64` setting in JAX config. Defaults to True.
+
+    Notes
+    -----
+    With `dtype="float32"` and `update_jax=True`, JAX's
+    `jax_default_matmul_precision` is also set to `"highest"`, unless you have
+    already chosen a precision (through the `JAX_DEFAULT_MATMUL_PRECISION`
+    environment variable or `jax.config.update`). JAX's default runs float32
+    matrix multiplications on NVIDIA GPUs from Ampere on as TF32, whose 10-bit
+    mantissa can stall NUTS on LAN likelihoods. On TPUs, `"highest"` likewise
+    replaces JAX's default of bfloat16 matrix multiplications. On CPUs the
+    setting changes nothing. Full float32 costs speed: on one RTX A5000, a LAN
+    log-likelihood and its gradient on 10,000 or more trials took about 1.3x as
+    long as under TF32, and data-center GPUs (A100, H100), whose TF32
+    throughput is much higher than their float32 throughput, can lose more. To
+    trade precision for speed, set `JAX_DEFAULT_MATMUL_PRECISION=tensorfloat32`
+    before importing JAX. Calling
+    `jax.config.update("jax_default_matmul_precision", "tensorfloat32")` after
+    this function works too, but only in the current process (see below).
+
+    The precision is also written to the environment (`floatX` into
+    `PYTENSOR_FLAGS`, and JAX's matmul precision into
+    `JAX_DEFAULT_MATMUL_PRECISION`). Processes started afterwards, such as
+    PyMC's chains under the `"spawn"` or `"forkserver"` start method, are fresh
+    interpreters that read these settings from the environment. A forkserver that
+    is already running keeps the environment it started with, so call this
+    function before the first multi-process PyMC fit. A `jax.config.update`
+    after this function does not reach the environment, so the workers keep the
+    precision written here; the environment variable set before importing JAX
+    covers both. With `update_jax=False`, `PYTENSOR_FLAGS` still carries
+    `floatX`, and PyTensor's JAX dispatch sets `jax_enable_x64` from it in the
+    workers, so float32 turns x64 off there.
     """
     if dtype not in ["float32", "float64"]:
         raise ValueError('`dtype` must be either "float32" or "float64".')
 
     pytensor.config.floatX = dtype
     _logger.info("Setting PyTensor floatX type to %s.", dtype)
+    # A fresh interpreter imports PyTensor with floatX from PYTENSOR_FLAGS, and
+    # PyTensor's JAX dispatch then sets jax_enable_x64 from it.
+    flags = [
+        flag
+        for flag in os.environ.get("PYTENSOR_FLAGS", "").split(",")
+        if flag.strip() and flag.split("=")[0].strip() != "floatX"
+    ]
+    os.environ["PYTENSOR_FLAGS"] = ",".join([*flags, f"floatX={dtype}"])
 
     if update_jax:
         jax_enable_x64 = dtype == "float64"
@@ -374,6 +417,16 @@ def set_floatX(dtype: Literal["float32", "float64"], update_jax: bool = True):
             + "If this is not intended, please set `jax` to False.",
             jax_enable_x64,
         )
+
+        # None: nobody has chosen a precision, so JAX would use TF32 on GPUs.
+        if dtype == "float32" and jax.config.jax_default_matmul_precision is None:
+            jax.config.update("jax_default_matmul_precision", "highest")
+            _logger.info(
+                'Setting "jax_default_matmul_precision" to "highest" '
+                "(full float32 matrix multiplications, no TF32 on GPUs)."
+            )
+        if precision := jax.config.jax_default_matmul_precision:
+            os.environ["JAX_DEFAULT_MATMUL_PRECISION"] = precision
 
 
 def _print_prior(term: CommonTerm | GroupSpecificTerm) -> str:
@@ -588,7 +641,7 @@ def predictive_dt_to_dataframe(
         A dataframe with the predictive samples.
     """
     predictive = dt[predictive_group].ds[response_str]
-    df = dt[predictive_group].ds.to_dataframe().reset_index(drop=False)
+    df = predictive.to_dataframe().reset_index()
     response_names = response_str.split(",")
     if response_dim not in df.columns:
         if any(dim not in {"chain", "draw", "__obs__"} for dim in predictive.dims):
@@ -646,58 +699,6 @@ class SuppressOutput:
         self._stderr_context.__exit__(exc_type, exc_value, traceback)
         self._null_file.close()
         logging.disable(logging.NOTSET)  # Re-enable logging
-
-
-@contextlib.contextmanager
-def _force_jax_nuts_no_jitter(active: bool = True):
-    """Temporarily disable the JAX-NUTS initial-value jitter inside ``pm.sample``.
-
-    PyMC 6's ``pm.sample(nuts_sampler="numpyro"|"blackjax")`` always calls
-    ``pymc.sampling.jax.sample_jax_nuts`` with its default ``jitter=True`` and exposes
-    no supported way to turn it off (passing ``jitter`` via ``nuts=`` routes it into the
-    NumPyro/BlackJAX *kernel* and raises ``TypeError``). HSSM applies its own controlled
-    jitter to the initial values (``initval_jitter``, default 0.01), so the sampler's
-    extra ``uniform(-1, 1)`` jitter is unwanted. Because ``pymc.sampling.mcmc`` resolves
-    the sampler as a module attribute at call time, temporarily replacing that attribute
-    with a wrapper that forces ``jitter=False`` is picked up by ``pm.sample``.
-
-    Parameters
-    ----------
-    active
-        When ``False`` the context manager is a no-op (used for the non-JAX samplers).
-        This lets callers wrap the ``fit`` call unconditionally without importing
-        ``contextlib`` themselves. Defaults to ``True``.
-
-    Notes
-    -----
-    If a future PyMC release removes or renames ``sample_jax_nuts``, the context manager
-    degrades to a no-op instead of raising.
-    """
-    if not active:
-        yield
-        return
-
-    try:
-        import pymc.sampling.jax as pymc_jax
-    except ImportError:  # pragma: no cover - jax extras always present in HSSM
-        yield
-        return
-
-    original = getattr(pymc_jax, "sample_jax_nuts", None)
-    if original is None:  # pragma: no cover - guards a future pymc refactor
-        yield
-        return
-
-    @functools.wraps(original)
-    def _no_jitter_sample_jax_nuts(*args, **kwargs):
-        kwargs["jitter"] = False
-        return original(*args, **kwargs)
-
-    pymc_jax.sample_jax_nuts = _no_jitter_sample_jax_nuts
-    try:
-        yield
-    finally:
-        pymc_jax.sample_jax_nuts = original
 
 
 def annotate_function(**kwargs):

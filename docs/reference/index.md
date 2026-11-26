@@ -21,6 +21,7 @@ This section records the public HSSM interfaces and project metadata. Use the
 
 ## Functions and specialized modules
 
+- [`hssm.list_data`](../api/list_data.md) lists package-supplied datasets.
 - [`hssm.load_data`](../api/load_data.md) loads package-supplied datasets.
 - [`hssm.simulate_data`](../api/simulate_data.md) simulates supported models.
 - [`hssm.show_defaults`](../api/show_defaults.md) inspects model defaults.

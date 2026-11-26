@@ -18,9 +18,9 @@ def register_model(
     name: SupportedModels,
     response: list[str],
     list_params: list[str],
-    choices: list[int] | None,
-    likelihoods: LoglikConfigs,
-    description: str | None,
+    choices: list[int] | None = None,
+    likelihoods: LoglikConfigs | None = None,
+    description: str | None = None,
     response_domains: dict[str, ResponseDomainSpec] | None = None,
 ) -> None:
     """Register a new model in HSSM.
@@ -34,13 +34,18 @@ def register_model(
     list_params : list[str]
         List of parameters
     choices : list[int] or None
-        Legacy list of possible choices for one categorical response.
+        Legacy list of possible choices for one categorical response. Omit
+        when supplying `response_domains`.
     response_domains : dict or None
         Canonical metadata keyed by each physical non-RT response column.
     description : str
         Description of the model
     likelihoods : LoglikConfigs
-        Dictionary of likelihood configurations
+        Dictionary of likelihood configurations. A likelihood whose support
+        starts below the non-decision time ``t`` declares the parameter that
+        shifts the edge, and by how much, under the optional ``ndt_edge_shift``
+        key: ``{"param": "st", "scale": 0.5}`` floors the log-likelihood for
+        response times at or below ``t - 0.5 * st`` instead of ``t``.
 
     Returns
     -------
@@ -54,6 +59,8 @@ def register_model(
     # Ensure no collisions with existing models
     if name in registered_models:
         raise ValueError(f"Model '{name}' already exists")
+    if likelihoods is None:
+        raise TypeError("register_model() requires `likelihoods`.")
     if response_domains is not None and choices is not None:
         raise ValueError(
             "Provide either `response_domains` or legacy `choices`, not both."
