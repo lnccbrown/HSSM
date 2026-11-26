@@ -571,11 +571,9 @@ def make_jax_single_trial_logp_from_network_forward(
         data = inputs[0]
         dist_params = inputs[1:]
 
+        # Each parameter is squeezed to a scalar, so this is always 1-D, also
+        # with a single parameter (a network of width 2, `[param, column]`).
         param_vector = jnp.array([inp.squeeze() for inp in dist_params])
-
-        if param_vector.shape[-1] == 1:
-            param_vector = param_vector.squeeze(axis=-1)
-
         input_vector = jnp.concatenate((param_vector, data))
         return jax_forward_fn(input_vector).squeeze()
 
