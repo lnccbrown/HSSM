@@ -60,3 +60,35 @@ jobs:
           # Log per-test RSS to diagnose slow-test memory leaks. This step only
           # runs on the slow-test path (run_slow_tests.yml), so it stays scoped.
           HSSM_TEST_RSS_LOG: "1"
+
+  # The network-inspection plots need the optional `inspect` extra (lanfactory,
+  # which pulls in torch), so they get their own job on one Python version
+  # instead of adding torch to the matrix (#1505). The matrix still runs these
+  # files, with the plot tests skipped.
+  run_inspect_tests:
+    if: ${{ !inputs.run_slow_tests }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HSSM_TEST_ARGS: ${{ inputs.test_args }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup environment
+        uses: ./.github/setup-env
+        with:
+          python-version: "3.13"
+
+      # The plot tests use importorskip, so a broken install would skip them
+      # and still pass. Fail here instead.
+      - name: Install the inspect extra
+        run: |
+          uv sync --extra inspect
+          uv run --extra inspect python -c "import lanfactory.network_inspectors"
+
+      - name: Run network-inspection tests
+        run: >-
+          uv run --extra inspect pytest -m "not slow" $HSSM_TEST_ARGS
+          tests/unit/plotting/test_network_inspection.py
+          tests/test_network_inspection_optional.py
