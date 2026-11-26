@@ -6,12 +6,12 @@
 
 ## Goal
 
-HSSM should describe each non-RT observation column in one canonical place. That
-contract must support mixed categorical, continuous, and circular observations and
-arbitrary fixed observation widths without model-specific branches.
+`Config.response` declares all physical observation columns in order, including `rt`
+when present. HSSM supplies the timing and omission rules for `rt`; `response_domains`
+declares whether each remaining coordinate is categorical, continuous, or circular.
 
-The implementation should replace fixed-width assumptions, not surround them with a
-second abstraction layer.
+The implementation should support mixed domains and arbitrary fixed observation
+widths without model-specific branches or a second abstraction layer.
 
 ## Canonical representation
 
