@@ -46,9 +46,12 @@ def _float64():
     """Pin float64 (other modules switch to float32 at collection time)."""
     prev_floatx = pytensor.config.floatX
     prev_x64 = jax.config.jax_enable_x64
-    hssm.set_floatX("float64", update_jax=True)
+    # update_jax=False on both sides: set_floatX then touches only floatX and
+    # PYTENSOR_FLAGS (read by worker processes), never JAX's matmul precision
+    # or its environment variable; x64 is switched directly.
+    hssm.set_floatX("float64", update_jax=False)
+    jax.config.update("jax_enable_x64", True)
     yield
-    # Through set_floatX, so PYTENSOR_FLAGS (read by worker processes) follows.
     hssm.set_floatX(prev_floatx, update_jax=False)
     jax.config.update("jax_enable_x64", prev_x64)
 
