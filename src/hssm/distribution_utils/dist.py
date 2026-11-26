@@ -274,7 +274,7 @@ def make_hssm_rv(
             # Older ssms adapters miss the choices of models registered at runtime.
             choices = config.get("choices", choices)
 
-    # Only named choice-only simulators project a legacy (rt, choice) pair.
+    # A named choice-only simulator is checked after its legacy choice projection.
     comparison_obs_dim = (
         1 if is_choice_only and isinstance(simulator_fun, str) else declared_obs_dim
     )
@@ -307,15 +307,7 @@ def make_hssm_rv(
         """
 
         name = model_name + "_RV"
-        # New in PyMC 5.16+: instead of using `ndims_supp`, we use `signature` to define
-        # the signature of the random variable. The string to the left of the `->` sign
-        # describes the input signature, which is `()` for each parameter, meaning each
-        # parameter is a scalar. The string to the right of the
-        # `->` sign describes the output signature, which is `(2)`, which means the
-        # random variable is a length-2 array.
-
-        # Override the output from ssm_simulator based on whether the model is
-        # choice-only.
+        # Scalar parameters; the observation is scalar only for choice-only models.
         output = "()" if is_choice_only else f"({declared_obs_dim})"
         signature = f"{','.join(['()'] * len(list_params))}->{output}"
 

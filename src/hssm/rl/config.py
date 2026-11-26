@@ -207,7 +207,6 @@ class RLSSMConfig(BaseModelConfig):
                     "Provide either `response_domains` or legacy `choices`, not both."
                 )
             init_kwargs["response_domains"] = deepcopy(response_domains)
-            init_kwargs["choices"] = None
         else:
             _get_or_warn("choices", DEFAULT_SSM_CHOICES)
 
