@@ -131,8 +131,8 @@ This version includes the following changes:
    hidden category: the network returns the probability of the choice it is handed. To migrate,
    retrain the CPN on a corpus whose last input column is the choice (the `[θ…, choice]` rows,
    labelled with `P(choice | θ)`); LANfactory's trainers export the matching single-trial ONNX,
-   and tooling that derives such a corpus from a trained LAN is being added there (tracked in
-   [#1324](https://github.com/lnccbrown/HSSM/issues/1324)). The `hssm.HSSM(...)` API always passes
+   and its `derive-aux` command (LANfactory 0.10.0 and later) derives such a corpus from a trained
+   LAN. The `hssm.HSSM(...)` API always passes
    the choice; when assembling likelihoods yourself with
    `hssm.distribution_utils.assemble_callables(..., params_only=True)`, a params-only callable is
    still accepted and is then invoked as `f(None, *params)`. No CPN artifact was ever published on
