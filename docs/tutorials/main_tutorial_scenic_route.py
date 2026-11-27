@@ -2827,7 +2827,7 @@ def _(hssm, make_distribution):
     from hssm.distribution_utils import make_likelihood_callable
 
     _angle_loglik = make_likelihood_callable(
-        loglik="angle.onnx",
+        loglik="angle_extended.onnx",
         loglik_kind="approx_differentiable",
         backend="jax",
         params_is_reg=[0, 0, 0, 0, 0],
@@ -2974,7 +2974,7 @@ def _(
         parameter_names=hssm.defaults.default_model_config["angle"]["list_params"],
     )
     _angle_loglik = make_likelihood_callable(
-        loglik="angle.onnx",
+        loglik="angle_extended.onnx",
         loglik_kind="approx_differentiable",
         backend="jax",
         params_is_reg=bool_param_reg,

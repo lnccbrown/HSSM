@@ -14,9 +14,10 @@ ParamSpec = Union[float, dict[str, Any], bmb.Prior, None]
 SupportedModels = Literal[
     "ddm",
     "ddm_sdv",
+    "ddm_st",
     "full_ddm",
+    "full_ddm_lan",
     "angle",
-    "angle_extended",
     "levy",
     "ornstein",
     "weibull",
