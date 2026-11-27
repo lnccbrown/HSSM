@@ -16,8 +16,8 @@ SupportedModels = Literal[
     "ddm_sdv",
     "ddm_st",
     "full_ddm",
+    "full_ddm_lan",
     "angle",
-    "angle_extended",
     "levy",
     "ornstein",
     "weibull",
@@ -70,12 +70,21 @@ class LoglikConfig(TypedDict):
 LoglikConfigs = dict[LoglikKind, LoglikConfig]
 
 
+class ResponseDomainSpec(TypedDict):
+    """Canonical metadata for one physical response column."""
+
+    kind: Literal["categorical", "continuous", "circular"]
+    values: NotRequired[tuple[int, ...]]
+    bounds: NotRequired[tuple[float, float]]
+
+
 class DefaultConfig(TypedDict):
     """Type for the value of DefaultConfig."""
 
     response: list[str]
     list_params: list[str]
-    choices: list[int]
+    choices: NotRequired[list[int]]
+    response_domains: NotRequired[dict[str, ResponseDomainSpec]]
     description: Optional[str]
     likelihoods: LoglikConfigs
 

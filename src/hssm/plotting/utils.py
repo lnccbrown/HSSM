@@ -4,9 +4,11 @@ import logging
 import numbers
 from typing import Any, Iterable, Literal, cast
 
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
 import xarray as xr
+from seaborn import FacetGrid
 
 from ..utils import _random_sample
 
@@ -397,6 +399,27 @@ def _get_title(cols: Iterable["str"], col_values: Iterable[Any]) -> str:
     return title
 
 
+def _set_facet_suptitle(g: FacetGrid, title: str) -> None:
+    """Put a figure title above the facet titles of a FacetGrid.
+
+    `tight_layout` reserves the height of the figure title plus two pads above
+    the facet titles, so the title goes one pad below the top edge. That distance
+    is set in inches: at a fixed fraction of the figure height the title lands on
+    the facet titles of a short figure and on the panels of a tall one.
+
+    Parameters
+    ----------
+    g
+        The grid to title.
+    title
+        The figure title.
+    """
+    fig = g.figure
+    pad = 1.08 * mpl.rcParams["font.size"] / 72  # tight_layout's default pad
+    fig.suptitle(title, y=1 - pad / fig.get_figheight())
+    g.tight_layout()
+
+
 def _process_df_for_qp_plot(
     df: pd.DataFrame,
     q: int | Iterable[float],
@@ -575,7 +598,8 @@ def _use_traces_or_sample(
     the model. When ``rng`` is given and posterior-predictive sampling is
     triggered with an integer ``n_samples``, the draws are a seeded random
     subset of the posterior instead of the legacy first-``n`` (which is
-    deterministic but biased toward early, warm-up-adjacent draws).
+    deterministic but biased toward early, warm-up-adjacent draws). ``rng`` also
+    seeds the simulated responses, so the samples are reproducible.
     """
     # First, determine whether posterior predictive samples are available
     # If not, we need to sample from the posterior
@@ -609,11 +633,13 @@ def _use_traces_or_sample(
                 data=data,
                 inplace=True,
                 draws=draws,
+                random_seed=rng,
             )
         elif predictive_group == "prior_predictive":
             dt = model.sample_prior_predictive(
                 draws=n_samples,
                 omit_offsets=False,
+                random_seed=rng,
             )
         else:  # pragma: no cover
             raise ValueError(f"Invalid predictive group: {predictive_group}")

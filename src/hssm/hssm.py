@@ -31,6 +31,7 @@ from hssm.distribution_utils import (
     make_likelihood_callable,
     make_missing_data_callable,
 )
+from hssm.modelconfig import resolve_model_name
 from hssm.utils import (
     _rearrange_data,
 )
@@ -57,24 +58,27 @@ class HSSM(HSSMBase):
     Parameters
     ----------
     data
-        A pandas DataFrame with the minimum requirements of containing the data with the
-        columns "rt" and "response".
+        A pandas DataFrame containing the physical response columns declared in
+        `hssm.ModelConfig.response`, plus any configured extra fields. Built-in RT
+        models typically use the columns "rt" and "response".
     model
         The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
-        "full_ddm", "angle", "angle_extended", "levy", "ornstein", "weibull",
+        "full_ddm", "angle", "levy", "ornstein", "weibull",
         "race_no_bias_angle_4",
         "ddm_seq2_no_bias", "gamma_drift", "gamma_drift_angle". If any other string
-        is passed, the model will be considered custom, in which case all
-        `model_config`, `loglik`, and `loglik_kind` have to be provided by the user.
+        is passed, the model will be considered custom, in which case `loglik` and
+        `loglik_kind` have to be provided by the user. If ssm-simulators knows the
+        name (one of its built-in models, or a model registered with
+        `ssms.config.register_model_config`), `list_params`, `bounds` and `choices`
+        default to its ssm-simulators config; otherwise `model_config` has to
+        provide at least `list_params`.
     choices : optional
-        The choices that participants can make. An integer (Python `int` or numpy
-        integer) gives the number of choices: `2` means [-1, 1] and any `n > 2`
-        means [0, 1, ..., n - 1]. A `list` or `tuple` gives the choice values
-        directly. Ignored for supported models unless `model_config` is also passed,
-        and choices set in `model_config` take precedence. Defaults to `None`, which
-        uses the model's default choices (from ssm-simulators for custom models it
-        knows). If any value other than the choices provided is found in the
-        "response" column of the data, an error will be raised.
+        Legacy shorthand for the allowed labels of one categorical non-RT response.
+        An integer gives the number of choices: `2` means [-1, 1] and `n > 2` means
+        [0, 1, ..., n - 1]. A list or tuple gives the labels directly. Defaults to
+        the model's choices. For supported models this argument is ignored unless
+        `model_config` is also passed; choices in `model_config` take precedence.
+        Omit this argument when declaring `model_config.response_domains`.
     include : optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
@@ -193,7 +197,12 @@ class HSSM(HSSMBase):
         following:
 
         - `"safe"`: fills eligible missing common and group-specific regression-term
-        priors with HSSM's weakly informative defaults.
+        priors with HSSM's weakly informative defaults. An identity-link intercept
+        of a parameter with finite bounds gets a Normal centered in the bounds,
+        with an SD of a quarter of their width (`ddm`, `ddm_sdv` and `full_ddm`
+        without a LAN likelihood use HDDM-based priors instead). If the bounds are
+        much wider than the parameter's plausible values, that prior is nearly
+        flat: give the parameter an explicit `prior`.
         - `None`: leaves missing regression-term priors to Bambi. This is not
         recommended for hierarchical models.
 
@@ -246,8 +255,8 @@ class HSSM(HSSMBase):
     Attributes
     ----------
     data
-        A pandas DataFrame with at least two columns of "rt" and "response" indicating
-        the response time and responses.
+        The pandas DataFrame containing the physical response columns declared by the
+        model configuration.
     list_params
         The list of strs of parameter names.
     model_name
@@ -298,6 +307,9 @@ class HSSM(HSSMBase):
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs: Any,
     ) -> None:
+        # A deprecated model name is replaced before anything reads it.
+        model = resolve_model_name(model)
+
         # ===== save/load serialisation =====
         self._init_args = self._store_init_args(locals(), kwargs)
 
@@ -323,6 +335,18 @@ class HSSM(HSSMBase):
             initval_jitter=initval_jitter,
             **kwargs,
         )
+
+    def _validate_fixed_vectors(self) -> None:
+        """Also reject fixed vectors when `loglik` is a `pm.Distribution` class.
+
+        Such a class is used as given (see `_make_model_distribution`), so its
+        logp and its RV receive Bambi's scalar 0.0 placeholder, not the vector.
+        """
+        super()._validate_fixed_vectors()
+        if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
+            self._reject_fixed_vectors(
+                context="when `loglik` is a `pm.Distribution` class"
+            )
 
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Make a pm.Distribution for the model."""
@@ -437,11 +461,15 @@ class HSSM(HSSMBase):
                 self.missing_data_value,
             )
 
-        self.data = typing_cast("pd.DataFrame", _rearrange_data(self.data))
+        # Move missing rows on top, keeping the row positions in `order` so that
+        # fixed-vector params, given in the user's row order, follow their rows.
+        rearranged = _rearrange_data(self.data.reset_index(drop=True))
+        order = typing_cast("pd.DataFrame", rearranged).index.to_numpy()
+        self.data = self.data.iloc[order]
 
         # Collect fixed-vector params to substitute in the distribution logp
         fixed_vector_params = {
-            name: param.prior
+            name: param.prior[order]
             for name, param in self.params.items()
             if isinstance(param.prior, np.ndarray)
         }
@@ -482,4 +510,5 @@ class HSSM(HSSMBase):
             ndt_edge_shift=ndt_edge_shift,
             n_choices=self.n_choices,
             has_deadline=bool(self.deadline),
+            expected_obs_dim=self._obs_dim,
         )

@@ -141,7 +141,7 @@ def test_get_gamma_drift_angle_config():
         "z",
         "t",
         "theta",
-        "shape",
+        "k",
         "scale",
         "c",
     ]
@@ -155,14 +155,14 @@ def test_get_gamma_drift_angle_config():
         "z": (0.1, 0.9),
         "t": (0.001, 2.0),
         "theta": (-0.1, 1.3),
-        "shape": (2.0, 10.0),
+        "k": (2.0, 10.0),
         "scale": (0.01, 1.0),
         "c": (-3.0, 3.0),
     }
 
 
 @pytest.mark.parametrize(
-    "model", ["gamma_drift", "gamma_drift_angle", "angle_extended"]
+    "model", ["gamma_drift", "gamma_drift_angle", "angle", "full_ddm_lan"]
 )
 def test_config_matches_ssms_registry(model):
     """The declared box must be the box the network was trained on.
@@ -185,6 +185,22 @@ def test_config_matches_ssms_registry(model):
         param: (low, high)
         for param, low, high in zip(ssms_config["params"], lower, upper)
     }
+
+
+def test_angle_uses_the_wider_range_network():
+    """`angle` is the network trained on `v` in (-6, 6), not the 2023 `angle.onnx`."""
+    likelihood = get_default_model_config("angle")["likelihoods"][
+        "approx_differentiable"
+    ]
+    assert likelihood["loglik"] == "angle_extended.onnx"
+    assert likelihood["bounds"]["v"] == (-6.0, 6.0)
+
+
+def test_angle_extended_is_a_deprecated_name_for_angle():
+    assert "angle_extended" not in hssm.list_models()
+    with pytest.warns(FutureWarning, match="'angle_extended' is deprecated"):
+        config = get_default_model_config("angle_extended")
+    assert config == get_default_model_config("angle")
 
 
 @pytest.mark.parametrize("model", hssm.list_models())
@@ -271,6 +287,54 @@ def test_softmax_inv_temperature_3_choices():
         "mu": 0.0,
         "sigma": 1.0,
     }
+
+
+def test_get_full_ddm_lan_config():
+    config = get_default_model_config("full_ddm_lan")
+    assert config["response"] == ["rt", "response"]
+    assert config["choices"] == [-1, 1]
+    assert config["list_params"] == ["v", "a", "z", "t", "sz", "sv", "st"]
+    assert config["list_params"] == get_default_model_config("full_ddm")["list_params"]
+
+    assert list(config["likelihoods"]) == ["approx_differentiable"]
+    lk = config["likelihoods"]["approx_differentiable"]
+    assert lk["loglik"] == "full_ddm_lan.onnx"
+    assert lk["backend"] == "jax"
+
+    # the bounds are the LAN's training box, so they are pinned in full: a
+    # widening samples the network outside the region it was trained on
+    assert lk["bounds"] == {
+        "v": (-3.0, 3.0),
+        "a": (0.3, 2.5),
+        "z": (0.3, 0.7),
+        "t": (0.25, 2.25),
+        "sz": (1e-3, 0.2),
+        "sv": (0.3, 2.5),
+        "st": (1e-3, 0.35),
+    }
+
+    assert lk["default_priors"] == {}
+    assert lk["extra_fields"] is None
+
+
+def test_full_ddm_lan_declares_support_edge_at_t_minus_st():
+    """The network's simulator draws ndt as t + U(-st, st), so the edge is t - st.
+
+    full_ddm's blackbox declares scale 0.5 because hddm_wfpt reads st as the
+    full width; this network was trained on the half-width convention.
+    """
+    from hssm.config import Config
+
+    likelihood = get_default_model_config("full_ddm_lan")["likelihoods"][
+        "approx_differentiable"
+    ]
+    assert likelihood["ndt_edge_shift"] == {"param": "st", "scale": 1.0}
+    assert get_default_model_config("full_ddm")["likelihoods"]["blackbox"][
+        "ndt_edge_shift"
+    ] == {"param": "st", "scale": 0.5}
+
+    config = Config.from_defaults("full_ddm_lan", "approx_differentiable")
+    assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}
 
 
 def test_get_ddm_st_config():

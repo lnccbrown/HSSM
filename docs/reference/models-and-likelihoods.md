@@ -14,15 +14,15 @@ model.
 | `ddm_sdv` | `analytical`, `approx_differentiable`, `blackbox` | `analytical` | `v`, `a`, `z`, `t`, `sv` | `-1`, `1` |
 | `ddm_st` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `t`, `st` | `-1`, `1` |
 | `full_ddm` | `blackbox` | `blackbox` | `v`, `a`, `z`, `t`, `sz`, `sv`, `st` | `-1`, `1` |
+| `full_ddm_lan` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `t`, `sz`, `sv`, `st` | `-1`, `1` |
 | `angle` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `t`, `theta` | `-1`, `1` |
-| `angle_extended` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `t`, `theta` | `-1`, `1` |
 | `levy` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `alpha`, `t` | `-1`, `1` |
 | `ornstein` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `g`, `t` | `-1`, `1` |
 | `weibull` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `t`, `alpha`, `beta` | `-1`, `1` |
 | `race_no_bias_angle_4` | `approx_differentiable` | `approx_differentiable` | `v0`, `v1`, `v2`, `v3`, `a`, `z`, `t`, `theta` | `0`, `1`, `2`, `3` |
 | `ddm_seq2_no_bias` | `approx_differentiable` | `approx_differentiable` | `vh`, `vl1`, `vl2`, `a`, `t` | `0`, `1`, `2`, `3` |
-| `gamma_drift` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `t`, `shape`, `scale`, `c` | `-1`, `1` |
-| `gamma_drift_angle` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `t`, `theta`, `shape`, `scale`, `c` | `-1`, `1` |
+| `gamma_drift` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `t`, `k`, `scale`, `c` | `-1`, `1` |
+| `gamma_drift_angle` | `approx_differentiable` | `approx_differentiable` | `v`, `a`, `z`, `t`, `theta`, `k`, `scale`, `c` | `-1`, `1` |
 | `lba3` | `analytical` | `analytical` | `A`, `b`, `v0`, `v1`, `v2` | `0`, `1`, `2` |
 | `lba4` | `analytical` | `analytical` | `A`, `b`, `v0`, `v1`, `v2`, `v3` | `0`, `1`, `2`, `3` |
 | `lba2` | `analytical` | `analytical` | `A`, `b`, `v0`, `v1` | `0`, `1` |

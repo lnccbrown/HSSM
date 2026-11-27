@@ -1,11 +1,15 @@
 """Tests for HSSM distribution utility helpers."""
 
+import os
+import subprocess
+import sys
 from unittest.mock import patch
 
 import bambi as bmb
 import numpy as np
 import pandas as pd
 import pymc as pm
+import pytensor
 import pytensor.tensor as pt
 import pytest
 
@@ -30,7 +34,23 @@ from hssm.likelihoods.analytical import DDM, logp_ddm
 from hssm.likelihoods.blackbox import logp_full_ddm
 from hssm.register import register_model
 
-hssm.set_floatX("float32")
+
+@pytest.fixture(autouse=True)
+def _float32():
+    """Run every test in this file in float32, whatever ran before it.
+
+    The expected values below are float32 ones. Setting floatX at import does
+    not give the tests that precision: pytest imports every test module before
+    the first test runs, and any earlier test can leave another floatX behind.
+    """
+    floatX = pytensor.config.floatX
+    hssm.set_floatX("float32")
+    yield
+    hssm.set_floatX(floatX)
+
+
+# LOGP_LB as these float32 graphs store it.
+FLOOR = np.float32(LOGP_LB)
 
 # Response times for the ndt_edge_shift wiring tests. With t = 0.5 and st = 0.1
 # the candidate edges are 0.5 (no declaration), 0.45 (scale 0.5), 0.4 (scale 1.0)
@@ -60,7 +80,7 @@ def _ndt_grid_data():
 
 def _floored_at(edge):
     """Return the expected logp on the grid for a floor at ``edge``."""
-    return np.where(NDT_RT_GRID <= edge, LOGP_LB, 1.0)
+    return np.where(NDT_RT_GRID <= edge, FLOOR, 1.0)
 
 
 def test_make_hssm_rv():
@@ -99,6 +119,53 @@ def test_make_hssm_rv():
     assert random_sample.shape == (100, 2)
 
 
+def test_likelihood_only_model_uses_configured_width():
+    """An unregistered simulator prevents prediction, not fitting."""
+    data = pd.DataFrame({"rt": [1.0, 2.0], "x": [2.0, 3.0], "y": [3.0, 4.0]})
+    model = hssm.HSSM(
+        data=data,
+        model="likelihood_only_test",
+        model_config={
+            "response": list(data),
+            "response_domains": {k: {"kind": "continuous"} for k in ("x", "y")},
+            "list_params": ["v"],
+            "default_priors": {"v": {"name": "Normal", "mu": 0, "sigma": 1}},
+        },
+        loglik=lambda data, v: -pt.sum(pt.square(data - v[..., None]), axis=-1),
+        loglik_kind="analytical",
+        p_outlier=None,
+    )
+    assert model.model_distribution.rv_op.signature == "()->(3)"
+    assert np.isfinite(
+        model.pymc_model.compile_logp()(model.pymc_model.initial_point())
+    )
+    with pytest.raises(ValueError, match="likelihood_only_test"):
+        model.sample_prior_predictive(draws=1)
+
+
+@pytest.mark.parametrize("name", ["ddm", "ddm_deadline"])
+def test_named_simulator_still_checks_its_width(name):
+    """A real simulator, including a generated variant, must match the config."""
+    with pytest.raises(
+        ValueError, match="observation width 2.*configured response width 3"
+    ):
+        distribution_utils.make_hssm_rv(name, ["v"], expected_obs_dim=3)
+
+
+def test_lapse_responses_use_a_registered_models_choices(registered_ssms_model):
+    """A model registered in ssm-simulators after import draws lapse responses
+    from its own choices, not from ssm-simulators' fallback [0, 1, 2]."""
+    rv = distribution_utils.make_hssm_rv(
+        registered_ssms_model["name"],
+        ["v", "a", "z", "t"],
+        lapse=bmb.Prior("Uniform", lower=0.0, upper=1.0),
+    )
+    # p_outlier = 1: every response is a lapse draw.
+    sample = rv.rng_fn(np.random.default_rng(1), *[0.5, 1.0, 0.5, 0.3], 1.0, 200)
+
+    assert set(np.unique(sample[:, 1])) == {-1.0, 1.0}
+
+
 def test_lapse_distribution():
     """Check lapse sampling shape, support, and reproducibility."""
     lapse_dist = bmb.Prior("Uniform", lower=0.0, upper=1.0)
@@ -130,6 +197,97 @@ def test_lapse_distribution():
     np.testing.assert_array_equal(random_sample_a, random_sample_b)
 
 
+def test_make_hssm_rv_simulates_fixed_vector_params():
+    """``rng_fn`` simulates a fixed-vector parameter row by row (#1453).
+
+    The RV receives Bambi's scalar ``0.0`` placeholder for such a parameter. A
+    DDM response time is ``t`` plus a positive decision time, so every rt exceeds
+    its own row's ``t`` only if the vector reached the simulator in row order.
+    """
+    t_fixed = np.array([0.2, 1.5, 0.2, 1.5, 0.2, 1.5])
+    rv = distribution_utils.make_hssm_rv(
+        "ddm", ["v", "a", "z", "t"], fixed_vector_params={"t": t_fixed}
+    )
+    rng = np.random.default_rng(42)
+    placeholder = np.zeros((1, 1, 1))
+
+    # Posterior predictive: Bambi passes (chain, draw, obs) or (chain, draw, 1)
+    # arrays, and the constant placeholder as (1, 1, 1).
+    v = np.full((1, 3, t_fixed.size), 0.5)
+    a = np.full((1, 3, 1), 1.0)
+    z = np.full((1, 1, 1), 0.5)
+    sims = rv.rng_fn(rng, v, a, z, placeholder, None)
+    assert sims.shape == (1, 3, t_fixed.size, 2)
+    assert np.all(sims[..., 0] > t_fixed)
+
+    # Prior predictive: scalar parameters and one draw per row.
+    sims = rv.rng_fn(rng, 0.5, 1.0, 0.5, 0.0, (t_fixed.size,))
+    assert sims.shape == (t_fixed.size, 2)
+    assert np.all(sims[:, 0] > t_fixed)
+
+    # Rows other than the model's have no value of the vector.
+    with pytest.raises(ValueError, match="fixed to a vector"):
+        rv.rng_fn(rng, np.full((1, 3, 4), 0.5), a, z, placeholder, None)
+
+
+def test_make_hssm_rv_simulates_fixed_vector_p_outlier():
+    """A fixed-vector ``p_outlier`` gives each row its own lapse probability (#1453).
+
+    Rows with ``p_outlier=1`` are all lapses, drawn here from Uniform(10, 20); rows
+    with ``p_outlier=0`` are DDM draws, whose response times stay far below 10.
+    """
+    p_fixed = np.array([0.0, 1.0, 0.0, 1.0, 0.0, 1.0])
+    rv = distribution_utils.make_hssm_rv(
+        "ddm",
+        ["v", "a", "z", "t"],
+        lapse=bmb.Prior("Uniform", lower=10.0, upper=20.0),
+        fixed_vector_params={"p_outlier": p_fixed},
+    )
+    rng = np.random.default_rng(42)
+    v = np.full((1, 3, p_fixed.size), 0.5)
+    a = np.full((1, 3, 1), 1.0)
+    z = np.full((1, 1, 1), 0.5)
+    t = np.full((1, 1, 1), 0.3)
+    sims = rv.rng_fn(rng, v, a, z, t, np.zeros((1, 1, 1)), None)
+    assert sims.shape == (1, 3, p_fixed.size, 2)
+    lapsed = p_fixed == 1.0
+    assert np.all(sims[..., lapsed, 0] >= 10.0)
+    assert np.all(sims[..., ~lapsed, 0] < 10.0)
+
+
+def test_make_hssm_rv_reports_other_mismatches_as_they_are():
+    """A shape mismatch between other parameters is not blamed on the fixed vector.
+
+    Only when the other parameters broadcast together does the error point at
+    the fixed vector; otherwise numpy's own broadcasting error is raised.
+    """
+    t_fixed = np.array([0.2, 1.5, 0.2, 1.5, 0.2, 1.5])
+    rv = distribution_utils.make_hssm_rv(
+        "ddm", ["v", "a", "z", "t"], fixed_vector_params={"t": t_fixed}
+    )
+    rng = np.random.default_rng(42)
+    v = np.full((1, 3, 5), 0.5)
+    a = np.full((1, 3, 4), 1.0)
+    z = np.full((1, 1, 1), 0.5)
+    with pytest.raises(ValueError, match="broadcast") as excinfo:
+        rv.rng_fn(rng, v, a, z, np.zeros((1, 1, 1)), None)
+    assert "fixed to a vector" not in str(excinfo.value)
+
+
+@pytest.mark.parametrize("as_instance", [False, True])
+def test_make_distribution_warns_fixed_vector_with_random_variable(caplog, as_instance):
+    """A ready-made RandomVariable cannot simulate with a fixed vector (#1453)."""
+    rv_class = distribution_utils.make_hssm_rv("ddm", ["v", "a", "z", "t"])
+    with caplog.at_level("WARNING", logger="hssm"):
+        make_distribution(
+            rv=rv_class() if as_instance else rv_class,
+            loglik=logp_ddm,
+            list_params=["v", "a", "z", "t"],
+            fixed_vector_params={"t": np.array([0.2, 1.5])},
+        )
+    assert "rng_fn receives the placeholder 0.0" in caplog.text
+
+
 def test_apply_lapse_model_rejects_numeric_lapse_distribution():
     """Numeric choice-only lapse values cannot simulate RT lapse samples."""
     sims_out = np.asarray([[0.2, 0.0], [0.3, 1.0]], dtype=float)
@@ -145,13 +303,66 @@ def test_apply_lapse_model_rejects_numeric_lapse_distribution():
         )
 
 
+@pytest.mark.parametrize("shape", [(2000,), (3, 2000), (2, 3, 500)])
+@pytest.mark.parametrize("trialwise", [False, True], ids=["scalar", "trialwise"])
+@pytest.mark.parametrize("is_choice_only", [False, True], ids=["rt", "choice_only"])
+def test_apply_lapse_model_gives_each_lapse_row_its_own_draw(
+    shape, trialwise, is_choice_only
+):
+    """Lapse rows hold independent draws, and the same rows lapse as before (#1507).
+
+    `np.putmask` handed out the lapse draws by flat position in `sims_out`, so
+    several lapse rows shared one (rt, response) pair.
+    """
+    p_outlier = np.broadcast_to(
+        np.linspace(0.0, 0.1, shape[-1]) if trialwise else 0.05, shape
+    ).copy()
+    # 0.5 is neither a choice nor inside the lapse RT support: it marks non-lapse rows.
+    sims_out = np.full(shape if is_choice_only else (*shape, 2), 0.5)
+
+    out = _apply_lapse_model(
+        sims_out=sims_out.copy(),
+        p_outlier=p_outlier if trialwise else 0.05,
+        rng=np.random.default_rng(0),
+        lapse_dist=0.5
+        if is_choice_only
+        else bmb.Prior("Uniform", lower=5.0, upper=20.0),
+        choices=[-1, 1],
+        is_choice_only=is_choice_only,
+    )
+
+    # Which rows lapse is the function's first draw from the generator.
+    expected_lapse = (
+        np.random.default_rng(0).binomial(n=1, p=p_outlier, size=shape).astype(bool)
+    )
+    is_lapse = out != 0.5 if is_choice_only else out[..., 0] != 0.5
+    np.testing.assert_array_equal(is_lapse, expected_lapse)
+    np.testing.assert_array_equal(out[~is_lapse], sims_out[~is_lapse])
+
+    lapse_rows = out[is_lapse]
+    responses = lapse_rows if is_choice_only else lapse_rows[:, 1]
+    assert set(np.unique(responses)) == {-1.0, 1.0}
+    if not is_choice_only:
+        lapse_rt = lapse_rows[:, 0]
+        assert ((lapse_rt >= 5.0) & (lapse_rt <= 20.0)).all()
+        assert np.unique(lapse_rt).size == lapse_rt.size
+
+
 @pytest.mark.parametrize("rv", ["choice_only_model", lambda *args, **kwargs: None])
 def test_make_distribution_forwards_choice_only_to_generated_rv(monkeypatch, rv):
     """Generated RVs must keep the choice-only support-shape contract."""
     captured = {}
 
-    def fake_make_hssm_rv(simulator_fun, list_params, lapse=None, is_choice_only=False):
+    def fake_make_hssm_rv(
+        simulator_fun,
+        list_params,
+        lapse=None,
+        is_choice_only=False,
+        fixed_vector_params=None,
+        expected_obs_dim=None,
+    ):
         captured["is_choice_only"] = is_choice_only
+        captured["expected_obs_dim"] = expected_obs_dim
 
         class FakeRV:
             def __call__(self):
@@ -169,6 +380,7 @@ def test_make_distribution_forwards_choice_only_to_generated_rv(monkeypatch, rv)
     )
 
     assert captured["is_choice_only"] is True
+    assert captured["expected_obs_dim"] is None
 
 
 @pytest.mark.slow
@@ -196,7 +408,7 @@ def test_apply_param_bounds_to_loglik():
         apply_param_bounds_to_loglik(
             logp, list_params, scalar_in_bound, scalar_out_of_bound, bounds=bounds
         ).eval(),
-        -66.1,
+        FLOOR,
     )
 
     results_vector = np.asarray(
@@ -205,7 +417,7 @@ def test_apply_param_bounds_to_loglik():
         ).eval(),
     )
 
-    np.testing.assert_array_equal(results_vector[out_of_bound_indices], -66.1)
+    np.testing.assert_array_equal(results_vector[out_of_bound_indices], FLOOR)
 
     np.testing.assert_array_equal(
         results_vector[~out_of_bound_indices], logp[~out_of_bound_indices]
@@ -244,12 +456,12 @@ def test_make_distribution():
 
     np.testing.assert_array_equal(
         Dist.logp(data, scalar_in_bound, scalar_out_of_bound).eval(),
-        -66.1,
+        FLOOR,
     )
 
     results_vector = np.asarray(Dist.logp(data, scalar_in_bound, random_vector).eval())
 
-    np.testing.assert_array_equal(results_vector[out_of_bound_indices], -66.1)
+    np.testing.assert_array_equal(results_vector[out_of_bound_indices], FLOOR)
 
     np.testing.assert_array_equal(
         results_vector[~out_of_bound_indices],
@@ -281,7 +493,7 @@ def test_make_distribution_floors_at_t_without_declaration():
 
     result = np.asarray(Dist.logp(data, 0.5, 0.5, 0.5, 0.5, 0.2).eval())
 
-    np.testing.assert_array_equal(result, [LOGP_LB] * 5 + [1.0])
+    np.testing.assert_array_equal(result, [FLOOR] * 5 + [1.0])
 
 
 @pytest.mark.parametrize(
@@ -364,9 +576,11 @@ def test_extra_fields(data_ddm):
 
     true_values = dict(v=0.5, a=1.5, z=0.5, t=0.5)
 
-    np.testing.assert_almost_equal(
+    # rtol, not decimals: one float32 ulp of these values is about 2.4e-7.
+    np.testing.assert_allclose(
         pm.logp(DDM.dist(**true_values), data_ddm).eval(),
         pm.logp(DDM_WITH_XY.dist(**true_values), data_ddm).eval() / 2.0,
+        rtol=1e-6,
     )
 
     data_ddm_copy = data_ddm.copy()
@@ -381,10 +595,11 @@ def test_extra_fields(data_ddm):
         lapse=None,
     )
 
-    np.testing.assert_almost_equal(
+    np.testing.assert_allclose(
         pm.logp(DDM.dist(**true_values), data_ddm).eval(),
         pm.logp(ddm_model_xy.model_distribution.dist(**true_values), data_ddm).eval()
         / 2.0,
+        rtol=1e-6,
     )
 
     ddm_model = hssm.HSSM(data=data_ddm)
@@ -405,11 +620,12 @@ def test_extra_fields(data_ddm):
         + 0.05
         * pt.exp(pm.logp(pm.Uniform.dist(lower=0.0, upper=20.0), data_ddm["rt"].values))
     )
-    np.testing.assert_almost_equal(
+    np.testing.assert_allclose(
         pm.logp(
             ddm_model.model_distribution.dist(**true_values, p_outlier=0.05), data_ddm
         ).eval(),
         ddm_model_p_logp_lapse.eval(),
+        rtol=1e-6,
     )
 
 
@@ -434,7 +650,7 @@ def test_ensure_positive_ndt(edge, trialwise):
     after = ensure_positive_ndt(data, logp, lower_edge).eval()
     mask = (rt - edge <= 1e-15) & (rt != -999.0)
 
-    assert np.all(after[mask] == LOGP_LB)
+    assert np.all(after[mask] == FLOOR)
     assert np.all(after[~mask] == logp[~mask])
 
 
@@ -781,3 +997,61 @@ def test_rt_single_draw_keeps_the_requested_shape(size, expected):
     rv = distribution_utils.make_hssm_rv("ddm", ["v", "a", "z", "t"])()
 
     assert pm.draw(rv(0.5, 1.5, 0.5, 0.3, size=size), random_seed=5).shape == expected
+
+
+_FREE_RV_NAMES = """
+import numpy as np
+import pandas as pd
+
+import hssm
+
+theta = dict(v=0.5, a=1.5, z=0.5, t=0.3)
+ddm_data = hssm.simulate_data(model="ddm", theta=theta, size=20, random_state=1)
+choices = np.random.default_rng(1).choice(3, size=20)
+for model, data in [
+    ("ddm", ddm_data),
+    ("softmax_inv_temperature_3", pd.DataFrame({"response": choices})),
+]:
+    rvs = hssm.HSSM(data=data, model=model).pymc_model.free_RVs
+    print("free_RVs:", model, *[rv.name for rv in rvs])
+"""
+
+
+def _free_rv_names(hash_seed: str) -> dict[str, list[str]]:
+    result = subprocess.run(
+        [sys.executable, "-c", _FREE_RV_NAMES],
+        env={**os.environ, "PYTHONHASHSEED": hash_seed},
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,  # the assertion below reports the failure with its stderr
+    )
+    assert result.returncode == 0, result.stderr
+    lines = [line.split() for line in result.stdout.splitlines()]
+    return {line[1]: line[2:] for line in lines if line[:1] == ["free_RVs:"]}
+
+
+def test_free_rv_order_does_not_depend_on_the_hash_seed():
+    """bambi orders the auxiliary parameters as a set; the family keeps list_params.
+
+    With bambi's set, the DDM (SSMFamily) gives ['z', 'a', 't', 'v'] under hash
+    seed 1 and ['t', 'z', 'a', 'v'] under seed 2, and the choice-only model
+    (OrderedFamily) puts logit2 before logit1, so a seeded sample() differs
+    between processes.
+    """
+    expected = {
+        "ddm": ["a", "z", "t", "v"],
+        "softmax_inv_temperature_3": ["logit1", "logit2", "beta"],
+    }
+    assert _free_rv_names("1") == _free_rv_names("2") == expected
+
+
+@pytest.mark.parametrize("param", ["shape", "size", "name", "observed", "dims"])
+def test_parameter_named_like_a_pymc_keyword_is_rejected(param):
+    """PyMC would read such a parameter as its keyword (#1456), so it is refused."""
+    with pytest.raises(ValueError, match=rf"\['{param}'\] cannot be used"):
+        make_distribution(
+            rv="fake",
+            loglik=lambda data, *params: pt.zeros_like(data[:, 0]),
+            list_params=["v", "a", "z", "t", param],
+        )
