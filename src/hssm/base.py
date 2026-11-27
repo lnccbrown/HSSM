@@ -7,6 +7,7 @@ This file defines the entry class HSSM.
 """
 
 import datetime
+import inspect
 import logging
 import warnings
 from abc import ABC, abstractmethod
@@ -28,6 +29,7 @@ import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 from bambi.utils import get_aliased_name
+from formulae import model_description
 from pymc.model.transform.conditioning import do
 from pymc.pytensorf import resolve_backend_compile_kwargs
 from pymc.variational import Approximation
@@ -123,6 +125,36 @@ def _get_regression_term_prior(prior: dict[str, Any], term: str) -> Any:
     return prior.get(term, prior.get("common"))
 
 
+def _first_differing_column(
+    data: pd.DataFrame, reference: pd.DataFrame, columns: list[str]
+) -> tuple[str, int] | None:
+    """Find the first of `columns` whose values differ between two frames.
+
+    The two frames must have the same number of rows. Rows are compared by
+    position, so a different index or other dtypes (e.g. int and float) do not
+    make them differ, and missing values compare equal to each other. Returns
+    the column and the position of its first differing row, or None when the
+    values of all `columns` are the same.
+    """
+    for col in columns:
+        values = data[col].to_numpy()
+        reference_values = reference[col].to_numpy()
+        # Compare the missing-value masks, then the other values: NaN != NaN, and
+        # np.array_equal(..., equal_nan=True) raises TypeError on object columns.
+        missing = np.asarray(pd.isna(values), dtype=bool)
+        reference_missing = np.asarray(pd.isna(reference_values), dtype=bool)
+        differs = missing != reference_missing
+        both = ~missing & ~reference_missing
+        try:
+            differs[both] = values[both] != reference_values[both]
+        except (TypeError, ValueError):
+            # Values that cannot be compared (e.g. dates against numbers) differ.
+            differs[both] = True
+        if differs.any():
+            return col, int(np.argmax(differs))
+    return None
+
+
 class classproperty:
     """A decorator that combines the behavior of @property and @classmethod.
 
@@ -161,7 +193,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         columns "rt" and "response".
     model
         The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
-        "full_ddm", "angle", "angle_extended", "levy", "ornstein", "weibull",
+        "full_ddm", "angle", "levy", "ornstein", "weibull",
         "race_no_bias_angle_4",
         "ddm_seq2_no_bias", "gamma_drift", "gamma_drift_angle". If any other string
         is passed, the model will be considered custom, in which case all
@@ -423,6 +455,15 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             p_outlier=p_outlier,
             noncentered=model_noncentered,
         )
+        # `Params` took the parameters out of `kwargs`; the rest go to bmb.Model.
+        # Name a misspelled or renamed parameter here, before bambi rejects it as
+        # one of its own arguments.
+        unknown = sorted(kwargs.keys() - inspect.signature(bmb.Model).parameters.keys())
+        if unknown:
+            raise TypeError(
+                f"{unknown} are not parameters of model '{self.model_name}', whose "
+                f"parameters are {self.list_params}, nor arguments of `bambi.Model`."
+            )
 
         # Explicit group priors are authoritative, so reject any specification
         # that bambi cannot build or would silently alter under the effective
@@ -1189,6 +1230,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         ------
         ValueError
             If the model has not been sampled yet and datatree is not provided.
+        ValueError
+            If `data` other than the model's own data is given with
+            `kind="response"` and a parameter is fixed to a vector, which has
+            values only for the rows of the model's data.
 
         Returns
         -------
@@ -1196,6 +1241,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             A DataTree object with the posterior predictive samples added,
             or None if inplace is True.
         """
+        self._check_fixed_vectors_for_new_data(data, kind)
+
         if dt is None:
             if self._inference_obj is None:
                 raise ValueError(
@@ -1385,8 +1432,121 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return plotting.plot_model_cartoon(self, **kwargs)
 
     def predict(self, **kwargs) -> DataTree:
-        """Generate samples from the predictive distribution."""
+        """Generate samples from the predictive distribution.
+
+        Raises
+        ------
+        ValueError
+            If `data` with rows other than the model's own is given with
+            `kind="response"` and a parameter is fixed to a vector (see
+            `sample_posterior_predictive`).
+        """
+        self._check_fixed_vectors_for_new_data(
+            kwargs.get("data"), kwargs.get("kind", "response_params")
+        )
         return self.model.predict(**kwargs)
+
+    def _reject_fixed_vectors(self, context: str | None = None) -> None:
+        """Raise for parameters fixed to a vector in classes that do not use it.
+
+        RLSSM and aDDM build their distribution without the fixed vectors, and so
+        does HSSM when `loglik` is a `pm.Distribution` class, so such a parameter
+        would be fitted and simulated with Bambi's scalar 0.0 placeholder on every
+        row, without a warning (#1453). `context` says when the class does not
+        support them, e.g. "when `loglik` is a `pm.Distribution` class".
+        """
+        fixed_vector_names = [
+            name
+            for name, param in self.params.items()
+            if isinstance(param.prior, np.ndarray)
+        ]
+        if fixed_vector_names:
+            when = f" {context}" if context else ""
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support parameters fixed to a "
+                f"vector{when} ({fixed_vector_names}): the likelihood and the "
+                "simulator would use 0.0 in their place. Fix them to a scalar, or "
+                "give them a prior or a regression."
+            )
+
+    def _model_columns(self) -> list[str]:
+        """Return the columns of `self.data` that the model reads.
+
+        These are the response columns (with the deadline column, if any), the
+        variables of every regression formula and the extra fields. Other columns,
+        such as a timestamp or a note, do not reach the model.
+        """
+        used = set(self.response or [])
+        used.update(self.extra_fields or [])
+        formula = getattr(self, "formula", None)
+        if formula is not None:
+            for formula_str in formula.get_all_formulas():
+                used.update(model_description(formula_str).var_names)
+        return [col for col in self.data.columns if col in used]
+
+    def _check_fixed_vectors_for_new_data(
+        self, data: pd.DataFrame | None, kind: str
+    ) -> None:
+        """Refuse to simulate fixed-vector parameters on rows they have no value for.
+
+        A fixed vector holds one value per row of the model's data, and the RV
+        simulates row *i* of `self.data` with value *i* (#1453; with
+        `missing_data` or `deadline`, this also needs the vector reordered with
+        the rows, #1451). So
+        `data` is accepted only when its rows are the model's rows, in the same
+        order: the columns it shares with `self.data` among those the model reads
+        (response, formula variables, extra fields) must hold the same values,
+        and it must share at least one of them. The index, the dtypes and the
+        other columns do not matter. The plotting functions pass
+        `data=self.data`, which is accepted.
+        """
+        # Bambi 0.19 and 0.20 still accept "pps", a deprecated alias of "response".
+        if data is None or kind not in ("response", "pps"):
+            return
+        fixed_vector_names = [
+            name
+            for name, param in self.params.items()
+            if isinstance(param.prior, np.ndarray)
+        ]
+        if not fixed_vector_names:
+            return
+        requirement = (
+            f"Parameter(s) {fixed_vector_names} are fixed to a vector with one value "
+            "per row of the model's data, so `data` must hold those rows in the "
+            "order of `model.data`."
+        )
+        remedy = "Omit `data`, or build a model on the new data with its own vector."
+        model_columns = self._model_columns()
+        shared = [col for col in model_columns if col in data.columns]
+        if not shared:
+            # Without a column the model reads, nothing says which rows `data`
+            # holds (e.g. a constant session column), so they cannot be checked.
+            raise ValueError(
+                f"{requirement} `data` has none of the columns the model reads "
+                f"({model_columns}), so its rows cannot be matched to the rows of "
+                f"`model.data`. {remedy}"
+            )
+        if len(data) != len(self.data):
+            raise ValueError(
+                f"{requirement} `data` has {len(data)} rows and `model.data` has "
+                f"{len(self.data)}. {remedy}"
+            )
+        difference = _first_differing_column(data, self.data, shared)
+        if difference is None:
+            return
+        column, position = difference
+        reordered_hint = (
+            " With `missing_data` or `deadline`, the model moved the missing-RT "
+            "rows to the top: pass `model.data`."
+            if self.missing_data or self.deadline
+            else ""
+        )
+        raise ValueError(
+            f"{requirement} Column '{column}' differs from `model.data`, first at "
+            f"row {position} (by position). A row whose value in a column the "
+            "model reads has changed counts as another row, even if it is one of "
+            f"the model's rows.{reordered_hint} {remedy}"
+        )
 
     def sample_do(
         self,

@@ -34,9 +34,28 @@ get_default_model_config(model_name: SupportedModels) -> DefaultConfig
 
 import importlib
 import sys
-from typing import get_args
+import warnings
+from typing import cast, get_args
 
 from .._types import DefaultConfig, SupportedModels
+
+# Names a built-in model used to have, and the model each one builds now.
+DEPRECATED_MODEL_NAMES: dict[str, SupportedModels] = {"angle_extended": "angle"}
+
+
+def resolve_model_name(model_name: str) -> str:
+    """Return the current name of a model, warning if the name given is deprecated."""
+    current = DEPRECATED_MODEL_NAMES.get(model_name)
+    if current is None:
+        return model_name
+    warnings.warn(
+        f"The model name '{model_name}' is deprecated and will be removed in a "
+        f"future release. It now builds the model '{current}': use "
+        f"model='{current}' instead.",
+        FutureWarning,
+        stacklevel=3,
+    )
+    return current
 
 
 def list_models() -> tuple[SupportedModels, ...]:
@@ -68,6 +87,7 @@ def get_default_model_config(model_name: SupportedModels) -> DefaultConfig:
         and likelihood specifications.
 
     """
+    model_name = cast("SupportedModels", resolve_model_name(model_name))
     supported_models = list_models()
     if model_name not in supported_models:
         error_message = (
