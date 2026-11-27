@@ -34,7 +34,7 @@ def _float32_precision_guard():
     hssm.set_floatX("float32")
     yield
 
-    pytensor.config.floatX = prev_floatx
+    hssm.set_floatX(prev_floatx)
     jax.config.update("jax_enable_x64", prev_jax_x64)
 
 
