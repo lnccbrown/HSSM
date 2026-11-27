@@ -156,8 +156,12 @@ class DataValidatorMixin:
         ):
             # Missing-RT rows (no deadline) still carry an observed choice: the
             # choice-probability network receives it as its last input, so it
-            # must be a valid response code (lnccbrown/HSSM#1324).
-            missing_responses_col = self.data.loc[self.data["rt"] == -999.0, "response"]
+            # must be a valid response code (lnccbrown/HSSM#1324). It is the second
+            # response column, whatever its name (the CPN gets data column 1).
+            response_column = self.response[1]
+            missing_responses_col = self.data.loc[
+                self.data["rt"] == -999.0, response_column
+            ]
             is_invalid = ~missing_responses_col.isin(self.choices)
             if is_invalid.any():
                 invalid = [
@@ -168,8 +172,9 @@ class DataValidatorMixin:
                 ]
                 raise ValueError(
                     "Missing-RT rows (rt == -999.0) must carry the observed "
-                    "response: HSSM passes each missing row's `response` to the "
-                    "choice-probability network (CPN) as its last input. Found "
+                    f"response: HSSM passes each missing row's `{response_column}` "
+                    "to the choice-probability network (CPN) as its last input. "
+                    "Found "
                     f"invalid responses on missing-RT rows: {invalid}; valid "
                     f"choices are {list(self.choices)}. See "
                     "https://github.com/lnccbrown/HSSM/issues/1324."
