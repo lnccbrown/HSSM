@@ -117,27 +117,24 @@ class aDDM(HSSMBase):
             **kwargs,
         )
 
-    def _validate_fixed_vectors(self) -> None:
-        """Reject parameters fixed to a vector, which this class does not use."""
-        super()._validate_fixed_vectors()
-        self._reject_fixed_vectors()
-
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Build a ``pm.Distribution`` from the pre-built aDDM log-likelihood Op.
 
         Like :meth:`RLSSM._make_model_distribution`, this bypasses
         ``make_likelihood_callable`` and uses the Op directly. Unlike RLSSM,
         ``params_is_trialwise`` is driven by which params the user put under a
-        regression (``param.is_trialwise``) — aDDM params are scalar by default.
+        regression or fixed to a vector (``param.is_trialwise``) — aDDM params are
+        scalar by default.
         """
         list_params = self.list_params
         assert list_params is not None, "list_params must be set"
 
         # Standard trial-wise pattern (identical to hssm.py / RLSSM): one flag per
-        # model param, True iff the user put it under a regression. dist.py then
-        # broadcasts those to (n_obs,) so the builder's logp maps them per-trial
-        # (see likelihoods/builder.py). Core params default to scalar; a regressed
-        # one (eta, kappa, a, b, x0) flows through per-trial. sigma stays scalar.
+        # model param, True iff the user put it under a regression or fixed it to a
+        # vector. dist.py then broadcasts those to (n_obs,) so the builder's logp
+        # maps them per-trial (see likelihoods/builder.py). Core params default to
+        # scalar; a regressed or vector-fixed one (eta, kappa, a, b, x0) flows
+        # through per-trial. sigma stays scalar.
         params_is_trialwise = [
             param.is_trialwise
             for param_name, param in self.params.items()
@@ -156,6 +153,7 @@ class aDDM(HSSMBase):
             bounds=self.bounds,
             lapse=self.lapse,
             extra_fields=extra_fields_data,
+            fixed_vector_params=self._fixed_vector_params(),
             params_is_trialwise=params_is_trialwise,
             n_choices=self.n_choices,
             has_deadline=bool(self.deadline),

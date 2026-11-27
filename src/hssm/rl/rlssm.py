@@ -259,11 +259,6 @@ class _RLSSM(HSSMBase):
             )
             self._initvals[name] = np.asarray(start, self._initvals[name].dtype)
 
-    def _validate_fixed_vectors(self) -> None:
-        """Reject parameters fixed to a vector, which this class does not use."""
-        super()._validate_fixed_vectors()
-        self._reject_fixed_vectors()
-
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Build a pm.Distribution using the pre-built RL log-likelihood Op.
 
@@ -332,6 +327,7 @@ class _RLSSM(HSSMBase):
             bounds=self.bounds,
             lapse=lapse,
             extra_fields=extra_fields_data,
+            fixed_vector_params=self._fixed_vector_params(),
             params_is_trialwise=params_is_trialwise,
             is_choice_only=self.model_config.is_choice_only,
             # __init__ takes an RLSSMConfig, which is where ndt_edge_shift lives.

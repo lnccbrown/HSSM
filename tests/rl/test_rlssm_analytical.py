@@ -127,6 +127,29 @@ def test_observed_logp_matches_reference(data, point):
     np.testing.assert_allclose(logp, _reference_logp(data, **point), rtol=0, atol=1e-9)
 
 
+def test_fixed_vector_enters_the_likelihood(data):
+    """Each row is scored with its own value of a parameter fixed to a vector.
+
+    The learning rate is fixed per participant, so each participant's rows must
+    match the model in which it is fixed to that participant's value. The
+    likelihood used to receive Bambi's ``0.0`` placeholder on every row.
+    """
+    first = (data["participant_id"] == data["participant_id"].iloc[0]).to_numpy()
+    others = {name: TRUTH[name] for name in ("a", "z", "t")}
+
+    def rowwise_logp(rl_alpha):
+        pymc_model = _analytical_model(data, rl_alpha=rl_alpha, **others).pymc_model
+        logp = pymc_model.compile_logp(vars=pymc_model.observed_RVs, sum=False)
+        return logp(pymc_model.initial_point())[0]
+
+    low, high = rowwise_logp(0.1), rowwise_logp(0.7)
+
+    assert not np.allclose(low, high)
+    np.testing.assert_allclose(
+        rowwise_logp(np.where(first, 0.1, 0.7)), np.where(first, low, high)
+    )
+
+
 def test_gradient_matches_finite_differences(data):
     """The model's gradient (through the RL Op's VJP) matches central differences."""
     logp_and_grad = _observed_logp(_analytical_model(data), with_grad=True)
