@@ -5,6 +5,7 @@ import subprocess
 import sys
 from types import SimpleNamespace
 
+import bambi as bmb
 import numpy as np
 import pandas as pd
 import pymc as pm
@@ -301,6 +302,23 @@ def test_compute_log_likelihood_warns_and_replaces_existing_group(
         np.array([[[-1.0], [-2.0]]]),
     )
     assert "Replacing existing log_likelihood group in dt." in caplog.text
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        "constrained(y, lb=-2.0, ub=2.0)",
+        "truncated(y, lb=-2.0, ub=2.0)",
+        "censored(y, status)",
+    ],
+)
+def test_log_likelihood_refuses_multi_column_bambi_responses(response):
+    """HSSM never builds these Bambi responses, so `log_likelihood` refuses them."""
+    df = pd.DataFrame({"y": [0.1, -0.4, 0.8], "status": ["none", "left", "right"]})
+    model = bmb.Model(f"{response} ~ 1", df, family="gaussian")
+
+    with pytest.raises(NotImplementedError, match="constrained"):
+        log_likelihood(model.family, model, xr.Dataset())
 
 
 def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):

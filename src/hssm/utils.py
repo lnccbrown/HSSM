@@ -165,7 +165,7 @@ def _compute_log_likelihood(
     sample_new_groups = False
 
     # Get the aliased response name
-    response_aliased_name = get_aliased_name(model.response_component.term)
+    response_aliased_name = get_aliased_name(_get_response_term(model))
 
     if not inplace:
         dt = dt.copy(deep=True)
@@ -248,15 +248,26 @@ def log_likelihood(
     # Child classes pass "y_values" through the "y" kwarg
     y_values = kwargs.pop("y", None)
 
+    response_term = _get_response_term(model)
+    # HSSM builds its own response, so Bambi's multi-column responses are
+    # refused here instead of re-implementing Bambi's PyMC backend (#1452).
+    if any(
+        getattr(response_term, flag, False)
+        for flag in ("is_constrained", "is_truncated", "is_censored")
+    ):
+        raise NotImplementedError(
+            "`log_likelihood` does not support Bambi's `constrained(...)`, "
+            "`truncated(...)` and `censored(...)` responses."
+        )
+
     # Get the values of the outcome variable
     if y_values is None:  # when it's not handled by the specific family
         if data is None:
-            y_values = np.squeeze(model.response_component.term.data)
+            y_values = np.squeeze(response_term.data)
         else:
             y_values = response_evaluate_new_data(model, data)
 
     response_dist = get_response_dist(model.family)
-    response_term = model.response_component.term
     kwargs, coords = family._make_dist_kwargs_and_coords(model, posterior, **kwargs)
 
     # If it's multivariate, it's going to have a fourth coord,
@@ -277,36 +288,15 @@ def log_likelihood(
     # on_unused_input="ignore" is needed because fixed-vector parameters
     # are substituted with constants inside HSSMDistribution.logp(), making
     # the corresponding input variable unused in the compiled graph.
-    if not response_term.is_constrained:
-        # pyrefly: ignore[no-matching-overload]
-        rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
-        logp_compiled = pm.compile(
-            [val for key_, val in pt_dict.items()],
-            rv_logp,
-            mode=compile_mode,
-            allow_input_downcast=True,
-            on_unused_input="ignore",
-        )
-    else:
-        # Bounds are scalars, we can safely pick them from the first row
-        lower, upper = response_term.data[0, 1:]
-        lower = lower if lower != -np.inf else None
-        upper = upper if upper != np.inf else None
-
-        # Finally evaluate logp
-        rv_logp = pm.logp(
-            pm.Truncated.dist(
-                response_dist.dist(**kwargs_prep), lower=lower, upper=upper
-            ),
-            y_values,
-        )
-        logp_compiled = pm.compile(
-            [val for key_, val in pt_dict.items()],
-            rv_logp,
-            mode=compile_mode,
-            allow_input_downcast=True,
-            on_unused_input="ignore",
-        )
+    # pyrefly: ignore[no-matching-overload]
+    rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
+    logp_compiled = pm.compile(
+        [val for key_, val in pt_dict.items()],
+        rv_logp,
+        mode=compile_mode,
+        allow_input_downcast=True,
+        on_unused_input="ignore",
+    )
 
     # Loop through chain and draws by position: the coordinate values need not
     # be 0, 1, ..., e.g. once burn-in draws are dropped or the trace is thinned.
@@ -324,6 +314,18 @@ def log_likelihood(
 
     # output_array
     return xr.DataArray(output_array, coords=coords)
+
+
+def _get_response_term(model: bmb.Model) -> Any:
+    """Return the response term of a Bambi model.
+
+    ``Model.response_term`` replaces ``Model.response_component.term``, which is
+    deprecated in Bambi 0.21.0. The fallback keeps older Bambi versions allowed
+    by ``pyproject.toml`` working.
+    """
+    if hasattr(type(model), "response_term"):
+        return model.response_term
+    return model.response_component.term
 
 
 def get_response_dist(family: bmb.Family) -> type[pm.Distribution]:
