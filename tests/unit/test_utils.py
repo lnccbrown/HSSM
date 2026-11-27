@@ -1,7 +1,11 @@
 """Tests for HSSM utility helpers."""
 
+import os
+import subprocess
+import sys
 from types import SimpleNamespace
 
+import bambi as bmb
 import numpy as np
 import pandas as pd
 import pymc as pm
@@ -88,19 +92,108 @@ def test_get_alias_dict():
     assert alias_regression_a["1|group"] == "a_1|group"
 
 
-def test_set_floatX():
+def test_set_floatX(precision_env):
     """Synchronize floating-point precision across computational backends."""
     # Should raise error when wrong value is passed.
     with pytest.raises(ValueError):
         set_floatX("bad_value")
 
-    set_floatX("float32")
-    assert pytensor.config.floatX == "float32"
-    assert not config.read("jax_enable_x64")
+    floatX = pytensor.config.floatX
+    try:
+        set_floatX("float32")
+        assert pytensor.config.floatX == "float32"
+        assert not config.read("jax_enable_x64")
 
-    set_floatX("float64")
-    assert pytensor.config.floatX == "float64"
-    assert config.read("jax_enable_x64")
+        set_floatX("float64")
+        assert pytensor.config.floatX == "float64"
+        assert config.read("jax_enable_x64")
+    finally:
+        set_floatX(floatX)
+
+
+@pytest.fixture
+def precision_env():
+    """Restore the environment variables set_floatX writes for new processes."""
+    names = ("PYTENSOR_FLAGS", "JAX_DEFAULT_MATMUL_PRECISION")
+    saved = {name: os.environ.get(name) for name in names}
+    yield
+    for name, value in saved.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+
+
+def test_set_floatX_float32_disables_tf32(precision_env):
+    """float32 means full float32 matmuls (no TF32), unless a precision was chosen."""
+    floatX, precision = pytensor.config.floatX, config.jax_default_matmul_precision
+    try:
+        config.update("jax_default_matmul_precision", None)  # JAX's default
+        set_floatX("float32")
+        assert config.jax_default_matmul_precision == "highest"
+
+        config.update("jax_default_matmul_precision", "tensorfloat32")
+        set_floatX("float32")
+        assert config.jax_default_matmul_precision == "tensorfloat32"
+    finally:
+        set_floatX(floatX)
+        config.update("jax_default_matmul_precision", precision)
+
+
+@pytest.mark.parametrize(
+    "model, theta",
+    [
+        ("ddm", dict(v=0.5, a=1.5, z=0.5, t=0.3)),
+        ("angle", dict(v=0.5, a=1.5, z=0.5, t=0.3, theta=0.2)),
+        ("lba2", dict(A=0.5, b=1.5, v0=1.0, v1=1.0)),
+    ],
+)
+def test_set_floatX_float32_graphs_are_float32(model, theta):
+    """A model built after set_floatX("float32") has a float32 log density.
+
+    HSSM is imported at the default float64, so a constant typed at import time
+    would upcast the graph.
+    """
+    floatX = pytensor.config.floatX
+    try:
+        set_floatX("float32")
+        data = hssm.simulate_data(model=model, theta=theta, size=20, random_state=1)
+        for p_outlier in (None, 0.05):  # with and without the default lapse
+            model_ = hssm.HSSM(data=data, model=model, p_outlier=p_outlier)
+            assert model_.pymc_model.logp().dtype == "float32"
+    finally:
+        set_floatX(floatX)
+
+
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+def test_set_floatX_reaches_new_processes(precision_env, dtype):
+    """A fresh interpreter (PyMC's chains under spawn/forkserver) gets the precision."""
+    os.environ["PYTENSOR_FLAGS"] = "floatX=float64,mode=FAST_RUN"
+    os.environ.pop("JAX_DEFAULT_MATMUL_PRECISION", None)
+    floatX = pytensor.config.floatX
+    try:
+        set_floatX(dtype)
+        assert "mode=FAST_RUN" in os.environ["PYTENSOR_FLAGS"]  # other flags kept
+        child = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import jax, pytensor, pytensor.link.jax.dispatch; "
+                "print(pytensor.config.floatX, jax.config.read('jax_enable_x64'), "
+                "jax.config.jax_default_matmul_precision)",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        expected = [
+            dtype,
+            str(dtype == "float64"),
+            str(config.jax_default_matmul_precision),
+        ]
+        assert child.stdout.split() == expected
+    finally:
+        set_floatX(floatX)
 
 
 @pytest.fixture
@@ -211,6 +304,23 @@ def test_compute_log_likelihood_warns_and_replaces_existing_group(
     assert "Replacing existing log_likelihood group in dt." in caplog.text
 
 
+@pytest.mark.parametrize(
+    "response",
+    [
+        "constrained(y, lb=-2.0, ub=2.0)",
+        "truncated(y, lb=-2.0, ub=2.0)",
+        "censored(y, status)",
+    ],
+)
+def test_log_likelihood_refuses_multi_column_bambi_responses(response):
+    """HSSM never builds these Bambi responses, so `log_likelihood` refuses them."""
+    df = pd.DataFrame({"y": [0.1, -0.4, 0.8], "status": ["none", "left", "right"]})
+    model = bmb.Model(f"{response} ~ 1", df, family="gaussian")
+
+    with pytest.raises(NotImplementedError, match="constrained"):
+        log_likelihood(model.family, model, xr.Dataset())
+
+
 def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
     """Post-sampling likelihoods honor the requested JAX compiler."""
     compile_calls = []
@@ -252,6 +362,40 @@ def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
     assert result.shape == (1, 1, 2)
     assert len(compile_calls) == 1
     assert compile_calls[0][2]["mode"] == "JAX"
+
+
+def test_log_likelihood_indexes_draws_by_position():
+    """Chain and draw coordinates need not start at 0 or be contiguous.
+
+    A posterior with burn-in dropped or thinned keeps its original coordinate
+    values (here chains 2, 3 and draws 10, 20, 30), so each draw must be read and
+    written by position, not by its coordinate value.
+    """
+    y = np.array([0.5, -1.0])
+    mu = np.arange(6.0).reshape(2, 3, 1) * np.ones((1, 1, 2))
+    family = SimpleNamespace(
+        likelihood=SimpleNamespace(dist=pm.Normal, name="Normal"),
+        _make_dist_kwargs_and_coords=lambda model, posterior, **kwargs: (
+            {"mu": mu, "sigma": np.ones((1, 1, 2))},
+            {
+                "chain": pd.Index([2, 3]),
+                "draw": pd.Index([10, 20, 30]),
+                "__obs__": pd.Index([0, 1]),
+            },
+        ),
+    )
+    model = SimpleNamespace(
+        response_component=SimpleNamespace(
+            term=SimpleNamespace(data=y, is_constrained=False)
+        ),
+        family=family,
+    )
+
+    result = log_likelihood(family, model, posterior=xr.DataArray())
+
+    expected = -0.5 * np.log(2 * np.pi) - 0.5 * (y - mu) ** 2
+    np.testing.assert_allclose(result.values, expected)
+    assert result.coords["draw"].values.tolist() == [10, 20, 30]
 
 
 @pytest.mark.parametrize(
@@ -415,3 +559,22 @@ def test_predictive_idata_to_dataframe(data_ddm):
     assert df is not None
     assert df.shape == (10 * data_ddm.shape[0], 5)
     assert set(df.columns) == {"chain", "draw", "rt", "response", "__obs__"}
+
+
+def test_predictive_dataframe_ignores_dimensions_of_other_variables():
+    """One scalar response per trial must remain one row per trial."""
+    group = xr.Dataset(
+        {
+            "response": (("chain", "draw", "__obs__"), [[[0, 1, 0]]]),
+            "unrelated": ("other_dim", [10, 20]),
+        }
+    )
+    dt = xr.DataTree.from_dict({"prior_predictive": group})
+
+    frame = hssm.utils.predictive_dt_to_dataframe(
+        dt, predictive_group="prior_predictive", response_str="response"
+    )
+
+    assert list(frame.columns) == ["chain", "draw", "__obs__", "response"]
+    assert frame["__obs__"].tolist() == [0, 1, 2]
+    assert frame["response"].tolist() == [0, 1, 0]

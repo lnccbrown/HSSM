@@ -2,6 +2,7 @@
 
 import sys
 import types
+from dataclasses import replace
 
 import jax.numpy as jnp
 import pytest
@@ -67,6 +68,77 @@ def create_config_dict(
         ssm_logp_func=ssm_logp_func,
         data={},
     )
+
+
+def test_from_rlssm_dict_preserves_canonical_response_domains():
+    """Canonical RL metadata is copied without injecting legacy choices."""
+    domains = {"response": {"kind": "categorical", "values": [0, 1]}}
+    config_dict = create_config_dict(
+        "canonical_rlssm",
+        ["alpha"],
+        [0.5],
+        bounds={"alpha": (0.0, 1.0)},
+    )
+    config_dict.pop("choices")
+    config_dict["response_domains"] = domains
+
+    config = RLSSMConfig.from_rlssm_dict(config_dict)
+    domains["response"]["values"][0] = -1
+    config.validate()
+
+    assert config.response_domains == {
+        "response": {"kind": "categorical", "values": (0, 1)}
+    }
+    assert config.choices == (0, 1)
+
+
+def test_from_rlssm_dict_rejects_canonical_and_legacy_metadata():
+    """RL dictionary construction rejects two response-domain sources."""
+    config_dict = create_config_dict(
+        "ambiguous_rlssm",
+        ["alpha"],
+        [0.5],
+        bounds={"alpha": (0.0, 1.0)},
+    )
+    config_dict["response_domains"] = {
+        "response": {"kind": "categorical", "values": [0, 1]}
+    }
+
+    with pytest.raises(ValueError, match="either `response_domains` or legacy"):
+        RLSSMConfig.from_rlssm_dict(config_dict)
+
+
+def test_direct_rlssm_config_defaults_choices_only_without_domains(
+    valid_rlssmconfig_kwargs,
+):
+    """Direct RL construction retains binary choices without overriding domains."""
+    del valid_rlssmconfig_kwargs["choices"]
+    legacy = RLSSMConfig(**valid_rlssmconfig_kwargs)
+    legacy.validate()
+    assert legacy.choices == (0, 1)
+
+    canonical = RLSSMConfig(
+        **valid_rlssmconfig_kwargs,
+        response_domains={"response": {"kind": "categorical", "values": (-1, 1)}},
+    )
+    canonical.validate()
+    assert canonical.choices == (-1, 1)
+
+
+def test_resolved_config_round_trip_accepts_matching_derived_choices(
+    valid_rlssmconfig_kwargs,
+):
+    """Resolved canonical RL configs remain replace-compatible."""
+    valid_rlssmconfig_kwargs["response_domains"] = {
+        "response": {"kind": "categorical", "values": (0, 1)}
+    }
+
+    config = RLSSMConfig(**valid_rlssmconfig_kwargs)
+    config.validate()
+
+    copied = replace(config)
+    copied.validate()
+    assert copied.choices == (0, 1)
 
 
 # region fixtures and helpers
