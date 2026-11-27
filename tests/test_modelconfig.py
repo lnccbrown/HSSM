@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-import ssms
 
 import hssm
 from hssm.likelihoods.analytical import lba4_bounds, logp_lba4
@@ -158,19 +157,7 @@ def test_get_gamma_drift_angle_config():
 
 
 @pytest.mark.parametrize(
-    "model",
-    [
-        "gamma_drift",
-        "gamma_drift_angle",
-        "angle",
-        pytest.param(
-            "full_ddm_lan",
-            marks=pytest.mark.skipif(
-                "full_ddm_lan" not in ssms.config.model_config,
-                reason="needs the ssm-simulators release that registers full_ddm_lan",
-            ),
-        ),
-    ],
+    "model", ["gamma_drift", "gamma_drift_angle", "angle", "full_ddm_lan"]
 )
 def test_config_matches_ssms_registry(model):
     """The declared box must be the box the network was trained on.
