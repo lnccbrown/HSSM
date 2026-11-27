@@ -156,9 +156,7 @@ def test_get_gamma_drift_angle_config():
     }
 
 
-@pytest.mark.parametrize(
-    "model", ["gamma_drift", "gamma_drift_angle", "angle_extended"]
-)
+@pytest.mark.parametrize("model", ["gamma_drift", "gamma_drift_angle", "angle"])
 def test_config_matches_ssms_registry(model):
     """The declared box must be the box the network was trained on.
 
@@ -180,6 +178,22 @@ def test_config_matches_ssms_registry(model):
         param: (low, high)
         for param, low, high in zip(ssms_config["params"], lower, upper)
     }
+
+
+def test_angle_uses_the_wider_range_network():
+    """`angle` is the network trained on `v` in (-6, 6), not the 2023 `angle.onnx`."""
+    likelihood = get_default_model_config("angle")["likelihoods"][
+        "approx_differentiable"
+    ]
+    assert likelihood["loglik"] == "angle_extended.onnx"
+    assert likelihood["bounds"]["v"] == (-6.0, 6.0)
+
+
+def test_angle_extended_is_a_deprecated_name_for_angle():
+    assert "angle_extended" not in hssm.list_models()
+    with pytest.warns(FutureWarning, match="'angle_extended' is deprecated"):
+        config = get_default_model_config("angle_extended")
+    assert config == get_default_model_config("angle")
 
 
 @pytest.mark.parametrize("model", hssm.list_models())
