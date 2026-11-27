@@ -27,7 +27,6 @@ import hssm  # noqa: E402
 @pytest.mark.slow
 def test_addm_log_likelihood_enables_waic_loo():
     """Pointwise log-likelihood is emitted, correctly shaped, and drives ``az.loo``."""
-    hssm.set_floatX("float64")
     df = make_addm_dataframe(30, seed=1)
     model = hssm.aDDM(data=df)
 
