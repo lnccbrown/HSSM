@@ -133,7 +133,11 @@ def make_rldm_logp_func(
         ----------
         data:
             A 2D numpy array of shape (n_trials * n_participants, 2) containing the
-            response and reaction time for each trial.
+            reaction time and the response, in that order, for each trial. The
+            response may be coded 0/1 or -1/1; the positive response is the upper
+            boundary. Unsupported response codes, including NaN and infinity,
+            produce NaN log likelihoods rather than a valid boundary choice.
+            Missing or extra columns raise ValueError.
         dist_params:
             A list of parameters for the RLDM model, including:
             - rl_alpha: learning rate for the RL model.
@@ -147,8 +151,11 @@ def make_rldm_logp_func(
         Returns
         -------
         np.ndarray
-            The log likelihoods for each subject.
+            The log likelihood for each trial.
         """
+        if data.ndim != 2 or data.shape[1] != 2:
+            raise ValueError("data must be 2D with two columns [rt, response].")
+
         action = data[:, 1]
         rl_alpha = dist_params[0]
         scaler = dist_params[1]
@@ -165,7 +172,16 @@ def make_rldm_logp_func(
 
         # create parameter arrays to be passed to the likelihood function
         ddm_params_matrix = jnp.stack(dist_params[2:6], axis=1)
-        lan_matrix = jnp.concatenate((v, ddm_params_matrix, data), axis=1)
+        # The angle LAN declares -1/1 choices, so a 0/1 response is mapped
+        # to -1/1 before it reaches the network. Do not impute invalid or
+        # missing responses as valid lower-boundary observations.
+        valid_response = (action == -1) | (action == 0) | (action == 1)
+        choice = jnp.where(
+            valid_response, jnp.where(action > 0, 1.0, -1.0), jnp.nan
+        ).reshape((-1, 1))
+        lan_matrix = jnp.concatenate(
+            (v, ddm_params_matrix, data[:, :1], choice), axis=1
+        )
 
         return angle_logp_jax_func(lan_matrix)
 
