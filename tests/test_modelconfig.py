@@ -405,7 +405,8 @@ def test_ddm_st_logp_floors_at_t_minus_st(monkeypatch):
     data = np.column_stack([rt, np.ones_like(rt)])
     # v, a, z, t, st
     result = np.asarray(Dist.logp(data, 0.5, 0.5, 0.5, 0.5, 0.1).eval())
-    np.testing.assert_array_equal(result, [LOGP_LB, LOGP_LB, 0.0, 0.0])
+    # allclose, not equal: under floatX float32 the floor is float32(LOGP_LB).
+    np.testing.assert_allclose(result, [LOGP_LB, LOGP_LB, 0.0, 0.0], rtol=1e-6)
 
 
 def test_softmax_inv_temperature_4_is_registered():
