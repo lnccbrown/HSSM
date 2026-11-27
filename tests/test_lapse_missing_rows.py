@@ -82,7 +82,7 @@ def _float64():
     prev_x64 = jax.config.jax_enable_x64
     hssm.set_floatX("float64", update_jax=True)
     yield
-    pytensor.config.floatX = prev_floatx
+    hssm.set_floatX(prev_floatx)
     jax.config.update("jax_enable_x64", prev_x64)
 
 
