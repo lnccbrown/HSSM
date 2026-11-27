@@ -37,6 +37,7 @@ and transfer the pattern:
 
 ## See also
 
+- [Model configuration and response domains](../api/model_config.md) — declare the physical observation columns and their domains
 - [The ONNX likelihood contract](custom_onnx_likelihoods.md) — the rules an ONNX artifact must satisfy
 - [Custom models from JAX callables](../tutorials/jax_callable_contribution_onnx_example.ipynb) — the same callable gesture without an external trainer
 - [Likelihood kinds in HSSM](../explanations/likelihoods.md) — where `approx_differentiable` fits among the likelihood kinds

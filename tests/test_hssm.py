@@ -693,6 +693,22 @@ class TestFixedVectorParams:
         assert "z" in idata.posterior.data_vars
 
 
+def test_fixed_vector_with_distribution_loglik_raises(data_ddm):
+    """A `pm.Distribution` class as `loglik` would use 0.0 for a fixed vector (#1453).
+
+    HSSM uses such a class as given, so neither its logp nor its RV receives
+    the vector in place of Bambi's scalar placeholder.
+    """
+    with pytest.raises(NotImplementedError, match="pm.Distribution"):
+        HSSM(
+            data=data_ddm,
+            model="ddm",
+            loglik=DDM,
+            loglik_kind="analytical",
+            t=np.full(len(data_ddm), 0.3),
+        )
+
+
 @pytest.mark.slow
 def test_sample_do(data_ddm):
     """Return intervention samples and the intervened PyMC model."""
@@ -875,7 +891,7 @@ def test_vi_idata_rejects_attached_approximation(data_ddm):
         _ = model.vi_idata
 
 
-def test_drop_parent_str_requires_datatree(data_ddm):
+def test_clean_predictive_datatree_requires_datatree(data_ddm):
     """Posterior cleanup rejects a missing trace object."""
     model = HSSM(data=data_ddm)
 
@@ -883,10 +899,10 @@ def test_drop_parent_str_requires_datatree(data_ddm):
         ValueError,
         match=r"Please provide a DataTree \(traces\) object\.",
     ):
-        model._drop_parent_str_from_datatree(None)
+        model._clean_predictive_datatree(None)
 
 
-def test_drop_parent_str_renames_response_mean(data_ddm):
+def test_clean_predictive_datatree_renames_response_mean(data_ddm):
     """Posterior cleanup restores the model's response-parameter name."""
     model = HSSM(data=data_ddm)
     traces = xr.DataTree.from_dict(
@@ -902,7 +918,7 @@ def test_drop_parent_str_renames_response_mean(data_ddm):
         }
     )
 
-    result = model._drop_parent_str_from_datatree(traces)
+    result = model._clean_predictive_datatree(traces)
 
     assert result is traces
     assert model._parent in result["posterior"].data_vars
@@ -919,6 +935,7 @@ def test_is_choice_only_and_deadline(data_ddm):
 
     model = HSSM(data=data_ddm, model="ddm", model_config=config_choice_only)
     assert model.model_config.is_choice_only
+    assert model._obs_dim == 1
     assert model.response_c == "response"
     assert model.response_str == "response"
 
@@ -935,6 +952,7 @@ def test_is_choice_only_and_deadline(data_ddm):
     assert len(model_with_deadline.response) == 2
     assert model_with_deadline.response_c == "c(response, deadline)"
     assert model_with_deadline.response_str == "response,deadline"
+    assert model_with_deadline._obs_dim == 1
 
 
 @pytest.mark.parametrize("mode", [None, "JAX"], ids=["default", "jax_linker"])

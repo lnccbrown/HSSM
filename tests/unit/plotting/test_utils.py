@@ -1,11 +1,17 @@
 """Tests for plotting utility helpers."""
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
 
 import hssm
+from hssm.plotting import (
+    plot_model_cartoon,
+    plot_predictive,
+    plot_quantile_probability,
+)
 from hssm.plotting.utils import (
     _get_plotting_df,
     _get_title,
@@ -388,3 +394,36 @@ class TestUseTracesOrSampleSeededDraws:
         fn(model, None, dt, n_samples=5)
         assert model.draw_requests == [5]
         assert model.seeds == [None]
+
+
+@pytest.mark.parametrize(
+    ("plot", "kwargs"),
+    [
+        (plot_predictive, {"col": "stim"}),
+        (plot_predictive, {"row": "stim"}),
+        (plot_predictive, {"col": "participant_id", "col_wrap": 2}),
+        # A tall figure: a title placed at a fraction of the figure height
+        # drops onto the first row of facets.
+        (plot_predictive, {"row": "stim", "grid_kwargs": {"height": 8}}),
+        (
+            plot_quantile_probability,
+            {"col": "conf", "cond": "stim", "grid_kwargs": {"height": 2.5}},
+        ),
+        (plot_model_cartoon, {"col": "stim"}),
+    ],
+)
+def test_figure_title_clears_facet_titles(cav_model_cartoon, plot, kwargs):
+    """The figure title of a faceted plot sits above the facet titles."""
+    fig = plot(cav_model_cartoon, n_samples=2, **kwargs).figure
+    fig.canvas.draw()
+
+    (suptitle,) = [t for t in fig.texts if t.get_text() == fig.get_suptitle()]
+    box = suptitle.get_window_extent()
+    facet_titles = [ax.title for ax in fig.axes if ax.get_title()]
+
+    assert facet_titles
+    assert fig.bbox.y0 <= box.y0 and box.y1 <= fig.bbox.y1
+    assert not [
+        t.get_text() for t in facet_titles if box.overlaps(t.get_window_extent())
+    ]
+    plt.close(fig)

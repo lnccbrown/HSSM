@@ -2,7 +2,7 @@
 
 ``aDDM`` mirrors :class:`hssm.rl.rlssm.RLSSM`: it builds a differentiable
 PyTensor ``Op`` from the vendored JAX kernel in ``__init__``, injects it into a
-copy of the config via ``dataclasses.replace(loglik=op, backend="jax")``, and
+private copy of the config, and
 overrides :meth:`_make_model_distribution` to consume that Op directly.
 
 Unlike ``RLSSM`` there is **no** balanced-panel reshape (each trial's likelihood
@@ -12,7 +12,7 @@ the subclass: column validation (:meth:`_validate_addm_columns`) and
 materializing the 2-D ``sacc_array`` covariate (:meth:`_stack_sacc_array`).
 """
 
-from dataclasses import replace
+from copy import copy
 from typing import Any, Literal, cast
 
 import bambi as bmb
@@ -74,7 +74,7 @@ class aDDM(HSSMBase):
         # Default to the complete default config (every aDDMConfig field defaults).
         # NOTE: this is the factory, NOT aDDMConfig.get_defaults() (which is the
         # abstract per-param method).
-        model_config = model_config or aDDMConfig()
+        model_config = copy(model_config) if model_config is not None else aDDMConfig()
         model_config.validate()
 
         # aDDM-specific column/shape validation (lives on the subclass; no
@@ -102,8 +102,8 @@ class aDDM(HSSMBase):
             extra_fields=list(model_config.extra_fields or []),
         )
 
-        # Inject the Op + backend, leaving the caller's config object unmodified.
-        model_config = replace(model_config, loglik=loglik_op, backend="jax")
+        model_config.loglik = loglik_op
+        model_config.backend = "jax"
 
         super().__init__(
             data=data,
@@ -116,6 +116,11 @@ class aDDM(HSSMBase):
             deadline=deadline,
             **kwargs,
         )
+
+    def _validate_fixed_vectors(self) -> None:
+        """Reject parameters fixed to a vector, which this class does not use."""
+        super()._validate_fixed_vectors()
+        self._reject_fixed_vectors()
 
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Build a ``pm.Distribution`` from the pre-built aDDM log-likelihood Op.
@@ -154,6 +159,7 @@ class aDDM(HSSMBase):
             params_is_trialwise=params_is_trialwise,
             n_choices=self.n_choices,
             has_deadline=bool(self.deadline),
+            expected_obs_dim=self._obs_dim,
         )
         # Expose the observed fixations to the RV's generative path so
         # posterior-predictive draws condition on them (see _push_rv_extra_fields).
