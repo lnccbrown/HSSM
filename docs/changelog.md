@@ -102,6 +102,8 @@ This version includes the following changes:
 
 49. **`plot_predictive` shows response time and direction for circular responses** (#1521). For a model with a response time and one circular response, `model.plot_predictive()` returns two axes drawn from the same predictive datasets: a histogram of the response times and a polar histogram of the observed and simulated angles. The polar panel spans the full turn; its radius is the percentage of trials per angular bin, computed within each simulated dataset and shown with a pointwise uncertainty band. `outcome="rt"` or `outcome="response"` draws one panel. HSSM picks the plot from the model's response domain, not from its name, so a custom model with a circular response gets the same panels. The polar panel is a histogram without facets; for a KDE or for `row`, `col` and `groups`, use `outcome="rt"`. Plots of models with categorical responses are unchanged.
 
+50. **Documentation: a circular diffusion walkthrough** (#1522). *Learn → Model walkthroughs → Circular diffusion* simulates 250 trials with a response time and a reported direction, fits both drift components, the radius and the non-decision time with NUTS, and reads the two-panel posterior predictive check, including what two marginal panels cannot show. The model reference links to it.
+
 #### Breaking changes that require migration:
 
 1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.

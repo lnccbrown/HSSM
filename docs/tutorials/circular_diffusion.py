@@ -1,7 +1,6 @@
 """Fit and check a circular diffusion model for continuous direction reports.
 
-From a development checkout that contains native circular plotting, install the
-matching ssm-simulators build (see the notebook), then regenerate the static page:
+Regenerate the static page with:
 
     python -m marimo export ipynb --no-sandbox docs/tutorials/circular_diffusion.py \
         --include-outputs --output docs/tutorials/circular_diffusion.ipynb --force
@@ -51,15 +50,8 @@ def _(mo):
     model, evidence starts at the center of a disk. The location where it first
     hits the circle gives the angle; the time taken plus nondecision time gives RT.
 
-    **Development example.** The native model and its two-panel predictive plot
-    require the HSSM checkout containing this example. The circular sampler
-    has merged into ssm-simulators but is not in the published 0.16.0 wheel.
-    With the development HSSM checkout installed, install this tested revision
-    from ssm-simulators main (no JEAM required):
-
-    ```sh
-    python -m pip install "ssm-simulators @ git+https://github.com/lnccbrown/ssm-simulators.git@b7578d085882d885afdaae2333e2ad346d8c2640"
-    ```
+    **Requirements.** This walkthrough needs HSSM 0.5.1 or later, which installs
+    ssm-simulators 0.17.0 or later, the first release with the circular simulator.
 
     ## Simulate one participant
 
