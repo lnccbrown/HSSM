@@ -32,6 +32,7 @@ from hssm.distribution_utils import (
     make_missing_data_callable,
 )
 from hssm.distribution_utils.onnx_utils.model import load_onnx_model
+from hssm.modelconfig import resolve_model_name
 from hssm.utils import (
     _rearrange_data,
 )
@@ -109,7 +110,7 @@ class HSSM(HSSMBase):
         models typically use the columns "rt" and "response".
     model
         The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
-        "full_ddm", "angle", "angle_extended", "levy", "ornstein", "weibull",
+        "full_ddm", "angle", "levy", "ornstein", "weibull",
         "race_no_bias_angle_4",
         "ddm_seq2_no_bias", "gamma_drift", "gamma_drift_angle". If any other string
         is passed, the model will be considered custom, in which case `loglik` and
@@ -370,6 +371,9 @@ class HSSM(HSSMBase):
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs: Any,
     ) -> None:
+        # A deprecated model name is replaced before anything reads it.
+        model = resolve_model_name(model)
+
         # ===== save/load serialisation =====
         self._init_args = self._store_init_args(locals(), kwargs)
 
@@ -395,6 +399,18 @@ class HSSM(HSSMBase):
             initval_jitter=initval_jitter,
             **kwargs,
         )
+
+    def _validate_fixed_vectors(self) -> None:
+        """Also reject fixed vectors when `loglik` is a `pm.Distribution` class.
+
+        Such a class is used as given (see `_make_model_distribution`), so its
+        logp and its RV receive Bambi's scalar 0.0 placeholder, not the vector.
+        """
+        super()._validate_fixed_vectors()
+        if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
+            self._reject_fixed_vectors(
+                context="when `loglik` is a `pm.Distribution` class"
+            )
 
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Make a pm.Distribution for the model."""
@@ -520,11 +536,15 @@ class HSSM(HSSMBase):
                 self.missing_data_value,
             )
 
-        self.data = typing_cast("pd.DataFrame", _rearrange_data(self.data))
+        # Move missing rows on top, keeping the row positions in `order` so that
+        # fixed-vector params, given in the user's row order, follow their rows.
+        rearranged = _rearrange_data(self.data.reset_index(drop=True))
+        order = typing_cast("pd.DataFrame", rearranged).index.to_numpy()
+        self.data = self.data.iloc[order]
 
         # Collect fixed-vector params to substitute in the distribution logp
         fixed_vector_params = {
-            name: param.prior
+            name: param.prior[order]
             for name, param in self.params.items()
             if isinstance(param.prior, np.ndarray)
         }

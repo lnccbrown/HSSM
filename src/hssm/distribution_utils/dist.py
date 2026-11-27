@@ -41,6 +41,26 @@ MISSING_RT = -999.0
 
 LOGP_LB = -66.1  # a Python float takes the graph's dtype (see likelihoods.analytical)
 
+# Keyword arguments of `pm.Distribution` and its `.dist()` (plus `observed` and
+# `dims`, which Bambi adds). The parameters reach PyMC as keywords, so a
+# parameter with one of these names would be read as the keyword instead.
+PYMC_RESERVED_NAMES = frozenset(
+    {
+        "name",
+        "shape",
+        "size",
+        "dims",
+        "observed",
+        "rng",
+        "initval",
+        "total_size",
+        "transform",
+        "default_transform",
+        "dtype",
+        "return_next_rng",
+    }
+)
+
 
 def apply_param_bounds_to_loglik(
     logp: Any,
@@ -235,6 +255,7 @@ def make_hssm_rv(
     list_params: list[str],
     lapse: bmb.Prior | float | None = None,
     is_choice_only: bool = False,
+    fixed_vector_params: dict[str, np.ndarray] | None = None,
     expected_obs_dim: int | None = None,
 ) -> type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
@@ -249,6 +270,10 @@ def make_hssm_rv(
         A bmb.Prior object representing the lapse distribution.
     is_choice_only : bool
         Whether the model is a choice-only model.
+    fixed_vector_params : optional
+        A dictionary mapping parameter names to their fixed ``np.ndarray``
+        values, one per row of the data. ``rng_fn`` simulates with these vectors
+        in place of the scalar placeholders it receives for these parameters.
     expected_obs_dim : int, optional
         Configured number of physical response columns. This is checked against
         a real simulator and sets the support width of a likelihood-only model.
@@ -286,6 +311,11 @@ def make_hssm_rv(
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
+
+    fixed_vectors = {
+        list_params.index(name): pm.pytensorf.floatX(np.asarray(vector))
+        for name, vector in (fixed_vector_params or {}).items()
+    }
 
     # pylint: disable=W0511, R0903
     class HSSMRV(RandomVariable):
@@ -367,14 +397,46 @@ def make_hssm_rv(
             requested_size = kwargs.get("size", args[-1])
             size, args, kwargs = _extract_size(args, kwargs)
             arg_arrays = _create_arg_arrays(cls, args)
+            # A parameter fixed to a vector reaches this RV as the scalar 0.0
+            # placeholder that Bambi holds for it (see `make_distribution`).
+            # Simulate with the vector, as HSSMDistribution.logp() does (#1453).
+            for idx, vector in fixed_vectors.items():
+                arg_arrays[idx] = vector
             param_shapes = [arr.shape for arr in arg_arrays]
             p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
 
-            # A trial-wise p_outlier (a p_outlier regression) needs one simulated
-            # trial per p_outlier value, even when the model parameters are scalar.
-            if p_outlier is not None and p_outlier.size > 1:
-                batch_shape = np.broadcast_shapes(*param_shapes)
+            # A trial-wise p_outlier (a p_outlier regression) or a fixed vector
+            # needs one simulated trial per value, even when the other model
+            # parameters are scalar.
+            if fixed_vectors or (p_outlier is not None and p_outlier.size > 1):
+                try:
+                    batch_shape = np.broadcast_shapes(*param_shapes)
+                except ValueError as err:
+                    other_shapes = [
+                        shape
+                        for i, shape in enumerate(param_shapes)
+                        if i not in fixed_vectors
+                    ]
+                    # Blame the fixed vector only when the other parameters
+                    # broadcast with each other; otherwise the mismatch is
+                    # elsewhere, and the original error says where.
+                    try:
+                        np.broadcast_shapes(*other_shapes)
+                    except ValueError:
+                        raise err from None
+                    # The vector has one value per row the model was built on,
+                    # so it cannot be matched to any other set of rows.
+                    raise ValueError(
+                        "Cannot simulate: the parameter(s) fixed to a vector "
+                        f"({', '.join(list_params[i] for i in fixed_vectors)}) have "
+                        "one value per row of the model's data, which does not match "
+                        f"the shapes of the other parameters ({param_shapes})."
+                    ) from err
                 arg_arrays = [np.broadcast_to(arr, batch_shape) for arr in arg_arrays]
+                # p_outlier was taken out of arg_arrays above, so a fixed-vector
+                # p_outlier needs the same broadcast, one probability per trial.
+                if p_outlier is not None and p_outlier.size > 1:
+                    p_outlier = np.broadcast_to(p_outlier, batch_shape)
 
             # Forward observed per-trial covariates to the simulator when the RV
             # has been given them (covariate-conditioned PPC); a no-op otherwise.
@@ -688,8 +750,9 @@ def make_distribution(
         Bambi receives a scalar ``0.0`` placeholder, and the real vector is
         injected as a constant PyTensor tensor inside
         ``HSSMDistribution.logp()``, replacing the placeholder at the
-        correct position in ``dist_params``.  Defaults to ``None``
-        (no fixed-vector parameters).
+        correct position in ``dist_params``.  When ``rv`` is a string or a
+        simulator function, the RV's ``rng_fn`` likewise simulates with the
+        vector.  Defaults to ``None`` (no fixed-vector parameters).
     params_is_trialwise : optional
         A list of booleans, one per parameter in ``list_params`` (plus extra
         fields), indicating whether each parameter is trial-wise (i.e. should
@@ -723,7 +786,36 @@ def make_distribution(
     -------
     type[pm.Distribution]
         A pymc.Distribution that uses the log-likelihood function.
+
+    Raises
+    ------
+    ValueError
+        If a name in ``list_params`` is one of ``PYMC_RESERVED_NAMES``.
     """
+    reserved = sorted(PYMC_RESERVED_NAMES.intersection(list_params))
+    if reserved:
+        raise ValueError(
+            f"Parameter name(s) {reserved} cannot be used: PyMC reads them as "
+            "keyword arguments of the distribution (`shape`, for example, sets "
+            "the shape of the response), not as parameters of the model. "
+            "Rename them in `list_params` and wherever the model refers to them."
+        )
+
+    is_ready_made_rv = isinstance(rv, RandomVariable) or (
+        isinstance(rv, type) and issubclass(rv, RandomVariable)
+    )
+    if fixed_vector_params and is_ready_made_rv:
+        # A ready-made RandomVariable is used as given: its rng_fn receives the
+        # scalar 0.0 placeholder for these parameters (#1453).
+        _logger.warning(
+            "Parameter(s) %s are fixed to a vector, but `rv` is a RandomVariable, "
+            "whose rng_fn receives the placeholder 0.0 for them, not the vector. "
+            "The likelihood uses the vector; draws from the predictive "
+            "distributions do not. Pass a simulator function or a model name as "
+            "`rv` to simulate with the vector.",
+            sorted(fixed_vector_params),
+        )
+    # The isinstance checks stay in the branches so that type checkers narrow `rv`.
     if isinstance(rv, type) and issubclass(rv, RandomVariable):
         rv_instance = rv()
     elif not isinstance(rv, type) and isinstance(rv, RandomVariable):
@@ -734,6 +826,7 @@ def make_distribution(
             list_params=list_params,
             lapse=lapse,
             is_choice_only=is_choice_only,
+            fixed_vector_params=fixed_vector_params,
             expected_obs_dim=expected_obs_dim,
         )
         rv_instance = random_variable()

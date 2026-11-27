@@ -178,7 +178,7 @@ class TestBuildSsmSpecFromModelconfig:
         spec = registry._build_ssm_spec_from_modelconfig("angle")
         result = spec["ssm_base_logp_func_factory"]()
 
-        assert called_with == ["angle.onnx"]
+        assert called_with == ["angle_extended.onnx"]
         assert callable(result)
         assert result.inputs == ["v", "a", "z", "t", "theta", "rt", "response"]
         assert result.outputs == ["logp"]

@@ -211,7 +211,7 @@ class BaseModelConfig(ABC):
 class Config(BaseModelConfig):
     """Config class that stores the configurations for models."""
 
-    rv: RandomVariable | None = None
+    rv: RandomVariable | Callable[..., np.ndarray] | None = None
     # Fields with dictionaries are automatically deepcopied
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     # Which parameter shifts the lower edge of the response-time support, and by
@@ -532,7 +532,7 @@ class ModelConfig:
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     backend: Literal["jax", "pytensor"] | None = None
-    rv: RandomVariable | None = None
+    rv: RandomVariable | Callable[..., np.ndarray] | None = None
     extra_fields: list[str] | None = None
     # Overrides the likelihood's own declaration when not None; see Config.
     ndt_edge_shift: NDTEdgeShift | None = None
