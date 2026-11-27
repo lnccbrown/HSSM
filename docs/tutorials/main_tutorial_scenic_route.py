@@ -1295,9 +1295,11 @@ def _(N_REG_TRIALS, SEEDS, hssm, np):
         v_Intercept=v_intercept,
         theta=0.0,
     )
+    # Pass only the DDM's own parameters. The dictionary's other entries are
+    # reference values, which the simulator does not take.
     dataset_reg_v = hssm.simulate_data(
         model="ddm",
-        theta=param_dict_reg_v,
+        theta={_name: param_dict_reg_v[_name] for _name in ("v", "a", "z", "t")},
         size=1,
         random_state=SEEDS["reg"],
     )
@@ -2825,7 +2827,7 @@ def _(hssm, make_distribution):
     from hssm.distribution_utils import make_likelihood_callable
 
     _angle_loglik = make_likelihood_callable(
-        loglik="angle.onnx",
+        loglik="angle_extended.onnx",
         loglik_kind="approx_differentiable",
         backend="jax",
         params_is_reg=[0, 0, 0, 0, 0],
@@ -2957,9 +2959,11 @@ def _(
         t=0.1,
         theta=0.0,
     )
+    # Pass only the DDM's own parameters. The dictionary's other entries are
+    # reference values, which the simulator does not take.
     pymc_reg_data = hssm.simulate_data(
         model="ddm",
-        theta=param_dict_pymc_reg,
+        theta={_name: param_dict_pymc_reg[_name] for _name in ("v", "a", "z", "t")},
         size=1,
         random_state=SEEDS["pymc_reg_data"],
     )
@@ -2970,7 +2974,7 @@ def _(
         parameter_names=hssm.defaults.default_model_config["angle"]["list_params"],
     )
     _angle_loglik = make_likelihood_callable(
-        loglik="angle.onnx",
+        loglik="angle_extended.onnx",
         loglik_kind="approx_differentiable",
         backend="jax",
         params_is_reg=bool_param_reg,

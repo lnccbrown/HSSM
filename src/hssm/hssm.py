@@ -28,10 +28,11 @@ from hssm.defaults import (
 from hssm.distribution_utils import (
     assemble_callables,
     make_distribution,
-    make_hssm_rv,
     make_likelihood_callable,
     make_missing_data_callable,
 )
+from hssm.distribution_utils.onnx_utils.model import load_onnx_model
+from hssm.modelconfig import resolve_model_name
 from hssm.utils import (
     _rearrange_data,
 )
@@ -43,6 +44,52 @@ if TYPE_CHECKING:
     from pytensor.graph.op import Op
 
 _logger = logging.getLogger("hssm")
+
+# The data column each missing-data network takes as its last input.
+_MISSING_DATA_NETWORK_LAST_INPUT: dict[MissingDataNetwork, tuple[str, str]] = {
+    MissingDataNetwork.CPN: ("CPN", "the observed choice"),
+    MissingDataNetwork.OPN: ("OPN", "the deadline"),
+}
+
+
+def _check_missing_data_network_input_width(
+    loglik_missing_data: "Op | Callable[..., Any] | PathLike | str",
+    network: MissingDataNetwork,
+    n_params: int,
+) -> None:
+    """Reject an ONNX missing-data network whose input width is not n_params + 1.
+
+    CPN and OPN artifacts take one data column (the observed choice, resp. the
+    deadline) as their last input, after the model parameters and the extra
+    fields; see lnccbrown/HSSM#1324. Only ONNX artifacts (a path or Hub file
+    name) are checked; callables and Ops are the user's responsibility, and
+    networks with symbolic input dimensions are left to the loader's own check.
+    The artifact is loaded once more by `make_missing_data_callable` afterwards
+    (a Hub download is cached, so this costs one extra ``onnx.load``).
+    """
+    if network not in _MISSING_DATA_NETWORK_LAST_INPUT:
+        return
+    if not isinstance(loglik_missing_data, (str, PathLike)):
+        return
+
+    onnx_model = load_onnx_model(loglik_missing_data)
+    dims = [
+        dim.dim_value for dim in onnx_model.graph.input[0].type.tensor_type.shape.dim
+    ]
+    if not dims or any(dim <= 0 for dim in dims):
+        return
+    width = int(np.prod(dims))
+    expected = n_params + 1
+    if width == expected:
+        return
+
+    label, last_input = _MISSING_DATA_NETWORK_LAST_INPUT[network]
+    raise ValueError(
+        f"{label} artifacts take {last_input} as their last input since HSSM "
+        f"0.5.1 (input width n_params + 1 = {expected}); this network has input "
+        f"width {width}. See https://github.com/lnccbrown/HSSM/issues/1324."
+    )
+
 
 # NOTE: Temporary mapping from old sampler names to new ones in bambi 0.16.0
 _new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
@@ -58,24 +105,27 @@ class HSSM(HSSMBase):
     Parameters
     ----------
     data
-        A pandas DataFrame with the minimum requirements of containing the data with the
-        columns "rt" and "response".
+        A pandas DataFrame containing the physical response columns declared in
+        `hssm.ModelConfig.response`, plus any configured extra fields. Built-in RT
+        models typically use the columns "rt" and "response".
     model
         The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
-        "full_ddm", "angle", "angle_extended", "levy", "ornstein", "weibull",
+        "full_ddm", "angle", "levy", "ornstein", "weibull",
         "race_no_bias_angle_4",
         "ddm_seq2_no_bias", "gamma_drift", "gamma_drift_angle". If any other string
-        is passed, the model will be considered custom, in which case all
-        `model_config`, `loglik`, and `loglik_kind` have to be provided by the user.
+        is passed, the model will be considered custom, in which case `loglik` and
+        `loglik_kind` have to be provided by the user. If ssm-simulators knows the
+        name (one of its built-in models, or a model registered with
+        `ssms.config.register_model_config`), `list_params`, `bounds` and `choices`
+        default to its ssm-simulators config; otherwise `model_config` has to
+        provide at least `list_params`.
     choices : optional
-        The choices that participants can make. An integer (Python `int` or numpy
-        integer) gives the number of choices: `2` means [-1, 1] and any `n > 2`
-        means [0, 1, ..., n - 1]. A `list` or `tuple` gives the choice values
-        directly. Ignored for supported models unless `model_config` is also passed,
-        and choices set in `model_config` take precedence. Defaults to `None`, which
-        uses the model's default choices (from ssm-simulators for custom models it
-        knows). If any value other than the choices provided is found in the
-        "response" column of the data, an error will be raised.
+        Legacy shorthand for the allowed labels of one categorical non-RT response.
+        An integer gives the number of choices: `2` means [-1, 1] and `n > 2` means
+        [0, 1, ..., n - 1]. A list or tuple gives the labels directly. Defaults to
+        the model's choices. For supported models this argument is ignored unless
+        `model_config` is also passed; choices in `model_config` take precedence.
+        Omit this argument when declaring `model_config.response_domains`.
     include : optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
@@ -164,7 +214,9 @@ class HSSM(HSSMBase):
         likelihood with weight `p_outlier`, marginalised per row type: observed
         rows use the lapse density at the observed `rt`; missing-RT rows (choice
         observed, no deadline) use `1 / n_choices`; omission rows (deadline) use
-        the lapse survival probability at the deadline.
+        the lapse survival probability at the deadline. Choice-only models accept
+        only the uniform lapse over choices, `1 / n_choices`, which is their
+        default; any other value raises a `ValueError`.
     global_formula : optional
         A string that specifies a regressions formula which will be used for all model
         parameters. If you specify parameter-wise regressions in addition, these will
@@ -192,7 +244,12 @@ class HSSM(HSSMBase):
         following:
 
         - `"safe"`: fills eligible missing common and group-specific regression-term
-        priors with HSSM's weakly informative defaults.
+        priors with HSSM's weakly informative defaults. An identity-link intercept
+        of a parameter with finite bounds gets a Normal centered in the bounds,
+        with an SD of a quarter of their width (`ddm`, `ddm_sdv` and `full_ddm`
+        without a LAN likelihood use HDDM-based priors instead). If the bounds are
+        much wider than the parameter's plausible values, that prior is nearly
+        flat: give the parameter an explicit `prior`.
         - `None`: leaves missing regression-term priors to Bambi. This is not
         recommended for hierarchical models.
 
@@ -219,6 +276,23 @@ class HSSM(HSSMBase):
         how to specify the likelihood function this parameter. If nothing is provided,
         a default likelihood function will be used. This parameter is required only if
         either `missing_data` or `deadline` is not `False`. Defaults to `None`.
+
+        The network follows the same single-trial input convention as the main
+        likelihood, with the model parameters (in `list_params` order, without
+        `p_outlier`) followed by any `extra_fields` and then one data column
+        **last**:
+
+        - without a deadline (choice-probability network, CPN):
+          `[θ..., choice] -> log P(choice | θ)`; HSSM passes each missing-RT
+          row's `response`, coded exactly as in `choices` (no remapping), so
+          such rows must carry a valid response;
+        - with a deadline (omission-probability network, OPN):
+          `[θ..., deadline] -> log P(rt > deadline | θ)`.
+
+        Either way the input width is `n_params + 1`; an ONNX network of a
+        different width is rejected at construction. A user-supplied callable
+        that takes only the parameters is still supported at the
+        `hssm.distribution_utils` level via `params_only=True`.
     process_initvals : optional
         If `True`, the model will process the initial values. Defaults to `True`.
         Processing also clamps a default initial value that falls outside its
@@ -245,8 +319,8 @@ class HSSM(HSSMBase):
     Attributes
     ----------
     data
-        A pandas DataFrame with at least two columns of "rt" and "response" indicating
-        the response time and responses.
+        The pandas DataFrame containing the physical response columns declared by the
+        model configuration.
     list_params
         The list of strs of parameter names.
     model_name
@@ -297,6 +371,9 @@ class HSSM(HSSMBase):
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs: Any,
     ) -> None:
+        # A deprecated model name is replaced before anything reads it.
+        model = resolve_model_name(model)
+
         # ===== save/load serialisation =====
         self._init_args = self._store_init_args(locals(), kwargs)
 
@@ -322,6 +399,18 @@ class HSSM(HSSMBase):
             initval_jitter=initval_jitter,
             **kwargs,
         )
+
+    def _validate_fixed_vectors(self) -> None:
+        """Also reject fixed vectors when `loglik` is a `pm.Distribution` class.
+
+        Such a class is used as given (see `_make_model_distribution`), so its
+        logp and its RV receive Bambi's scalar 0.0 placeholder, not the vector.
+        """
+        super()._validate_fixed_vectors()
+        if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
+            self._reject_fixed_vectors(
+                context="when `loglik` is a `pm.Distribution` class"
+            )
 
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Make a pm.Distribution for the model."""
@@ -391,10 +480,14 @@ class HSSM(HSSMBase):
         # Make the callable for missing data
         # And assemble it with the callable for the likelihood
         if self.missing_data_network != MissingDataNetwork.NONE:
-            if self.missing_data_network == MissingDataNetwork.OPN:
+            # Both the OPN ([theta..., deadline]) and the CPN
+            # ([theta..., choice]) take one data column as their last input;
+            # see lnccbrown/HSSM#1324 for the CPN contract.
+            if self.missing_data_network in (
+                MissingDataNetwork.OPN,
+                MissingDataNetwork.CPN,
+            ):
                 params_only = False
-            elif self.missing_data_network == MissingDataNetwork.CPN:
-                params_only = True
             else:
                 params_only = None
 
@@ -410,7 +503,14 @@ class HSSM(HSSMBase):
                 if self.model_config.backend != "pytensor"
                 else self.model_config.backend
             )
+            # The width check loads the network too, so it must run under the
+            # missing-data role or tracking records it as the likelihood.
             with tracking.network_role(tracking.MISSING_DATA_ROLE):
+                _check_missing_data_network_input_width(
+                    self.loglik_missing_data,
+                    self.missing_data_network,
+                    n_params=len(params_is_trialwise),
+                )
                 missing_data_callable = make_missing_data_callable(
                     self.loglik_missing_data,
                     backend_tmp,
@@ -436,38 +536,15 @@ class HSSM(HSSMBase):
                 self.missing_data_value,
             )
 
-        # TODO: This is a temporary solution to allow choice-only models without a
-        # specified simulator in ssm-simulators
-        if self.is_choice_only and self.model_config.rv is None:
-            _logger.warning(
-                "You are building a choice-only model without specifying "
-                "a RandomVariable class. Using a dummy simulator function. "
-                "Simulating data from this model will result in an error."
-            )
-
-            def dummy_simulator_func(*args, **kwargs):
-                raise NotImplementedError(
-                    "You are trying to simulate data from a choice-only model "
-                    "without specifying a RandomVariable class. Please specify "
-                    "a RandomVariable class via the `model_config.rv` argument."
-                )
-
-            setattr(dummy_simulator_func, "model_name", self.model_name)
-            setattr(dummy_simulator_func, "choices", self.choices)
-            setattr(dummy_simulator_func, "obs_dim", 1)
-
-            self.model_config.rv = make_hssm_rv(
-                dummy_simulator_func,
-                list_params=self.list_params or [],
-                lapse=self.lapse,
-                is_choice_only=True,
-            )
-
-        self.data = typing_cast("pd.DataFrame", _rearrange_data(self.data))
+        # Move missing rows on top, keeping the row positions in `order` so that
+        # fixed-vector params, given in the user's row order, follow their rows.
+        rearranged = _rearrange_data(self.data.reset_index(drop=True))
+        order = typing_cast("pd.DataFrame", rearranged).index.to_numpy()
+        self.data = self.data.iloc[order]
 
         # Collect fixed-vector params to substitute in the distribution logp
         fixed_vector_params = {
-            name: param.prior
+            name: param.prior[order]
             for name, param in self.params.items()
             if isinstance(param.prior, np.ndarray)
         }
@@ -479,12 +556,20 @@ class HSSM(HSSMBase):
         # HSSM.__init__ always builds a Config, which is where ndt_edge_shift lives.
         ndt_edge_shift = typing_cast("Config", self.model_config).ndt_edge_shift
 
+        # make_distribution() reads a float lapse as a log probability, while
+        # _check_lapse() sets the choice-only lapse as the probability 1 / n_choices.
+        lapse = (
+            float(np.log(self.lapse))
+            if self.is_choice_only and isinstance(self.lapse, int | float)
+            else self.lapse
+        )
+
         return make_distribution(
             rv=rv_name,
             loglik=self.loglik,
             list_params=_list_params,
             bounds=self.bounds,
-            lapse=self.lapse,
+            lapse=lapse,
             extra_fields=(
                 None
                 if not self.extra_fields
@@ -500,4 +585,5 @@ class HSSM(HSSMBase):
             ndt_edge_shift=ndt_edge_shift,
             n_choices=self.n_choices,
             has_deadline=bool(self.deadline),
+            expected_obs_dim=self._obs_dim,
         )

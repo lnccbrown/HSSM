@@ -33,6 +33,10 @@ def _registry_mismatches():
     found = []
     for model in get_args(SupportedModels):
         config = get_default_model_config(model)
+        # Spelling can differ; the public Cartesian components must still
+        # occupy the same positions as vx and vy in the simulator.
+        aliases = {"v_x": "vx", "v_y": "vy"} if model == "circular_diffusion" else {}
+        params = [aliases.get(name, name) for name in config["list_params"]]
         for kind, likelihood in config["likelihoods"].items():
             # The simulator is `rv` when the config declares one, else the
             # model name (hssm.py resolves it the same way).
@@ -40,12 +44,12 @@ def _registry_mismatches():
             simulator = rv if isinstance(rv, str) else model
             if simulator not in ssms.config.model_config:
                 # No ssm-simulators model to compare against, for example
-                # softmax_inv_temperature_2 and softmax_inv_temperature_3.
+                # the softmax_inv_temperature_<n> models.
                 continue
             registry = ssms.config.model_config[simulator]
             for field, declared, expected in (
-                ("params", config["list_params"], registry["params"]),
-                ("choices", config["choices"], registry["choices"]),
+                ("params", params, registry["params"]),
+                ("choices", config.get("choices", []), registry["choices"]),
             ):
                 if list(declared) != list(expected):
                     found.append((model, kind, field, list(declared), list(expected)))

@@ -28,6 +28,7 @@ from .utils import (
     _get_plotting_df,
     _get_title,
     _hdi_to_intervals,
+    _set_facet_suptitle,
     _subset_df,
     _to_dt_group,
     _use_traces_or_sample,
@@ -73,7 +74,7 @@ def _cartoon_model_meta(model) -> tuple[list[str], list[int]]:
     """
     cfg = default_model_config.get(model.model_name)
     if cfg is not None:
-        return list(cfg["list_params"]), list(cfg["choices"])
+        return list(cfg["list_params"]), list(cfg.get("choices") or model.choices)
     mc = model.model_config
     return list(mc.list_params), list(mc.choices)
 
@@ -191,7 +192,9 @@ def _plot_model_cartoon_1D(
     if list_params is None or choices is None:
         config_tmp = default_model_config[cast("SupportedModels", model_name)]
         list_params = list_params or config_tmp["list_params"]
-        choices = choices or config_tmp["choices"]
+        choices = choices or config_tmp.get("choices")
+        if choices is None:
+            raise ValueError("Model cartoons require categorical responses.")
     model_params = list_params
 
     n_choices = len(choices)
@@ -365,8 +368,7 @@ def _plot_model_cartoon_2D(
             )
 
     if title:
-        g.figure.subplots_adjust(top=0.9)
-        g.figure.suptitle(title)
+        _set_facet_suptitle(g, title)
 
     g.set_xlabels(xlabel)
     g.set_ylabels(ylabel)
@@ -731,6 +733,8 @@ def plot_model_cartoon(
     Axes | FacetGrid | list[FacetGrid]
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
+    if model.n_choices is None:
+        raise ValueError("Model cartoons require categorical responses.")
     if uncertainty is not None and uncertainty not in ("band", "samples", "both"):
         raise ValueError(
             f"`uncertainty` must be one of 'band', 'samples', 'both', or None, "
@@ -2833,7 +2837,11 @@ def plot_func_model_n(
     # choices is threaded in by _plot_model_cartoon_1D (from model.model_config);
     # fall back to the registry for built-in models called directly.
     if choices is None:
-        choices = default_model_config[cast("SupportedModels", model_name)]["choices"]
+        choices = default_model_config[cast("SupportedModels", model_name)].get(
+            "choices"
+        )
+        if choices is None:
+            raise ValueError("Model cartoons require categorical responses.")
 
     # Shared bin edges for every histogram on this axis (see plot_func_model).
     if bins is None:

@@ -111,6 +111,13 @@ def test_addm_rejects_invalid_setting_presets(setting_name, invalid_value, prese
     make_params.assert_not_called()
 
 
+def test_fixed_vector_raises():
+    """A parameter fixed to a vector would be used as 0.0, so it raises (#1453)."""
+    df = make_addm_dataframe(20)
+    with pytest.raises(NotImplementedError, match="fixed to a vector"):
+        hssm.aDDM(data=df, a=np.full(len(df), 1.0))
+
+
 def test_is_hssmbase_subclass():
     """``aDDM`` is an ``HSSMBase`` subclass."""
     assert issubclass(hssm.aDDM, HSSMBase)
@@ -120,15 +127,38 @@ def test_is_hssmbase_subclass():
 
 
 def test_loglik_op_injected():
-    """The JAX log-likelihood ``Op`` is injected into the config at construction."""
+    """The JAX log-likelihood ``Op`` is injected into the private config."""
     cfg = aDDMConfig()
-    assert cfg.loglik is None and cfg.backend is None
     model = hssm.aDDM(data=make_addm_dataframe(20), model_config=cfg)
-    assert model.model_config.loglik is not None
     assert isinstance(model.model_config.loglik, Op)
     assert model.model_config.backend == "jax"
-    # Caller's config object must be untouched by dataclasses.replace.
     assert cfg.loglik is None and cfg.backend is None
+
+
+@pytest.mark.parametrize("canonical", [False, True])
+def test_caller_response_config_is_detached(canonical):
+    """Construction and subsequent caller edits cannot change each other's metadata."""
+    labels = [-1, 1]
+    domains = {"response": {"kind": "categorical", "values": labels}}
+    cfg = (
+        aDDMConfig(response_domains=domains, choices=None)
+        if canonical
+        else aDDMConfig(choices=labels)
+    )
+    model = hssm.aDDM(data=make_addm_dataframe(20), model_config=cfg)
+    assert cfg.response_domains is (domains if canonical else None)
+    assert cfg.choices is (None if canonical else labels)
+
+    labels[0] = 42
+    cfg.response[1] = "renamed"
+    snapshot = model.__getstate__()["constructor_args"]["model_config"]
+    assert snapshot.response == model.model_config.response == ["rt", "response"]
+    assert model.choices == (-1, 1)
+    assert (
+        snapshot.response_domains["response"]["values"]
+        if canonical
+        else snapshot.choices
+    ) == [-1, 1]
 
 
 def test_bad_columns_raise():

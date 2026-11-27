@@ -1,7 +1,12 @@
-import numpy as np
+from pathlib import Path
+
 import jax.numpy as jnp
+import numpy as np
+import onnx
 
 from hssm.distribution_utils.jax import make_jax_single_trial_logp_from_network_forward
+from hssm.distribution_utils.onnx import make_jax_logp_funcs_from_onnx
+from hssm.distribution_utils.onnx_utils.onnx2jax import make_jax_func
 
 
 def test_lan_style_params_only_false_concatenates_params_and_data():
@@ -88,3 +93,84 @@ def test_opn_cpn_style_params_only_true_stacks_params_only():
     assert out.ndim == 1
     assert out.shape == expected.shape
     assert np.allclose(np.asarray(out), np.asarray(expected))
+
+
+# --------------------------------------------------------------------------
+# CPN input layout: [theta..., choice] with the choice LAST (#1324)
+# --------------------------------------------------------------------------
+
+FIXTURES = Path(__file__).parent / "fixtures"
+THETA = (0.5, 1.5, 0.5, 0.3)  # v, a, z, t
+
+
+def test_cpn_single_trial_logp_receives_choice_last(cpn_onnxruntime):
+    """The single-trial CPN logp is evaluated on ``[v, a, z, t, choice]``.
+
+    Two inputs that differ only in the choice give different outputs, and each
+    equals a direct onnxruntime evaluation of the same ``[theta..., choice]``
+    row, which pins both the layout and the position of the choice.
+    """
+    forward = make_jax_func(onnx.load(FIXTURES / "ddm_cpn.onnx"))
+    logp = make_jax_single_trial_logp_from_network_forward(forward, params_only=False)
+    params = [jnp.array(x) for x in THETA]
+
+    out = {c: float(logp(jnp.array([c]), *params)) for c in (-1.0, 1.0)}
+    assert out[-1.0] != out[1.0]
+    assert out[-1.0] <= 0.0 and out[1.0] <= 0.0  # log-probabilities
+
+    expected = cpn_onnxruntime([[*THETA, -1.0], [*THETA, 1.0]])
+    np.testing.assert_allclose([out[-1.0], out[1.0]], expected, rtol=1e-5)
+
+
+def test_cpn_vmapped_logp_maps_over_the_response_column(cpn_onnxruntime):
+    """``make_jax_logp_funcs_from_onnx(params_only=False)`` feeds each row's choice.
+
+    The data argument is the ``(n, 1)`` response column; each row is
+    concatenated after the parameters, so rows that differ only in the choice
+    differ in the output and match onnxruntime on ``[theta..., choice]``.
+    """
+    logp, _, _ = make_jax_logp_funcs_from_onnx(
+        onnx.load(FIXTURES / "ddm_cpn.onnx"),
+        params_is_reg=[False] * 4,
+        params_only=False,
+    )
+    choices = jnp.array([[1.0], [-1.0], [1.0]])
+    out = np.asarray(logp(choices, *[jnp.array(x) for x in THETA]))
+
+    assert out.shape == (3,)
+    assert out[0] != out[1]
+    assert out[0] == out[2]
+    expected = cpn_onnxruntime([[*THETA, 1.0], [*THETA, -1.0], [*THETA, 1.0]])
+    np.testing.assert_allclose(out, expected, rtol=1e-5)
+
+
+def test_one_parameter_network_gets_a_one_dimensional_param_vector():
+    """A width-2 network ``[param, column]`` (one parameter) can be evaluated.
+
+    Each parameter is squeezed to a scalar, so the stacked parameter vector has
+    shape ``(1,)``; it must not be squeezed again to ``()``, which cannot be
+    concatenated with the data column (lnccbrown/HSSM#1439 review).
+    """
+    logp = make_jax_single_trial_logp_from_network_forward(lambda x: x)
+    np.testing.assert_allclose(logp(jnp.array([0.7]), jnp.array([2.0])), [2.0, 0.7])
+
+    # y = 10 * param + column, single-trial input of width 2
+    weights = onnx.helper.make_tensor("w", onnx.TensorProto.FLOAT, [2], [10.0, 1.0])
+    graph = onnx.helper.make_graph(
+        [
+            onnx.helper.make_node("Mul", ["x", "w"], ["m"]),
+            onnx.helper.make_node("ReduceSum", ["m"], ["y"], keepdims=1),
+        ],
+        "one_param",
+        [onnx.helper.make_tensor_value_info("x", onnx.TensorProto.FLOAT, [2])],
+        [onnx.helper.make_tensor_value_info("y", onnx.TensorProto.FLOAT, [1])],
+        initializer=[weights],
+    )
+    model = onnx.helper.make_model(
+        graph, opset_imports=[onnx.helper.make_opsetid("", 13)]
+    )
+    logp, _, _ = make_jax_logp_funcs_from_onnx(
+        model, params_is_reg=[False], params_only=False
+    )
+    out = logp(jnp.array([[1.0], [-1.0]]), jnp.array(2.0))
+    np.testing.assert_allclose(out, [21.0, 19.0])

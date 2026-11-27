@@ -22,8 +22,7 @@ The key difference from `hssm.hssm.HSSM` is the likelihood:
 """
 
 import logging
-import warnings
-from dataclasses import replace
+from copy import copy
 from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
@@ -151,7 +150,8 @@ class _RLSSM(HSSMBase):
         # ===== save/load serialisation =====
         self._init_args = self._store_init_args(locals(), kwargs)
 
-        # Validate config (ensures ssm_logp_func is present, etc.)
+        # Validation resolves response metadata; keep the caller's inputs unchanged.
+        model_config = copy(model_config)
         model_config.validate()
 
         # RLSSM reshapes rows into (n_participants, n_trials, ...) by position,
@@ -185,9 +185,6 @@ class _RLSSM(HSSMBase):
         # Infer panel structure and validate balance BEFORE calling super so any
         # error surfaces before the expensive model-build steps.
         n_participants, n_trials = validate_balanced_panel(data, participant_col)
-        if model_config.is_choice_only:
-            self._validate_choice_only_responses(data, model_config)
-
         # Store RL-specific state on self BEFORE super().__init__() so that
         # _make_model_distribution() (called from super) can access them.
         self.n_participants = n_participants
@@ -211,14 +208,8 @@ class _RLSSM(HSSMBase):
             extra_fields=list(model_config.extra_fields or []),
         )
 
-        # Build a new RLSSMConfig with the Op and backend injected, leaving
-        # the caller's object unmodified (dataclasses.replace creates a shallow
-        # copy with only the specified fields overridden).
-        #
-        # backend is hardcoded to "jax" because the entire RLSSM likelihood
-        # stack is JAX-only. See ssm_logp_func, make_rl_logp_op, and
-        #  _make_model_distribution for details.
-        model_config = replace(model_config, loglik=loglik_op, backend="jax")
+        model_config.loglik = loglik_op
+        model_config.backend = "jax"  # The RLSSM likelihood stack is JAX-only.
 
         # missing_data and deadline are guaranteed False, and
         # loglik_missing_data guaranteed None, at this point (guards above
@@ -268,59 +259,10 @@ class _RLSSM(HSSMBase):
             )
             self._initvals[name] = np.asarray(start, self._initvals[name].dtype)
 
-    @staticmethod
-    def _validate_choice_only_responses(
-        data: pd.DataFrame,
-        model_config: RLSSMConfig,
-    ) -> None:
-        """Validate response labels for RLSSM choice-only observed data."""
-        if not model_config.response:
-            return
-        response_col = model_config.response[0]
-        if response_col not in data.columns:
-            return
-        if model_config.choices is None:
-            return
-
-        responses = data[response_col]
-        numeric_responses = pd.to_numeric(responses, errors="coerce")
-        non_numeric = numeric_responses.isna() & ~responses.isna()
-        if non_numeric.any():
-            raise ValueError(
-                "Choice-only RLSSM response labels must be numeric. "
-                f"Invalid values: {responses[non_numeric].unique().tolist()}"
-            )
-
-        response_values = numeric_responses.to_numpy(dtype=float)
-        if not np.all(np.isfinite(response_values)):
-            raise ValueError("Choice-only RLSSM response labels must be finite.")
-
-        if not np.all(np.equal(response_values, np.round(response_values))):
-            raise ValueError("Choice-only RLSSM response labels must be integral.")
-
-        response_ints = response_values.astype(int)
-        unique_responses = np.unique(response_ints)
-        choices = np.asarray(model_config.choices, dtype=int)
-
-        if np.any(~np.isin(unique_responses, choices)):
-            invalid_responses = sorted(
-                unique_responses[~np.isin(unique_responses, choices)].tolist()
-            )
-            raise ValueError(
-                f"Invalid responses found in your dataset: {invalid_responses}. "
-                f"The model's choices are {list(model_config.choices)}."
-            )
-
-        missing_responses = sorted(np.setdiff1d(choices, unique_responses).tolist())
-        if missing_responses:
-            warnings.warn(
-                (
-                    f"You set choices to be {model_config.choices}, but "
-                    f"{missing_responses} are missing from your dataset."
-                ),
-                UserWarning,
-                stacklevel=2,
-            )
+    def _validate_fixed_vectors(self) -> None:
+        """Reject parameters fixed to a vector, which this class does not use."""
+        super()._validate_fixed_vectors()
+        self._reject_fixed_vectors()
 
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Build a pm.Distribution using the pre-built RL log-likelihood Op.
@@ -378,11 +320,6 @@ class _RLSSM(HSSMBase):
         if self.model_config.is_choice_only and isinstance(
             lapse, int | float | np.floating
         ):
-            if not 0 < float(lapse) <= 1:
-                raise ValueError(
-                    "Choice-only RLSSM scalar lapse probabilities must satisfy "
-                    "0 < lapse <= 1."
-                )
             # Base._check_lapse() supplies choice-only scalar lapse as
             # 1 / n_choices, while make_distribution() expects float lapse
             # values to already be log probabilities.
@@ -399,6 +336,7 @@ class _RLSSM(HSSMBase):
             is_choice_only=self.model_config.is_choice_only,
             # __init__ takes an RLSSMConfig, which is where ndt_edge_shift lives.
             ndt_edge_shift=cast("RLSSMConfig", self.model_config).ndt_edge_shift,
+            expected_obs_dim=self._obs_dim,
         )
 
 

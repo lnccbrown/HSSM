@@ -14,9 +14,10 @@ ParamSpec = Union[float, dict[str, Any], bmb.Prior, None]
 SupportedModels = Literal[
     "ddm",
     "ddm_sdv",
+    "ddm_st",
     "full_ddm",
+    "full_ddm_lan",
     "angle",
-    "angle_extended",
     "levy",
     "ornstein",
     "weibull",
@@ -29,8 +30,10 @@ SupportedModels = Literal[
     "lba2",
     "racing_diffusion_3",
     "poisson_race",
+    "circular_diffusion",
     "softmax_inv_temperature_2",
     "softmax_inv_temperature_3",
+    "softmax_inv_temperature_4",
 ]
 
 
@@ -56,6 +59,7 @@ class LoglikConfig(TypedDict):
     bounds: dict[str, tuple[float, float]]
     extra_fields: Optional[list[str]]
     ndt_edge_shift: NotRequired[NDTEdgeShift]
+    rv: NotRequired[Callable[..., np.ndarray]]
     # A JAX implementation of this same likelihood, f(data, *list_params) -> (N,),
     # for callers that need JAX (the RLSSM registry); plain HSSM uses `loglik`.
     jax_loglik: NotRequired[Callable[..., Any]]
@@ -64,12 +68,21 @@ class LoglikConfig(TypedDict):
 LoglikConfigs = dict[LoglikKind, LoglikConfig]
 
 
+class ResponseDomainSpec(TypedDict):
+    """Canonical metadata for one physical response column."""
+
+    kind: Literal["categorical", "continuous", "circular"]
+    values: NotRequired[tuple[int, ...]]
+    bounds: NotRequired[tuple[float, float]]
+
+
 class DefaultConfig(TypedDict):
     """Type for the value of DefaultConfig."""
 
     response: list[str]
     list_params: list[str]
-    choices: list[int]
+    choices: NotRequired[list[int]]
+    response_domains: NotRequired[dict[str, ResponseDomainSpec]]
     description: Optional[str]
     likelihoods: LoglikConfigs
 
