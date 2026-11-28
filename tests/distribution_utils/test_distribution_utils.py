@@ -83,6 +83,16 @@ def _floored_at(edge):
     return np.where(NDT_RT_GRID <= edge, FLOOR, 1.0)
 
 
+def test_make_hssm_rv_keeps_expected_obs_dim_fifth():
+    """``expected_obs_dim`` is still the fifth positional argument, as on main."""
+    params = ["v", "a", "z", "t"]
+    distribution_utils.make_hssm_rv("ddm", params, None, False, 2)
+    with pytest.raises(
+        ValueError, match="observation width 2.*configured response width 3"
+    ):
+        distribution_utils.make_hssm_rv("ddm", params, None, False, 3)
+
+
 def test_make_hssm_rv():
     """Check that generated HSSM random variables sample deterministically."""
     params = ["v", "a", "z", "t"]
@@ -197,6 +207,97 @@ def test_lapse_distribution():
     np.testing.assert_array_equal(random_sample_a, random_sample_b)
 
 
+def test_make_hssm_rv_simulates_fixed_vector_params():
+    """``rng_fn`` simulates a fixed-vector parameter row by row (#1453).
+
+    The RV receives Bambi's scalar ``0.0`` placeholder for such a parameter. A
+    DDM response time is ``t`` plus a positive decision time, so every rt exceeds
+    its own row's ``t`` only if the vector reached the simulator in row order.
+    """
+    t_fixed = np.array([0.2, 1.5, 0.2, 1.5, 0.2, 1.5])
+    rv = distribution_utils.make_hssm_rv(
+        "ddm", ["v", "a", "z", "t"], fixed_vector_params={"t": t_fixed}
+    )
+    rng = np.random.default_rng(42)
+    placeholder = np.zeros((1, 1, 1))
+
+    # Posterior predictive: Bambi passes (chain, draw, obs) or (chain, draw, 1)
+    # arrays, and the constant placeholder as (1, 1, 1).
+    v = np.full((1, 3, t_fixed.size), 0.5)
+    a = np.full((1, 3, 1), 1.0)
+    z = np.full((1, 1, 1), 0.5)
+    sims = rv.rng_fn(rng, v, a, z, placeholder, None)
+    assert sims.shape == (1, 3, t_fixed.size, 2)
+    assert np.all(sims[..., 0] > t_fixed)
+
+    # Prior predictive: scalar parameters and one draw per row.
+    sims = rv.rng_fn(rng, 0.5, 1.0, 0.5, 0.0, (t_fixed.size,))
+    assert sims.shape == (t_fixed.size, 2)
+    assert np.all(sims[:, 0] > t_fixed)
+
+    # Rows other than the model's have no value of the vector.
+    with pytest.raises(ValueError, match="fixed to a vector"):
+        rv.rng_fn(rng, np.full((1, 3, 4), 0.5), a, z, placeholder, None)
+
+
+def test_make_hssm_rv_simulates_fixed_vector_p_outlier():
+    """A fixed-vector ``p_outlier`` gives each row its own lapse probability (#1453).
+
+    Rows with ``p_outlier=1`` are all lapses, drawn here from Uniform(10, 20); rows
+    with ``p_outlier=0`` are DDM draws, whose response times stay far below 10.
+    """
+    p_fixed = np.array([0.0, 1.0, 0.0, 1.0, 0.0, 1.0])
+    rv = distribution_utils.make_hssm_rv(
+        "ddm",
+        ["v", "a", "z", "t"],
+        lapse=bmb.Prior("Uniform", lower=10.0, upper=20.0),
+        fixed_vector_params={"p_outlier": p_fixed},
+    )
+    rng = np.random.default_rng(42)
+    v = np.full((1, 3, p_fixed.size), 0.5)
+    a = np.full((1, 3, 1), 1.0)
+    z = np.full((1, 1, 1), 0.5)
+    t = np.full((1, 1, 1), 0.3)
+    sims = rv.rng_fn(rng, v, a, z, t, np.zeros((1, 1, 1)), None)
+    assert sims.shape == (1, 3, p_fixed.size, 2)
+    lapsed = p_fixed == 1.0
+    assert np.all(sims[..., lapsed, 0] >= 10.0)
+    assert np.all(sims[..., ~lapsed, 0] < 10.0)
+
+
+def test_make_hssm_rv_reports_other_mismatches_as_they_are():
+    """A shape mismatch between other parameters is not blamed on the fixed vector.
+
+    Only when the other parameters broadcast together does the error point at
+    the fixed vector; otherwise numpy's own broadcasting error is raised.
+    """
+    t_fixed = np.array([0.2, 1.5, 0.2, 1.5, 0.2, 1.5])
+    rv = distribution_utils.make_hssm_rv(
+        "ddm", ["v", "a", "z", "t"], fixed_vector_params={"t": t_fixed}
+    )
+    rng = np.random.default_rng(42)
+    v = np.full((1, 3, 5), 0.5)
+    a = np.full((1, 3, 4), 1.0)
+    z = np.full((1, 1, 1), 0.5)
+    with pytest.raises(ValueError, match="broadcast") as excinfo:
+        rv.rng_fn(rng, v, a, z, np.zeros((1, 1, 1)), None)
+    assert "fixed to a vector" not in str(excinfo.value)
+
+
+@pytest.mark.parametrize("as_instance", [False, True])
+def test_make_distribution_warns_fixed_vector_with_random_variable(caplog, as_instance):
+    """A ready-made RandomVariable cannot simulate with a fixed vector (#1453)."""
+    rv_class = distribution_utils.make_hssm_rv("ddm", ["v", "a", "z", "t"])
+    with caplog.at_level("WARNING", logger="hssm"):
+        make_distribution(
+            rv=rv_class() if as_instance else rv_class,
+            loglik=logp_ddm,
+            list_params=["v", "a", "z", "t"],
+            fixed_vector_params={"t": np.array([0.2, 1.5])},
+        )
+    assert "rng_fn receives the placeholder 0.0" in caplog.text
+
+
 def test_apply_lapse_model_rejects_numeric_lapse_distribution():
     """Numeric choice-only lapse values cannot simulate RT lapse samples."""
     sims_out = np.asarray([[0.2, 0.0], [0.3, 1.0]], dtype=float)
@@ -267,6 +368,7 @@ def test_make_distribution_forwards_choice_only_to_generated_rv(monkeypatch, rv)
         list_params,
         lapse=None,
         is_choice_only=False,
+        fixed_vector_params=None,
         expected_obs_dim=None,
     ):
         captured["is_choice_only"] = is_choice_only

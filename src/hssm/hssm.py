@@ -332,6 +332,18 @@ class HSSM(HSSMBase):
             **kwargs,
         )
 
+    def _validate_fixed_vectors(self) -> None:
+        """Also reject fixed vectors when `loglik` is a `pm.Distribution` class.
+
+        Such a class is used as given (see `_make_model_distribution`), so its
+        logp and its RV receive Bambi's scalar 0.0 placeholder, not the vector.
+        """
+        super()._validate_fixed_vectors()
+        if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
+            self._reject_fixed_vectors(
+                context="when `loglik` is a `pm.Distribution` class"
+            )
+
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Make a pm.Distribution for the model."""
         ### Logic for different types of likelihoods:
