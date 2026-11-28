@@ -255,8 +255,8 @@ def make_hssm_rv(
     list_params: list[str],
     lapse: bmb.Prior | float | None = None,
     is_choice_only: bool = False,
-    fixed_vector_params: dict[str, np.ndarray] | None = None,
     expected_obs_dim: int | None = None,
+    fixed_vector_params: dict[str, np.ndarray] | None = None,
 ) -> type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
 
@@ -270,13 +270,13 @@ def make_hssm_rv(
         A bmb.Prior object representing the lapse distribution.
     is_choice_only : bool
         Whether the model is a choice-only model.
+    expected_obs_dim : int, optional
+        Configured number of physical response columns. This is checked against
+        a real simulator and sets the support width of a likelihood-only model.
     fixed_vector_params : optional
         A dictionary mapping parameter names to their fixed ``np.ndarray``
         values, one per row of the data. ``rng_fn`` simulates with these vectors
         in place of the scalar placeholders it receives for these parameters.
-    expected_obs_dim : int, optional
-        Configured number of physical response columns. This is checked against
-        a real simulator and sets the support width of a likelihood-only model.
 
     Returns
     -------
