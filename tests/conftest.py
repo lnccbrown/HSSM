@@ -13,10 +13,12 @@ import arviz as az
 import jax
 import matplotlib.pyplot as plt
 import numpy as np
+import onnxruntime
 import pandas as pd
 import pytest
 import xarray as xr
 from ssms.basic_simulators.simulator import simulator
+from ssms.config import ModelConfigBuilder, get_model_registry, register_model_config
 
 import hssm
 
@@ -187,6 +189,47 @@ def fixture_path():
     test file between ``tests/`` subdirectories does not break it.
     """
     return FIXTURES
+
+
+@pytest.fixture(scope="session")
+def cpn_onnxruntime():
+    """Return an onnxruntime oracle for the ``ddm_cpn.onnx`` fixture.
+
+    The returned function evaluates the choice-probability network directly on
+    ``(n, 5)`` rows ``[v, a, z, t, choice]`` (its contract since #1324) and
+    returns the ``n`` log-probabilities, independently of HSSM's JAX/PyTensor
+    wrappers, so tests can pin the input layout those wrappers build.
+    """
+    session = onnxruntime.InferenceSession(str(FIXTURES / "ddm_cpn.onnx"))
+    name = session.get_inputs()[0].name
+
+    def evaluate(rows: np.ndarray) -> np.ndarray:
+        rows = np.asarray(rows, dtype=np.float32)
+        return np.array(
+            [session.run(None, {name: row[None, :]})[0].item() for row in rows]
+        )
+
+    return evaluate
+
+
+@pytest.fixture
+def registered_ssms_model():
+    """Register a DDM copy in ssm-simulators' model registry; return its config.
+
+    The model is registered after import, so it is in the registry but not in
+    the ``ssms.config.model_config`` snapshot, like a user's own model (#1467).
+    Its bounds are narrower than the DDM's so tests can tell them apart.
+    """
+    name = "ddm_registered_1467"
+    config = ModelConfigBuilder.from_model(
+        "ddm",
+        name=name,
+        param_bounds=[[-2.0, 0.5, 0.2, 0.1], [2.0, 2.0, 0.8, 1.5]],
+    )
+    register_model_config(name, config)
+    yield config
+    # ssms has no public way to unregister a model.
+    get_model_registry()._configs.pop(name, None)
 
 
 @pytest.fixture

@@ -1,0 +1,79 @@
+/* HSSM ecosystem docs theme: notebook (mkdocs-jupyter) styles.
+   VENDORED COPY — source of truth: https://github.com/lnccbrown/HSSMSpine
+   (docs-brand/notebooks.css). Edit there and re-sync; local edits will be
+   flagged as drift. Loaded after styles/tokens.css and styles/extra.css by
+   every INHERIT base variant that includes "notebooks"
+   (overrides/.mkdocs-brand*-notebooks*.yml); sites opt in via brand_styles. */
+
+/* ── Notebooks (mkdocs-jupyter) ───────────────────────────────────────── */
+/* mkdocs-jupyter inlines a Jupyter stylesheet that defines --jp-* on
+   .jupyter-wrapper, separately per scheme. body[data-md-color-scheme]
+   outranks both, and the --hssm-* tokens already follow the scheme. */
+body[data-md-color-scheme] .jupyter-wrapper {
+  --jp-code-font-family: var(--hssm-font-mono);
+  --jp-content-font-family: var(--hssm-font-sans);
+  --jp-ui-font-family: var(--hssm-font-sans);
+  --jp-content-font-color1: var(--hssm-ink);
+  --jp-content-font-color2: var(--hssm-muted);
+  --jp-layout-color0: var(--hssm-surface);
+  --jp-cell-editor-background: var(--hssm-code-surface);
+  --jp-cell-editor-active-background: var(--hssm-code-surface);
+  --jp-cell-editor-border-color: var(--hssm-rule);
+  --jp-mirror-editor-keyword-color: var(--hssm-code-keyword);
+  --jp-mirror-editor-meta-color: var(--hssm-code-keyword);
+  --jp-mirror-editor-string-color: var(--hssm-code-string);
+  --jp-mirror-editor-string-2-color: var(--hssm-code-string);
+  --jp-mirror-editor-comment-color: var(--hssm-code-comment);
+  --jp-mirror-editor-def-color: var(--hssm-code-name);
+  --jp-mirror-editor-builtin-color: var(--hssm-code-name);
+  --jp-mirror-editor-atom-color: var(--hssm-code-name);
+  --jp-mirror-editor-number-color: var(--hssm-code-name);
+  --jp-mirror-editor-variable-color: var(--hssm-code-plain);
+  --jp-mirror-editor-variable-2-color: var(--hssm-code-plain);
+  --jp-mirror-editor-variable-3-color: var(--hssm-code-plain);
+  --jp-mirror-editor-property-color: var(--hssm-code-plain);
+  --jp-mirror-editor-operator-color: var(--hssm-code-plain);
+  --jp-mirror-editor-punctuation-color: var(--hssm-code-plain);
+  --jp-mirror-editor-bracket-color: var(--hssm-code-plain);
+}
+
+body[data-md-color-scheme] .jupyter-wrapper .jp-InputArea-editor {
+  border-radius: var(--hssm-radius-card);
+}
+
+/* pandas DataFrame output: wash stripes and rule hairlines in both schemes. */
+body[data-md-color-scheme] .jupyter-wrapper table.dataframe {
+  color: var(--hssm-ink);
+}
+
+body[data-md-color-scheme] .jupyter-wrapper table.dataframe thead {
+  border-bottom: 1px solid var(--hssm-rule);
+}
+
+body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:nth-child(odd) {
+  background: var(--hssm-wash);
+}
+
+body[data-md-color-scheme] .jupyter-wrapper table.dataframe tbody tr:hover {
+  background: var(--md-accent-fg-color--transparent);
+}
+
+/* docs-code for notebook text output (Jupyter sets these with !important). */
+.jp-OutputArea-executeResult pre,
+.jp-xr-text-repr-fallback pre,
+.jupyter-wrapper .jp-RenderedText pre,
+div .jp-RenderedText {
+  font-size: var(--hssm-docs-code-size) !important;
+}
+
+.xr-sections {
+  font-size: var(--hssm-docs-code-size);
+}
+
+/* Notebook figures render on paper; on navy they sit in a figure card. */
+[data-md-color-scheme="slate"] .jp-RenderedImage img,
+[data-md-color-scheme="slate"] .jp-RenderedSVG svg {
+  background: var(--hssm-paper);
+  border-radius: var(--hssm-radius-card);
+  padding: 0.4rem;
+}

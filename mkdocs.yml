@@ -1,3 +1,7 @@
+# Theme, palette, fonts, logo and stylesheets come from the shared brand base
+# (vendored from HSSMSpine docs-brand/; do not redefine them here).
+INHERIT: docs/overrides/.mkdocs-brand-notebooks.yml
+
 site_name: HSSM
 site_url: https://lnccbrown.github.io/HSSM/
 repo_name: lnccbrown/HSSM
@@ -15,6 +19,7 @@ not_in_nav: |
   tutorials/attentional_ddm.py
   tutorials/centered_vs_noncentered_basic_logic.py
   tutorials/choice_only_models.py
+  tutorials/circular_diffusion.py
   tutorials/main_tutorial.py
   tutorials/main_tutorial_scenic_route.py
   tutorials/link_functions.py
@@ -44,6 +49,7 @@ nav:
       - Model walkthroughs:
           - Hierarchical DDM regressions: tutorials/ddm_hierarchical_tutorial.ipynb
           - Choice-only models: tutorials/choice_only_models.ipynb
+          - Circular diffusion: tutorials/circular_diffusion.ipynb
           - Poisson race models: tutorials/poisson_race.ipynb
           - HMM with DDM emissions: tutorials/hmm_ddm_regime_switching.ipynb
           - Attentional DDM (aDDM): tutorials/attentional_ddm.ipynb
@@ -105,7 +111,7 @@ nav:
           - hssm.HSSM: api/hssm.md
           - hssm.aDDM and hssm.aDDMConfig: api/addm.md
           - hssm.Param: api/param.md
-          - hssm.ModelConfig: api/model_config.md
+          - Model configuration and response domains: api/model_config.md
           - hssm.Prior: api/prior.md
           - hssm.Link: api/link.md
           - hssm.rl: api/rl.md
@@ -150,6 +156,7 @@ plugins:
         - tutorials/attentional_ddm.py
         - tutorials/centered_vs_noncentered_basic_logic.py
         - tutorials/choice_only_models.py
+        - tutorials/circular_diffusion.py
         - tutorials/main_tutorial.py
         - tutorials/main_tutorial_scenic_route.py
         - tutorials/link_functions.py
@@ -172,6 +179,7 @@ plugins:
         - tutorials/hsgp_regression.ipynb
         - tutorials/ddm_hierarchical_tutorial.ipynb
         - tutorials/choice_only_models.ipynb
+        - tutorials/circular_diffusion.ipynb
         - tutorials/choice_only_rlssm.ipynb
         - tutorials/variational_inference.ipynb
         - tutorials/centered_vs_noncentered_basic_logic.ipynb
@@ -244,9 +252,6 @@ plugins:
             filters:
               - "!^_"
 theme:
-  logo: images/navlogo.png
-  favicon: images/navlogo.png
-  name: material
   custom_dir: docs/overrides
   features:
     - navigation.tracking
@@ -262,30 +267,6 @@ theme:
     - content.action.edit
     - header.autohide
     - announce.dismiss
-  palette:
-    # Palette toggle for automatic mode
-    - media: "(prefers-color-scheme)"
-      scheme: ocean
-      primary: custom
-      toggle:
-        icon: material/brightness-auto
-        name: Switch to light mode
-
-    # Palette toggle for light mode
-    - media: "(prefers-color-scheme: light)"
-      scheme: ocean
-      primary: custom
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: custom
-      toggle:
-        icon: material/brightness-4
-        name: Switch to system preference
 
 extra:
   release_announcement: true
@@ -295,9 +276,6 @@ extra:
     - icon: material/forum
       link: https://github.com/lnccbrown/HSSM/discussions
   homepage: "https://lnccbrown.github.io/HSSM/"
-
-extra_css:
-  - "styles/extra.css"
 
 markdown_extensions:
   - toc:

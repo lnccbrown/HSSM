@@ -4,7 +4,16 @@ import numpy as np
 import pandas as pd
 from numpy.typing import ArrayLike
 from ssms.basic_simulators.simulator import simulator
-from ssms.config import model_config
+from ssms.config import get_model_registry
+from ssms.hssm_support import decorate_atomic_simulator
+
+
+@decorate_atomic_simulator("circular_diffusion", choices=[], obs_dim=2)
+def _sample_circular_diffusion(theta, random_state, n_replicas):
+    """Draw uncensored RT/angle pairs for the model's predictive distribution."""
+    from ssms.basic_simulators.circular_diffusion import sample_circular_diffusion
+
+    return sample_circular_diffusion(theta, random_state, n_replicas)
 
 
 def simulate_data(
@@ -20,10 +29,9 @@ def simulate_data(
     Parameters
     ----------
     model
-        A model name that must be supported in `ssm_simulators`. For a detailed list of
-        supported models, please see all fields in the `model_config` dict
-        [here](https://github.com/AlexanderFengler/ssm-simulators/blob
-        /e09eb2528d885c7b3340516597849fff4d9a5bf8/ssms/config/config.py#L6)
+        A model name that must be known to `ssm_simulators`: one of its built-in
+        models or a model registered with `ssms.config.register_model_config`.
+        `ssms.config.get_model_registry().list_models()` lists them.
     theta
         Parameters of the process. Can be supplied as dictionary with parameter names as
         key and np.array or float as values. Can also be supplied as a list or 1D-array,
@@ -49,14 +57,28 @@ def simulate_data(
     np.ndarray | pd.DataFrame
         An array or DataFrame with simulated data.
     """
-    if model not in model_config:
-        raise ValueError(f"model must be one of {list(model_config.keys())}.")
+    # The registry, not the `ssms.config.model_config` snapshot taken at import,
+    # also knows models registered with `register_model_config`.
+    registry = get_model_registry()
+    if not registry.has_model(model):
+        raise ValueError(f"model must be one of {registry.list_models()}.")
 
     # The analytical Poisson-race likelihood assumes exact race finishing times.
     # ssms defaults to smooth_unif=True; override to False unless the caller
     # explicitly requests otherwise.
     if model == "poisson_race" and "smooth_unif" not in kwargs:
         kwargs["smooth_unif"] = False
+
+    if model == "circular_diffusion" and isinstance(theta, dict):
+        # HSSM names the Cartesian components v_x/v_y; ssms uses vx/vy.
+        theta = theta.copy()
+        for public, internal in (("v_x", "vx"), ("v_y", "vy")):
+            if public in theta:
+                if internal in theta:
+                    raise ValueError(
+                        f"Specify only one of {public!r} and {internal!r}."
+                    )
+                theta[internal] = theta.pop(public)
 
     sims = simulator(
         theta,

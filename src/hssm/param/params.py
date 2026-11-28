@@ -8,10 +8,11 @@ processing the parameters and applying user specifications.
 from __future__ import annotations
 
 from collections import UserDict
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import bambi as bmb
 import numpy as np
+from formulae import model_description
 
 from .param import Param
 from .regression_param import RegressionParam
@@ -130,7 +131,8 @@ class Params(UserDict[str, Param]):
             # Fixed-vector parameters: tell Bambi this is a scalar constant
             # (0.0). The actual vector substitution happens inside
             # HSSMDistribution.logp(), which replaces the scalar with the
-            # real vector at the correct position in the parameter list.
+            # real vector at the correct position in the parameter list, and
+            # in the RV's rng_fn for simulation (see make_hssm_rv).
             if isinstance(prior, np.ndarray):
                 priors[param_name] = 0.0
             elif param.is_parent:
@@ -292,6 +294,7 @@ def make_params(
             param = make_param_from_defaults(model, name)
 
         if isinstance(param, RegressionParam):
+            _check_formula_columns(param, model)
             design_matrices = param._prepare_formula_terms(
                 model.data, model.additional_namespace
             )
@@ -301,6 +304,25 @@ def make_params(
         param.process_prior()
         params[name] = param
     return params
+
+
+def _check_formula_columns(param: RegressionParam, model: HSSM) -> None:
+    """Reject a formula that uses a data column named like a model parameter.
+
+    Such a column clashes with the parameter when the PyMC model is built: it fails
+    with a misleading "Variable name ... already exists" error, or builds without
+    any message, depending on the other regressions in the model.
+    """
+    rhs = cast("str", param.formula).split("~")[-1]
+    used = model_description(f"response ~ {rhs}").var_names
+    clashes = sorted(used & set(model.list_params or []) & set(model.data.columns))
+    if clashes:
+        example = f"data.rename(columns={{{clashes[0]!r}: {clashes[0] + '_data'!r}}})"
+        raise ValueError(
+            f"The formula for '{param.name}' uses the data column(s) {clashes}, which "
+            f"have the name of a parameter of the '{model.model_name}' model. Rename "
+            f"the column(s) in `data`, for example `{example}`."
+        )
 
 
 def make_param_from_user_param(model: HSSM, name: str, user_param: UserParam) -> Param:
