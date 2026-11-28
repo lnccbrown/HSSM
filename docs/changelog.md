@@ -104,6 +104,8 @@ This version includes the following changes:
 
 50. **Documentation: a circular diffusion walkthrough** (#1522). *Learn → Model walkthroughs → Circular diffusion* simulates 250 trials with a response time and a reported direction, fits both drift components, the radius and the non-decision time with NUTS, and reads the two-panel posterior predictive check, including what two marginal panels cannot show. The model reference links to it.
 
+51. **Choice-probability networks (CPNs) receive the observed choice as their last input** (closes #1324). Missing-RT rows (`rt == -999.0`, no deadline) are now scored by the CPN on `[θ…, extra_fields…, choice] -> log P(choice | θ)`, the same layout the omission network already uses with the deadline (`[θ…, deadline]`), so both networks have input width `n_params + 1`. HSSM passes each missing row's `response` exactly as coded in `choices`, and missing rows whose response is not a valid choice now raise a clear `ValueError`. The lapse term on these rows is the `1 / n_choices` of item 17. The test fixture `tests/fixtures/ddm_cpn.onnx` was regenerated from the DDM LAN fixture with the choice as its last input column; its provenance (source LAN, derivation settings, training summary) is recorded in `tests/fixtures/ddm_cpn.provenance.json`.
+
 #### Breaking changes that require migration:
 
 1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.
@@ -113,6 +115,28 @@ This version includes the following changes:
 3. **`gamma_drift` and `gamma_drift_angle`: the parameter `shape` is now `k`** (#1456). Write `k=` (or `"name": "k"` in `include`, or the key `k` in the `theta` of `hssm.simulate_data`) where 0.5.0 code wrote `shape`.
 
 4. **`angle` fits change, and `angle_extended` is a deprecated name** (#1529). `model="angle"` now uses the wider-range network with `v` in (-6, 6). Write `model="angle"` where 0.5.0 code wrote `model="angle_extended"`. To keep the 2023 network, pass `loglik="angle.onnx"` and `model_config={"bounds": {"v": (-3.0, 3.0)}}`.
+
+5. **CPN input contract is `[θ…, choice]`** (#1324). Previously a CPN was called with the
+   parameters only (input width `n_params`) and had to encode, by a convention invisible to
+   HSSM, *which* choice's probability it returned. A network trained to that convention is now
+   rejected when the model is built, with a message pointing to
+   [#1324](https://github.com/lnccbrown/HSSM/issues/1324):
+
+   ```text
+   CPN artifacts take the observed choice as their last input since HSSM 0.5.1
+   (input width n_params + 1 = 5); this network has input width 4.
+   ```
+
+   The new contract works for any choice coding and any number of choices, and removes the
+   hidden category: the network returns the probability of the choice it is handed. To migrate,
+   retrain the CPN on a corpus whose last input column is the choice (the `[θ…, choice]` rows,
+   labelled with `P(choice | θ)`); LANfactory's trainers export the matching single-trial ONNX,
+   and its `derive-aux` command (LANfactory 0.10.0 and later) derives such a corpus from a trained
+   LAN. The `hssm.HSSM(...)` API always passes
+   the choice; when assembling likelihoods yourself with
+   `hssm.distribution_utils.assemble_callables(..., params_only=True)`, a params-only callable is
+   still accepted and is then invoked as `f(None, *params)`. No CPN artifact was ever published on
+   the `franklab/HSSM` Hub repository, so only user-trained networks are affected.
 
 #### Dependency changes:
 

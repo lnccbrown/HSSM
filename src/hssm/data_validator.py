@@ -148,6 +148,38 @@ class DataValidatorMixin:
                     f"bounds {bounds}."
                 )
 
+        if (
+            self.missing_data
+            and not self.deadline
+            and not self.is_choice_only
+            and self.choices is not None
+        ):
+            # Missing-RT rows (no deadline) still carry an observed choice: the
+            # choice-probability network receives it as its last input, so it
+            # must be a valid response code (lnccbrown/HSSM#1324). It is the second
+            # response column, whatever its name (the CPN gets data column 1).
+            response_column = self.response[1]
+            missing_responses_col = self.data.loc[
+                self.data["rt"] == -999.0, response_column
+            ]
+            is_invalid = ~missing_responses_col.isin(self.choices)
+            if is_invalid.any():
+                invalid = [
+                    "NaN"
+                    if pd.isna(value)
+                    else (value.item() if isinstance(value, np.generic) else value)
+                    for value in pd.unique(missing_responses_col[is_invalid])
+                ]
+                raise ValueError(
+                    "Missing-RT rows (rt == -999.0) must carry the observed "
+                    f"response: HSSM passes each missing row's `{response_column}` "
+                    "to the choice-probability network (CPN) as its last input. "
+                    "Found "
+                    f"invalid responses on missing-RT rows: {invalid}; valid "
+                    f"choices are {list(self.choices)}. See "
+                    "https://github.com/lnccbrown/HSSM/issues/1324."
+                )
+
     # AF-TODO: We probably want to incorporate some of the
     # remaining check on missing data
     # which are coming AFTER the data validation
