@@ -15,6 +15,7 @@ SupportedModels = Literal[
     "ddm",
     "ddm_sdv",
     "ddm_st",
+    "ddm_normal_st",
     "full_ddm",
     "full_ddm_lan",
     "angle",
