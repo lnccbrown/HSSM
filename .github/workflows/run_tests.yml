@@ -49,7 +49,9 @@ jobs:
 
       - name: Run fast tests
         if: ${{ !inputs.run_slow_tests }}
-        run: uv run pytest -m "not slow" $HSSM_TEST_ARGS
+        # One worker per logical core (pytest-xdist). loadscope keeps a module's
+        # tests on one worker, so module-scoped fixtures are built once.
+        run: uv run pytest -m "not slow" -n logical --dist loadscope $HSSM_TEST_ARGS
 
       - name: Run slow tests
         if: ${{ inputs.run_slow_tests }}

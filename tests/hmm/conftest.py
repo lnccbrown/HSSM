@@ -20,6 +20,54 @@ TUTORIAL_TRUE_PARAMS = {
 TUTORIAL_P = np.array([[0.95, 0.05], [0.10, 0.90]])
 TUTORIAL_PI0 = np.array([0.8, 0.2])
 
+# PyTensor's own mode and C++ compiler, read before `_python_vm` overrides them.
+_COMPILED_FLAGS = {"mode": pytensor.config.mode, "cxx": pytensor.config.cxx}
+
+
+@pytest.fixture(autouse=True)
+def _python_vm(request):
+    """Run the fast tests on PyTensor's Python VM instead of compiling them.
+
+    PyTensor's default mode compiles each function with Numba.  With a cold
+    Numba cache (as in CI) that takes seconds for a logp through the forward
+    ``scan`` and longer for its gradient, and it is paid again for every graph
+    that differs at all, even in one constant; nearly every test here builds
+    its own model.  Most tests check values, shapes and errors rather than the
+    compiled code, so they run on the Python VM, which evaluates the same graph
+    without compiling it: ``mode="FAST_COMPILE"`` selects the VM and ``cxx=""``
+    keeps the inner function of the ``scan`` from being compiled to C instead.
+
+    A test of the compiled function itself opts back in with
+    :func:`compiled_mode`.  Slow tests keep PyTensor's own mode.
+    """
+    if request.node.get_closest_marker("slow"):
+        yield
+        return
+    with pytensor.config.change_flags(mode="FAST_COMPILE", cxx=""):
+        yield
+
+
+def compiled_mode():
+    """Return a context manager that restores PyTensor's own compile mode.
+
+    For a test whose subject is the compiled function a sampler runs, such as
+    its gradient being finite at the start.  Every distinct graph compiled
+    inside costs seconds, so compile one function per failure mode.
+    """
+    return pytensor.config.change_flags(**_COMPILED_FLAGS)
+
+
+@pytest.fixture(params=["python_vm", pytest.param("compiled", marks=pytest.mark.slow)])
+def also_compiled_when_slow(request):
+    """Run a test on the Python VM, and once more compiled in the slow suite.
+
+    For a logp or gradient check that is too expensive to compile on every pull
+    request.  The fast copy evaluates it on the Python VM like the other fast
+    tests; the copy marked ``slow``, which ``_python_vm`` leaves alone, compiles
+    it in PyTensor's own mode.
+    """
+    return request.param
+
 
 def simulate_hmm_data(model, n_trials, regime_params, P, pi0, seed=42):
     """Simulate one participant from a regime-switching SSM (tutorial logic)."""
