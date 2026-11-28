@@ -56,7 +56,7 @@ def test_builtin_model_matrix_matches_defaults() -> None:
             tuple(config["likelihoods"]),
             runtime_default.loglik_kind,
             tuple(config["list_params"]),
-            tuple(str(choice) for choice in config["choices"]),
+            tuple(str(choice) for choice in (config.get("choices") or ())),
         )
 
 

@@ -611,6 +611,9 @@ def plot_quantile_probability(
         If `groups` is provided, returns a list of FacetGrid objects, one for each
         group.
     """
+    if model.n_choices is None:
+        raise ValueError("Quantile-probability plots require categorical responses.")
+
     # TODO: Should provide a few more safeguards to ensure
     # 1. quantile_by dimension is a column(s) of strings
     # 2. there is no overlap between quantile_by and extra_dims

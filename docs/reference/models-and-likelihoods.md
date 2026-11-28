@@ -28,9 +28,34 @@ model.
 | `lba2` | `analytical` | `analytical` | `A`, `b`, `v0`, `v1` | `0`, `1` |
 | `racing_diffusion_3` | `analytical` | `analytical` | `v0`, `v1`, `v2`, `A`, `b`, `t` | `0`, `1`, `2` |
 | `poisson_race` | `analytical` | `analytical` | `r1`, `r2`, `k1`, `k2`, `t` | `-1`, `1` |
+| `circular_diffusion` | `analytical` | `analytical` | `v_x`, `v_y`, `a`, `t` | Angle in radians, [−π, π) |
 | `softmax_inv_temperature_2` | `analytical` | `analytical` | `beta`, `logit1` | `-1`, `1` |
 | `softmax_inv_temperature_3` | `analytical` | `analytical` | `beta`, `logit1`, `logit2` | `0`, `1`, `2` |
 | `softmax_inv_temperature_4` | `analytical` | `analytical` | `beta`, `logit1`, `logit2`, `logit3` | `0`, `1`, `2`, `3` |
+
+### Circular reports
+
+The [fixed-boundary circular diffusion model](https://doi.org/10.1037/rev0000023)
+starts at the center of a disk of radius `a` with isotropic unit diffusion
+and Cartesian drift `(v_x, v_y)`. Boundary contact determines the reported
+angle. Decision time plus nondecision time `t` gives the RT. Supply ordinary
+`rt` and `response` columns; the latter contains a continuous angle, not a
+choice code. The native analytical likelihood is differentiable and requires
+neither a likelihood network nor an external research package.
+
+```python
+hssm.set_floatX("float64")
+model = hssm.HSSM(data=data, model="circular_diffusion", p_outlier=None)
+fit = model.sample(sampler="pymc", random_seed=42)
+predictions = model.sample_posterior_predictive(dt=fit, inplace=False, random_seed=43)
+```
+
+Keep lapse mixtures off. Use `plot_predictive` for pooled RTs, and use the
+raw predictive angles for directional summaries. Quantile-probability plots
+and model cartoons require categorical choices. The simulator and likelihood use
+a fixed radius, with no across-trial variability in drift or nondecision time
+unless modeled explicitly through covariates. This is a planar model with a
+single exit angle, not a spherical diffusion model.
 
 ## Specialized model families
 

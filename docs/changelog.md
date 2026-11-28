@@ -98,6 +98,8 @@ This version includes the following changes:
 
 47. **`ddm_st`: the DDM with uniform trial-to-trial variability in non-decision time** (#1346, plan in #1394; by @EItanm1999). `model="ddm_st"` fits `v`, `a`, `z`, `t` and `st` with the network `ddm_st.onnx`. Each trial's non-decision time is drawn from `Uniform(t - st, t + st)`, so `st` is the half-width: half of the `st` of `full_ddm` and of HDDM, which is the full width. The bounds are the network's training box, narrower than those of `ddm`: `t` starts at 0.25 s, `z` lies in (0.3, 0.7) and `st` reaches 0.35. The network was trained on data without lapses; its [model card](https://huggingface.co/franklab/HSSM/tree/main/lan/ddm_st) reports the recovery results and the caveats.
 
+48. **`circular_diffusion`: response times with a continuously reported direction** (#1518; likelihood in #1516, response domains in #1266). `hssm.HSSM(data, model="circular_diffusion", p_outlier=None)` fits the fixed-boundary circular diffusion model ([Smith, 2016](https://doi.org/10.1037/rev0000023)). Evidence starts at the centre of a disk of radius `a` and drifts with `(v_x, v_y)`; the point where it first reaches the circle gives the reported angle, and the time taken plus `t` gives the response time. The `response` column holds that angle in radians on [−π, π), not a choice code. The likelihood is analytical and differentiable, so the model samples with NUTS and needs no likelihood network. `hssm.simulate_data("circular_diffusion", ...)` and prior and posterior predictive sampling work by name. Lapses are not available for a circular response: pass `p_outlier=None`, the default raises a `ValueError`. `plot_quantile_probability` and `plot_model_cartoon` need categorical choices and raise for this model. The simulator is part of ssm-simulators 0.17.0.
+
 #### Breaking changes that require migration:
 
 1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.
@@ -110,7 +112,7 @@ This version includes the following changes:
 
 #### Dependency changes:
 
-1. **`ssm-simulators` floor raised to `>=0.17.0`**. 0.16.0 brought the `softmax_inv_temperature_{2,3,4}` simulators (lnccbrown/ssm-simulators#421), which replace HSSM's own adapter (#1416); 0.17.0 calls the gamma shape of `gamma_drift` and `gamma_drift_angle` `k` (#1456) and gives `angle` the `v` range (-6, 6) of its network (#1529).
+1. **`ssm-simulators` floor raised to `>=0.17.0`**. 0.16.0 brought the `softmax_inv_temperature_{2,3,4}` simulators (lnccbrown/ssm-simulators#421), which replace HSSM's own adapter (#1416); 0.17.0 calls the gamma shape of `gamma_drift` and `gamma_drift_angle` `k` (#1456), gives `angle` the `v` range (-6, 6) of its network (#1529), and adds the `circular_diffusion` simulator (#1518).
 
 ### 0.5.0
 
