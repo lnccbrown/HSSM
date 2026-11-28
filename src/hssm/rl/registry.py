@@ -582,8 +582,9 @@ def get_rlssm_model_config(
         Name of an ``ssms.rl`` preset (e.g. ``"2AB_RW_DDM"``) or a custom
         HSSM-side model registered with `register_rlssm_model`.
     choices:
-        Override the response choice values stored in the registry. A built-in
-        decision process only accepts the choices its model config declares.
+        Override the response choice values stored in the registry. A decision
+        process that declares choices (every built-in one, and a custom SSM
+        registered with ``choices``) only accepts those.
     learning_process:
         Override the learning process dict stored in the registry.
     decision_process:
@@ -663,8 +664,8 @@ def get_rlssm_model_config(
     dp: str = ssm_entry["name"]
 
     # The decision process reads the response column in its own coding: a LAN
-    # trained on -1/1 scores a response of 0 as an out-of-range input. Custom
-    # SSMs from register_ssm() declare no coding and keep the generic default.
+    # trained on -1/1 scores a response of 0 as an out-of-range input. A custom
+    # SSM from register_ssm() that declares no coding keeps the generic default.
     declared = ssm_entry.get("choices")
     if entry.choices is None:
         entry.choices = list(declared if declared is not None else DEFAULT_SSM_CHOICES)
@@ -817,10 +818,11 @@ def register_rlssm_model(
     extra_fields:
         Data column names required by the learning process (e.g. ``["feedback"]``).
     choices:
-        Response choice values. Defaults to the choices the decision process's
-        model config declares (``[-1, 1]`` for ``"ddm"`` and ``"angle"``), or to
-        ``[0, 1]`` for a custom SSM from `register_ssm`. A built-in decision
-        process rejects other choices when the config is built.
+        Response choice values. Defaults to the choices the decision process
+        declares (``[-1, 1]`` for ``"ddm"`` and ``"angle"``; a custom SSM
+        declares them with ``register_ssm(choices=...)``), or to ``[0, 1]`` if
+        it declares none. A decision process that declares choices rejects
+        other choices when the config is built.
     description:
         Optional human-readable description.
     decision_process_loglik_kind:
@@ -870,6 +872,7 @@ def register_ssm(
     params_default_ssm: list[float],
     response: list[str] | None = None,
     ndt_edge_shift: NDTEdgeShift | None = None,
+    choices: list[int] | None = None,
 ) -> None:
     """Register an SSM base log-likelihood function in the SSM registry.
 
@@ -899,6 +902,12 @@ def register_ssm(
         ``Config.ndt_edge_shift``). Both ``t`` and the named parameter must be
         in *list_params_ssm*. Defaults to ``None``, which keeps the edge at
         ``t``.
+    choices:
+        The response codes the likelihood reads, e.g. ``[-1, 1]``. An RLSSM
+        model on this SSM then defaults to them and rejects other choices, as
+        for a built-in decision process. Defaults to ``None``: the SSM declares
+        no coding, and a model on it defaults to ``[0, 1]`` and accepts any
+        ``choices``.
     """
     if not callable(ssm_base_logp_func):
         raise ValueError(
@@ -946,6 +955,7 @@ def register_ssm(
         "params_default_ssm": list(params_default_ssm),
         "response": list(response) if response is not None else ["rt", "response"],
         "ndt_edge_shift": deepcopy(ndt_edge_shift),
+        "choices": list(choices) if choices is not None else None,
     }
     # Pre-built: cache immediately so _get_ssm_logp never calls a factory.
     _SSM_LOGP_CACHE[name] = ssm_base_logp_func
