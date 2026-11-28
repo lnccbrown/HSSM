@@ -10,12 +10,20 @@ The recursion is the **scaled** (normalised) forward algorithm: the running
 log-forward vector ``log_alpha`` is renormalised to ``logsumexp = 0`` at every
 trial, and the per-step log-normalisers are accumulated to recover the marginal.
 This is mathematically identical to the textbook un-normalised recursion (the
-marginal value matches to machine precision) but is numerically essential: the
-un-normalised ``log_alpha`` drifts ~linearly with the sequence length, and for
-long panels (empirically ``T >= ~400``) the reverse-mode gradient through the
-scan becomes NaN — in *both* the C/PyTensor and JAX backends — even though the
-forward *value* stays finite.  Normalising keeps ``log_alpha`` O(1) so the
-gradient stays finite for arbitrarily long sequences.
+marginal value matches to machine precision) and keeps ``log_alpha`` O(1), so
+the gradient stays finite for arbitrarily long sequences whatever the backend
+does.
+
+The un-normalised ``log_alpha`` drifts ~linearly with the sequence length.
+Before PyMC 6.3.0 that made the reverse-mode gradient through the scan NaN for
+long panels (seen here for ``T >= ~400``) although the forward *value* stayed
+finite: the logsumexp stabilisation was not applied inside the scan before
+differentiation (pymc-devs/pymc-extras#720).  pymc-devs/pymc#8382 (PyMC 6.3.0)
+fixed that, and pymc-devs/pytensor#2313 (PyTensor 3.3.0) made the logsumexp
+gradient stable by construction, so on the PyMC versions HSSM supports the
+un-normalised recursion is stable as well (same value and gradient to 1e-10 at
+``T = 4000``, on the PyTensor and the JAX path).  The scaled form is kept
+because it does not rely on those rewrites.
 """
 
 from __future__ import annotations

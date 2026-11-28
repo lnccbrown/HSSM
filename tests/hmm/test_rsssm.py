@@ -1281,16 +1281,18 @@ def test_forward_gradient_finite_for_long_sequences(T):
     """The scaled forward keeps gradients finite (and correct) for long panels.
 
     The textbook un-normalised forward recursion drifts ~linearly with the
-    sequence length, so its reverse-mode gradient becomes NaN past ~400 trials
-    (in *both* the C/PyTensor and JAX backends) even though the marginal value
-    stays finite — which silently breaks NUTS on realistic long panels.  The
-    scaled (normalised) recursion must stay finite.
+    sequence length.  Before PyMC 6.3.0 its reverse-mode gradient became NaN
+    past ~400 trials even though the marginal value stayed finite
+    (pymc-devs/pymc-extras#720, fixed by pymc-devs/pymc#8382), which silently
+    broke NUTS on realistic long panels.  The scaled (normalised) recursion
+    must stay finite whatever the backend does.
 
     The emission has ``theta`` added to every trial's log-density, so the
     marginal is ``Z(theta) = Z(0) + T * theta`` exactly; the gradient w.r.t.
     ``theta`` must therefore equal ``T`` — catching a finite-but-wrong gradient,
     not merely a NaN.  Emissions are drawn in the realistic SSM range ``[-18,
-    -1]`` so the un-normalised recursion would genuinely overflow.
+    -1]`` so the un-normalised ``log_alpha`` drifts far past the range where
+    ``exp`` is representable.
     """
     import pytensor
 
