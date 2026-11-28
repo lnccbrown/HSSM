@@ -62,21 +62,32 @@ def data():
     )
 
 
-def _reference_logp(data, rl_alpha, scaler, a, z, t):
-    """Sum of logp: a NumPy Rescorla-Wagner learner plus PyTensor `logp_ddm`."""
+def _reference_rows(data, rl_alpha, scaler, a, z, t):
+    """Row-wise logp: a NumPy Rescorla-Wagner learner plus PyTensor `logp_ddm`.
+
+    A parameter is a scalar or holds one value per row.
+    """
+    n = len(data)
+    rl_alpha, scaler, a, z, t = (
+        np.full(n, x, dtype=float) for x in (rl_alpha, scaler, a, z, t)
+    )
     drifts = []
     for _, trials in data.groupby("participant_id", sort=False):
         q = np.array([0.5, 0.5])
         for response, reward in zip(trials["response"], trials["feedback"]):
-            drifts.append((q[1] - q[0]) * scaler)
+            row = len(drifts)
+            drifts.append((q[1] - q[0]) * scaler[row])
             arm = int(response > 0)
-            q[arm] += rl_alpha * (reward - q[arm])
-    n = len(drifts)
+            q[arm] += rl_alpha[row] * (reward - q[arm])
     obs = pt.matrix("obs", dtype="float64")
     params = [pt.vector(name, dtype="float64") for name in "vazt"]
     logp = pytensor.function([obs, *params], logp_ddm(obs, *params))
-    full = (np.full(n, x) for x in (a, z, t))
-    return logp(data[["rt", "response"]].to_numpy(), np.array(drifts), *full).sum()
+    return logp(data[["rt", "response"]].to_numpy(), np.array(drifts), a, z, t)
+
+
+def _reference_logp(data, **point):
+    """Sum of the reference logp over rows."""
+    return _reference_rows(data, **point).sum()
 
 
 def _observed_logp(model, with_grad=False):
@@ -127,26 +138,37 @@ def test_observed_logp_matches_reference(data, point):
     np.testing.assert_allclose(logp, _reference_logp(data, **point), rtol=0, atol=1e-9)
 
 
-def test_fixed_vector_enters_the_likelihood(data):
-    """Each row is scored with its own value of a parameter fixed to a vector.
+@pytest.mark.parametrize("free", ["scaler", "rl_alpha"])
+def test_fixed_vectors_enter_the_likelihood(data, free):
+    """Each row is scored with its own values of the parameters fixed to vectors.
 
-    The learning rate is fixed per participant, so each participant's rows must
-    match the model in which it is fixed to that participant's value. The
-    likelihood used to receive Bambi's ``0.0`` placeholder on every row.
+    Every parameter but `free` (a model needs one estimated parameter) takes a
+    different value on every trial, and each row must match the NumPy learner.
+    The likelihood used to receive Bambi's ``0.0`` placeholder on every row.
     """
-    first = (data["participant_id"] == data["participant_id"].iloc[0]).to_numpy()
-    others = {name: TRUTH[name] for name in ("a", "z", "t")}
+    rng = np.random.default_rng(5)
+    ranges = {
+        "rl_alpha": (0.05, 0.9),
+        "scaler": (1.0, 5.0),
+        "a": (1.0, 1.6),
+        "z": (0.4, 0.6),
+        "t": (0.05, 0.25),
+    }
+    fixed = {
+        name: rng.uniform(*ranges[name], len(data)) for name in TRUTH if name != free
+    }
 
-    def rowwise_logp(rl_alpha):
-        pymc_model = _analytical_model(data, rl_alpha=rl_alpha, **others).pymc_model
-        logp = pymc_model.compile_logp(vars=pymc_model.observed_RVs, sum=False)
-        return logp(pymc_model.initial_point())[0]
+    pymc_model = _analytical_model(data, **fixed).pymc_model
+    obs = pymc_model.observed_RVs[0]
+    rowwise_logp = pm.compile(
+        inputs=[pymc_model[free]], outputs=pm.logp(obs, pymc_model.rvs_to_values[obs])
+    )
 
-    low, high = rowwise_logp(0.1), rowwise_logp(0.7)
-
-    assert not np.allclose(low, high)
     np.testing.assert_allclose(
-        rowwise_logp(np.where(first, 0.1, 0.7)), np.where(first, low, high)
+        rowwise_logp(np.asarray(TRUTH[free])),
+        _reference_rows(data, **fixed, **{free: TRUTH[free]}),
+        rtol=0,
+        atol=1e-9,
     )
 
 
