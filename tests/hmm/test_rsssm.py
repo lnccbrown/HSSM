@@ -1421,6 +1421,7 @@ def test_forward_marginal_matches_tutorial():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("also_compiled_when_slow")
 def test_p_outlier_switching_builds_lapse_mixture(small_single_participant):
     """`p_outlier` in switching_params adds a per-regime RV + lapse mixture."""
     import pytensor.tensor as pt_
@@ -1440,8 +1441,7 @@ def test_p_outlier_switching_builds_lapse_mixture(small_single_participant):
     assert "p_outlier" in rvs and tuple(rvs["p_outlier"].type.shape) == (2,)
 
     ip = m.pymc_model.initial_point()
-    with compiled_mode():
-        assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
+    assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
 
     # The mixture genuinely alters the emission: p_outlier=0 vs 0.3 differ.
     fn, order = ffbs._compile_emission_fn(m)
@@ -1557,6 +1557,7 @@ def test_validate_no_warn_with_fixed_per_regime(tiny_df, caplog):
     assert not any("interchangeable" in rec.message for rec in caplog.records)
 
 
+@pytest.mark.usefixtures("also_compiled_when_slow")
 def test_p_outlier_alone_is_not_an_anchor(small_single_participant):
     """`p_outlier` as the sole switching param builds (unordered), not NaN.
 
@@ -1570,9 +1571,8 @@ def test_p_outlier_alone_is_not_an_anchor(small_single_participant):
     )
     assert "p_outlier" in {rv.name for rv in m.pymc_model.free_RVs}
     ip = m.pymc_model.initial_point()
-    with compiled_mode():
-        assert np.isfinite(m.pymc_model.compile_logp()(ip))
-        assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
+    assert np.isfinite(m.pymc_model.compile_logp()(ip))
+    assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
 
 
 def test_order_by_p_outlier_rejected(small_single_participant):
@@ -1587,6 +1587,7 @@ def test_order_by_p_outlier_rejected(small_single_participant):
         )
 
 
+@pytest.mark.usefixtures("also_compiled_when_slow")
 def test_no_pooling_fixed_scalar_and_list_build():
     """Fixed scalar/per-regime values build under pooling='none' (broadcast to N)."""
     panel = make_panel(3, 40)
@@ -1610,10 +1611,9 @@ def test_no_pooling_fixed_scalar_and_list_build():
         participant_col="participant_id",
         a=[0.8, 0.9],
     )
+    assert _logp_finite(m2)
     ip = m2.pymc_model.initial_point()
-    with compiled_mode():
-        assert np.isfinite(m2.pymc_model.compile_logp()(ip))
-        assert np.all(np.isfinite(m2.pymc_model.compile_dlogp()(ip)))
+    assert np.all(np.isfinite(m2.pymc_model.compile_dlogp()(ip)))
 
 
 @pytest.mark.parametrize("fixed", [0.5, [0.2, 1.5]])
@@ -1634,6 +1634,7 @@ def test_switching_param_with_fixed_value_raises(small_single_participant, fixed
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("also_compiled_when_slow")
 def test_unoccupied_and_imbalanced_regimes_do_not_crash():
     """§7.3: a never-occupied / highly-imbalanced regime must not produce NaN/Inf.
 
@@ -1661,11 +1662,11 @@ def test_unoccupied_and_imbalanced_regimes_do_not_crash():
         switching_params=["v"],
     )
     ip = m.pymc_model.initial_point()
-    with compiled_mode():
-        assert np.isfinite(m.pymc_model.compile_logp()(ip))
-        assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
+    assert np.isfinite(m.pymc_model.compile_logp()(ip))
+    assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
 
 
+@pytest.mark.usefixtures("also_compiled_when_slow")
 def test_descending_anchor_builds_with_finite_gradient(small_single_participant):
     """`OrderByParam(direction="desc")` builds a valid graph (negated anchor)."""
     m = RSSSM(
@@ -1678,8 +1679,7 @@ def test_descending_anchor_builds_with_finite_gradient(small_single_participant)
     )
     assert "v" in {d.name for d in m.pymc_model.deterministics}  # exposed as -u
     ip = m.pymc_model.initial_point()
-    with compiled_mode():
-        assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
+    assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
 
 
 def test_descending_anchor_starts_in_support(small_single_participant):

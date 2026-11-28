@@ -57,6 +57,18 @@ def compiled_mode():
     return pytensor.config.change_flags(**_COMPILED_FLAGS)
 
 
+@pytest.fixture(params=["python_vm", pytest.param("compiled", marks=pytest.mark.slow)])
+def also_compiled_when_slow(request):
+    """Run a test on the Python VM, and once more compiled in the slow suite.
+
+    For a logp or gradient check that is too expensive to compile on every pull
+    request.  The fast copy evaluates it on the Python VM like the other fast
+    tests; the copy marked ``slow``, which ``_python_vm`` leaves alone, compiles
+    it in PyTensor's own mode.
+    """
+    return request.param
+
+
 def simulate_hmm_data(model, n_trials, regime_params, P, pi0, seed=42):
     """Simulate one participant from a regime-switching SSM (tutorial logic)."""
     rng = np.random.default_rng(seed)
