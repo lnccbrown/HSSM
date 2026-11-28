@@ -111,7 +111,8 @@ class DataValidatorMixin:
                     if column == "response" and len(self.response_domains) == 1:
                         raise ValueError(
                             "Invalid responses found in your dataset: "
-                            f"{invalid_responses}"
+                            f"{invalid_responses}. "
+                            f"The model's choices are {list(allowed)}."
                         )
                     raise ValueError(
                         f"Invalid responses found in column {column!r}: "

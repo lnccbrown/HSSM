@@ -209,7 +209,7 @@ def test_kind_must_agree_with_model_config(data):
 
 
 def _register_rw_ddm(**kwargs):
-    """Register an HSSM-side RW + ddm RLSSM (0/1 responses)."""
+    """Register an HSSM-side RW + ddm RLSSM."""
     hssm.rl.register_rlssm_model(
         name="rw_ddm",
         decision_process="ddm",
@@ -218,7 +218,6 @@ def _register_rw_ddm(**kwargs):
         learning_process_bounds={"rl_alpha": (0.0, 1.0), "scaler": (0.0, 10.0)},
         learning_process_params_default=[0.2, 1.5],
         extra_fields=["feedback"],
-        choices=[0, 1],
         **kwargs,
     )
 
