@@ -31,6 +31,7 @@ from hssm.distribution_utils import (
     make_likelihood_callable,
     make_missing_data_callable,
 )
+from hssm.modelconfig import resolve_model_name
 from hssm.utils import (
     _rearrange_data,
 )
@@ -62,7 +63,7 @@ class HSSM(HSSMBase):
         models typically use the columns "rt" and "response".
     model
         The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
-        "full_ddm", "angle", "angle_extended", "levy", "ornstein", "weibull",
+        "full_ddm", "angle", "levy", "ornstein", "weibull",
         "race_no_bias_angle_4",
         "ddm_seq2_no_bias", "gamma_drift", "gamma_drift_angle". If any other string
         is passed, the model will be considered custom, in which case `loglik` and
@@ -306,6 +307,9 @@ class HSSM(HSSMBase):
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs: Any,
     ) -> None:
+        # A deprecated model name is replaced before anything reads it.
+        model = resolve_model_name(model)
+
         # ===== save/load serialisation =====
         self._init_args = self._store_init_args(locals(), kwargs)
 

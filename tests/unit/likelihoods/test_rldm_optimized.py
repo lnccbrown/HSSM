@@ -208,7 +208,7 @@ def test_response_codings_have_identical_parameter_gradients(small_rldm_case, ji
     [(make_rldm_logp_func, {}), (make_rldm_logp_op, {"n_params": 6})],
 )
 def test_default_model_is_hub_angle(monkeypatch, factory, kwargs):
-    """Without ``model``, the factories load ``angle.onnx`` from the Hub."""
+    """Without ``model``, the factories load the angle model's network from the Hub."""
     requested = []
     monkeypatch.setattr(
         rldm_optimized,
@@ -216,4 +216,4 @@ def test_default_model_is_hub_angle(monkeypatch, factory, kwargs):
         lambda model: requested.append(model),
     )
     factory(n_participants=1, n_trials=1, **kwargs)
-    assert requested == ["angle.onnx"]
+    assert requested == ["angle_extended.onnx"]

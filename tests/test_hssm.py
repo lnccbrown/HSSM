@@ -1051,3 +1051,18 @@ def test_ssms_registered_model_with_onnx(
     assert model.choices == (-1, 1)
     assert model.params["a"].bounds == (0.5, 2.0)
     assert np.isfinite(model.initial_point(transformed=False)["a"])
+
+
+def test_deprecated_model_name_builds_the_current_model(
+    data_angle, fixture_path, no_hf_hub_download
+):
+    """`model="angle_extended"` warns and builds the model `angle`."""
+    with pytest.warns(FutureWarning, match="'angle_extended' is deprecated"):
+        model = HSSM(
+            data=data_angle,
+            model="angle_extended",
+            loglik=fixture_path / "angle.onnx",
+        )
+
+    assert model.model_name == "angle"
+    assert model.params["v"].bounds == (-6.0, 6.0)
