@@ -62,8 +62,9 @@ def _check_missing_data_network_input_width(
     CPN and OPN artifacts take one data column (the observed choice, resp. the
     deadline) as their last input, after the model parameters and the extra
     fields; see lnccbrown/HSSM#1324. Only ONNX artifacts (a path or Hub file
-    name) are checked; callables and Ops are the user's responsibility, and
-    networks with symbolic input dimensions are left to the loader's own check.
+    name) are checked; callables and Ops are the user's responsibility. A
+    symbolic batch axis is skipped (the feature width is still checked); other
+    symbolic dimensions are left to the loader's own check.
     The artifact is loaded once more by `make_missing_data_callable` afterwards
     (a Hub download is cached, so this costs one extra ``onnx.load``).
     """
@@ -76,6 +77,8 @@ def _check_missing_data_network_input_width(
     dims = [
         dim.dim_value for dim in onnx_model.graph.input[0].type.tensor_type.shape.dim
     ]
+    if len(dims) > 1 and dims[0] <= 0:
+        dims = dims[1:]  # symbolic batch axis: the feature width is still known
     if not dims or any(dim <= 0 for dim in dims):
         return
     width = int(np.prod(dims))

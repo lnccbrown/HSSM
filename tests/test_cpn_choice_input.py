@@ -166,8 +166,8 @@ def test_width_check_helper_counts_extra_fields_and_skips_callables(tmp_path):
 
     ``n_params`` is what HSSM passes: model parameters plus extra fields, so
     the same width-5 fixture is accepted for four inputs and rejected for five
-    (e.g. one extra field). Callables, ``NONE`` and symbolic-dimension graphs
-    are not inspected.
+    (e.g. one extra field). Callables and ``NONE`` are not inspected; a
+    symbolic batch axis is skipped and the feature width still checked.
     """
     check = _check_missing_data_network_input_width
 
@@ -189,14 +189,16 @@ def test_width_check_helper_counts_extra_fields_and_skips_callables(tmp_path):
     check(lambda data, *params: params[0], MissingDataNetwork.CPN, n_params=99)
     check(CPN, MissingDataNetwork.NONE, n_params=99)
 
-    # Symbolic input dimensions are left to the loader's own check.
+    # A symbolic batch axis is skipped, so the feature width is still checked.
     symbolic = _write_params_only_graph(tmp_path / "symbolic.onnx", width=4, batch="N")
     dims = [
         d.dim_value
         for d in onnx.load(symbolic).graph.input[0].type.tensor_type.shape.dim
     ]
     assert dims == [0, 4]
-    check(symbolic, MissingDataNetwork.CPN, n_params=4)
+    check(symbolic, MissingDataNetwork.CPN, n_params=3)
+    with pytest.raises(ValueError, match=r"= 5\); this network has input width 4\."):
+        check(symbolic, MissingDataNetwork.CPN, n_params=4)
 
 
 def test_user_callable_receives_the_missing_rows_response():
@@ -250,6 +252,21 @@ def test_missing_row_with_invalid_response_raises(bad_value, shown):
         r"HSSM/issues/1324\.",
     ):
         _build(df)
+
+
+def test_missing_row_check_reads_the_configured_response_column():
+    """A renamed response column is checked too (it is what the CPN receives)."""
+    df = _simulated_missing_data().rename(columns={"response": "decision"})
+    config = {"response": ["rt", "decision"]}
+    _build(df, model_config=config)
+
+    df.loc[0, "decision"] = 0.0
+    with pytest.raises(
+        ValueError,
+        match=r"each missing row's `decision`.*invalid responses on missing-RT "
+        r"rows: \[0\.0\]",
+    ):
+        _build(df, model_config=config)
 
 
 def test_invalid_response_on_observed_row_keeps_the_existing_message():
