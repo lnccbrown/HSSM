@@ -116,6 +116,8 @@ This version includes the following changes:
 
 56. **Bambi is capped below 0.22.** HSSM now requires `bambi>=0.19.0,<0.22`; the requirement had no upper limit. Bambi's development branch restructures internals that HSSM uses, and HSSM does not import on it, so a Bambi release from that branch would have broken new HSSM installs. The cap will be raised once HSSM supports it.
 
+57. **`plot_model_cartoon` simulates its predicted RT histograms at the simulator's default time step** (closes #1413; by @AxelNoun). The histograms were simulated at `delta_t_model=0.01`, ten times coarser than the step the posterior predictive uses. A coarse step misses boundary crossings between grid points, so the plotted response times were too slow (about 7% on the mean upper-boundary RT in the gallery's default call). `delta_t_model` now applies only to the drawn geometry and the example trajectories. Plotted values change for a given `random_state`, and the renderer takes about a third longer.
+
 #### Breaking changes that require migration:
 
 1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.
