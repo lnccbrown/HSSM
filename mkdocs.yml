@@ -52,6 +52,8 @@ nav:
           - Circular diffusion: tutorials/circular_diffusion.ipynb
           - Poisson race models: tutorials/poisson_race.ipynb
           - HMM with DDM emissions: tutorials/hmm_ddm_regime_switching.ipynb
+          - Regime-switching SSMs (RSSSM), two regimes: tutorials/rsssm_regime_switching.ipynb
+          - Regime-switching SSMs (RSSSM), three regimes: tutorials/rsssm_k3.ipynb
           - Attentional DDM (aDDM): tutorials/attentional_ddm.ipynb
       - Reinforcement learning models:
           - RLSSM basics: tutorials/rlssm_basic.ipynb
@@ -110,6 +112,7 @@ nav:
       - HSSM core classes:
           - hssm.HSSM: api/hssm.md
           - hssm.aDDM and hssm.aDDMConfig: api/addm.md
+          - hssm.RSSSM: api/rsssm.md
           - hssm.Param: api/param.md
           - Model configuration and response domains: api/model_config.md
           - hssm.Prior: api/prior.md
@@ -196,6 +199,8 @@ plugins:
         - tutorials/tutorial_stim_coding.ipynb
         - tutorials/tutorial_p_outlier_regression.ipynb
         - tutorials/hmm_ddm_regime_switching.ipynb
+        - tutorials/rsssm_regime_switching.ipynb
+        - tutorials/rsssm_k3.ipynb
         - archive/hssm_tutorial_workshop_1.ipynb
         - archive/hssm_tutorial_workshop_2.ipynb
         - tutorials/rlssm_basic.ipynb
