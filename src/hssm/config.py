@@ -25,7 +25,7 @@ from ._types import (
 from .defaults import (
     default_model_config,
 )
-from .modelconfig import get_default_model_config
+from .modelconfig import get_default_model_config, resolve_model_name
 from .register import register_model
 
 if TYPE_CHECKING:
@@ -211,7 +211,7 @@ class BaseModelConfig(ABC):
 class Config(BaseModelConfig):
     """Config class that stores the configurations for models."""
 
-    rv: RandomVariable | None = None
+    rv: RandomVariable | Callable[..., np.ndarray] | None = None
     # Fields with dictionaries are automatically deepcopied
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     # Which parameter shifts the lower edge of the response-time support, and by
@@ -240,6 +240,7 @@ class Config(BaseModelConfig):
         loglik_kind
             The kind of the log-likelihood for the model.
         """
+        model_name = resolve_model_name(model_name)
         model_name_casted = cast("SupportedModels", model_name)
         if all(
             [
@@ -532,7 +533,7 @@ class ModelConfig:
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     backend: Literal["jax", "pytensor"] | None = None
-    rv: RandomVariable | None = None
+    rv: RandomVariable | Callable[..., np.ndarray] | None = None
     extra_fields: list[str] | None = None
     # Overrides the likelihood's own declaration when not None; see Config.
     ndt_edge_shift: NDTEdgeShift | None = None

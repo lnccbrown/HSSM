@@ -1,7 +1,9 @@
 """Plotting functionalities for HSSM."""
 
 import logging
+from functools import partial
 from itertools import product
+from numbers import Integral
 from typing import Iterable, Literal, cast, overload
 
 import matplotlib.pyplot as plt
@@ -10,6 +12,7 @@ import pandas as pd
 import seaborn as sns
 import xarray as xr
 from matplotlib.axes import Axes
+from matplotlib.ticker import MaxNLocator, PercentFormatter
 from scipy.stats import gaussian_kde
 
 from .utils import (
@@ -32,9 +35,14 @@ _DEFAULT_TITLE = "Posterior Predictive Distribution"
 _DEFAULT_XLABEL = "Response Time"
 
 
-def _histogram(a: np.ndarray, bins: int | np.ndarray | str | None = 50) -> pd.Series:
+def _histogram(
+    a: np.ndarray, bins: int | np.ndarray | str | None = 50, *, mass: bool = False
+) -> pd.Series:
+    hist = np.histogram(a, bins=bins, density=not mass)[0]  # type: ignore
+    if mass:
+        hist = hist / len(a)
     return pd.Series(
-        np.histogram(a, bins=bins, density=True)[0],  # type: ignore
+        hist,
         name="bin_n",
         copy=False,
     )
@@ -128,6 +136,8 @@ def _plot_predictive_1D(
     xlabel: str | None = _DEFAULT_XLABEL,
     ylabel: str | None = "Density",
     legend: bool = False,
+    value_column: str = "rt",
+    circular_bounds: tuple[float, float] | None = None,
     **kwargs,
 ) -> Axes:
     """Plot the posterior predictive distribution against the observed data.
@@ -156,7 +166,7 @@ def _plot_predictive_1D(
     styles["linestyle"] = linestyles[0] if isinstance(linestyles, list) else linestyles
     styles["linewidth"] = linewidths[0] if isinstance(linewidths, list) else linewidths
 
-    predicted = data.loc[data["observed"] == "predicted", "rt"]
+    predicted = data.loc[data["observed"] == "predicted", value_column]
 
     if "ax" in kwargs:
         ax = kwargs.pop("ax")
@@ -186,16 +196,27 @@ def _plot_predictive_1D(
             return grid, np.asarray(values)
 
     else:
-        bin_edges = np.histogram_bin_edges(predicted, bins=bins, range=x_range)  # type: ignore
+        bin_edges = np.histogram_bin_edges(
+            predicted,
+            bins=bins if bins is not None else 50,
+            range=circular_bounds or x_range,
+        )
         hists = (
             predicted.groupby(["chain", "draw"])
-            .apply(_histogram, bins=bin_edges)
+            .apply(_histogram, bins=bin_edges, mass=circular_bounds is not None)
             .reset_index(level=2, name="rt")
             .rename(columns={"level_2": "bin_n"})
         )
 
         def to_xy(values: np.ndarray | pd.Series) -> tuple[np.ndarray, np.ndarray]:
-            return _curve_xy(bin_edges, values, step)
+            x, y = _curve_xy(bin_edges, values, step)
+            if circular_bounds is not None:
+                # A complete turn in the declared units, with physical zero to the
+                # right. Join the last bin to the first, including bands and draws.
+                lo, hi = circular_bounds
+                x = x * (2 * np.pi / (hi - lo))
+                return np.r_[x, x[0] + 2 * np.pi], np.r_[y, y[0]]
+            return x, y
 
     hists_groupby = hists.groupby("bin_n")["rt"]
     hists_mean = hists_groupby.mean()
@@ -266,13 +287,15 @@ def _plot_predictive_1D(
             linewidths[1] if isinstance(linewidths, list) else linewidths
         )
 
-        observed = data.loc[data["observed"] == "observed", "rt"]
+        observed = data.loc[data["observed"] == "observed", value_column]
         if kind == "kde":
             data_hist = _kde_density(
                 observed.to_numpy(), grid, split_at_zero, bw_method
             )
         else:
-            data_hist = _histogram(observed.to_numpy(), bins=bin_edges)
+            data_hist = _histogram(
+                observed.to_numpy(), bins=bin_edges, mass=circular_bounds is not None
+            )
         x_o, y_o = to_xy(data_hist)
         ax.plot(
             x_o,
@@ -286,7 +309,15 @@ def _plot_predictive_1D(
             **kwargs,
         )
 
-    sns.despine(ax=ax)
+    if circular_bounds is None:
+        sns.despine(ax=ax)
+    else:
+        ax.set_ylim(bottom=0)
+        ax.yaxis.set_major_locator(
+            MaxNLocator(nbins=5, steps=[1, 2, 2.5, 5, 10], prune="lower")
+        )
+        ax.yaxis.set_major_formatter(PercentFormatter(xmax=1))
+        ax.yaxis.labelpad = 32  # Clear the 180° direction label on the left.
 
     if title:
         ax.set_title(title)
@@ -513,7 +544,7 @@ def plot_predictive(
     groups: str | Iterable[str] | None = None,
     groups_order: Iterable[str] | dict[str, Iterable[str]] | None = None,
     kind: Literal["hist", "kde"] = "hist",
-    bins: int | np.ndarray | str | None = 50,
+    bins: int | np.ndarray | str | None = None,
     grid_points: int = 256,
     bw_method: str | float | None = None,
     x_range: tuple[float, float] | None = None,
@@ -531,8 +562,10 @@ def plot_predictive(
     legend: bool = True,
     grid_kwargs: dict | None = None,
     random_seed: int | np.random.Generator | None = None,
+    *,
+    outcome: Literal["rt", "response"] | None = None,
     **kwargs,
-) -> Axes | sns.FacetGrid | list[sns.FacetGrid]:
+) -> Axes | tuple[Axes, Axes] | sns.FacetGrid | list[sns.FacetGrid]:
     """Plot the posterior predictive distribution against the observed data.
 
     Parameters
@@ -603,7 +636,9 @@ def plot_predictive(
           KDE is fit separately per choice side, weighted by response
           proportion, so no density is smoothed across the gap at zero.
     bins : optional
-        Specification of hist bins (`kind="hist"` only), by default 50.
+        Specification of hist bins (`kind="hist"` only). The default is 50
+        bins for RT and 16 equal sectors for a circular response. Passing an
+        integer sets the bin count for both panels.
         There are three options:
         - A string describing the binning strategy (passed to `np.histogram_bin_edges`).
         - A list-like defining the bin edges.
@@ -688,13 +723,24 @@ def plot_predictive(
         `numpy.random.Generator`): which posterior draws are used, and, when `dt` has
         no predictive group yet, the simulated responses. The same seed gives the same
         plot. Defaults to None, which keeps the previous, unseeded behavior.
+    outcome : {"rt", "response"}, optional
+        By default a model with RT and one circular response shows two panels
+        from the same predictive draws: pooled RT and a polar histogram of the
+        response. Other models keep their usual RT plot. Choose `"rt"` for
+        just that plot (including faceting and KDE), or `"response"` for just
+        the polar panel. The latter accepts a polar `ax`. Circular panels
+        require an integer bin count and use the full declared period. Radius
+        is the percentage of valid trials per bin, normalized within each draw;
+        angular ticks show degrees of a turn, with zero right and positive
+        angles counterclockwise in the model's own frame.
     kwargs : optional
         Additional keyword arguments passed to ax.plot() functions.
 
     Returns
     -------
-    Axes | sns.FacetGrid | list[sns.FacetGrid]
-        The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
+    Axes | tuple[Axes, Axes] | sns.FacetGrid | list[sns.FacetGrid]
+        The paired circular default returns `(rt_ax, polar_ax)`. Single
+        plots return their axis; faceted RT plots return a grid or list of grids.
     """
     if kind not in ("hist", "kde"):
         raise ValueError(
@@ -706,6 +752,39 @@ def plot_predictive(
             "`uncertainty` must be one of 'band', 'samples', 'both', or None, "
             f"got {uncertainty!r}."
         )
+    if outcome not in (None, "rt", "response"):
+        raise ValueError("Choose outcome='rt' or outcome='response'.")
+    domains = getattr(model, "response_domains", {})
+    circular = None
+    if len(domains) == 1 and model.response_str.startswith("rt,"):
+        column, domain = next(iter(domains.items()))
+        if domain["kind"] == "circular":
+            circular = (column, domain["bounds"])
+    if outcome == "response" and circular is None:
+        raise ValueError("outcome='response' requires RT and one circular response.")
+    show_angle = circular is not None and outcome != "rt"
+    supplied_ax = kwargs.get("ax")
+    if not show_angle and getattr(supplied_ax, "name", None) == "polar":
+        raise ValueError("An RT plot requires a Cartesian ax.")
+    if show_angle:
+        if kind != "hist" or any(x is not None for x in (row, col, groups)):
+            raise ValueError(
+                "Circular panels support un-faceted histograms; "
+                "use outcome='rt' for KDE or facets."
+            )
+        if bins is not None and (
+            not isinstance(bins, Integral) or isinstance(bins, bool) or bins < 1
+        ):
+            raise ValueError("Circular panels require a positive integer for bins.")
+        if supplied_ax is not None and (
+            outcome is None or getattr(supplied_ax, "name", None) != "polar"
+        ):
+            raise ValueError(
+                "Select outcome='rt' for a Cartesian ax or outcome='response' "
+                "for a polar ax. The paired plot creates its own axes."
+            )
+        if outcome == "response" and x_range is not None:
+            raise ValueError("A circular histogram spans the full response domain.")
 
     # Process hdi into a list of quantile intervals. `hdi=None` with band-style
     # uncertainty falls back to the default graded 50% + 94% bands; passing
@@ -758,12 +837,27 @@ def plot_predictive(
         predictive_group=predictive_group,
         rng=rng,
     )
-
+    if show_angle:
+        assert circular is not None
+        column, (lo, hi) = circular
+        # A missing/no-response trial has no direction. Exclude it before
+        # wrapping, or the -999 sentinel would look like a valid angle.
+        rt = plotting_df["rt"].to_numpy()
+        angle = plotting_df[column].to_numpy(dtype=float)
+        valid = np.isfinite(rt) & (rt >= 0) & np.isfinite(angle)
+        if not lo <= -999 < hi:
+            valid &= angle != -999
+        plotting_df = plotting_df.loc[valid].copy()
+        plotting_df[column] = (angle[valid] - lo) % (hi - lo) + lo
+        if "predicted" not in plotting_df["observed"].values:
+            raise ValueError("No valid circular predictive observations to plot.")
+        if plot_data and "observed" not in plotting_df["observed"].values:
+            raise ValueError("No valid observed circular responses to plot.")
     if uncertainty is not None:
         _check_sample_size(plotting_df)
 
     # Flip the rt values if necessary
-    if np.any(plotting_df["response"] == 0) and model.n_choices == 2:
+    if model.n_choices == 2 and np.any(plotting_df["response"] == 0):
         plotting_df["response"] = np.where(plotting_df["response"] == 0, -1, 1)
     if model.n_choices == 2:
         plotting_df["rt"] = plotting_df["rt"] * plotting_df["response"]
@@ -775,7 +869,7 @@ def plot_predictive(
     # Default x-range: trim extreme predictive tails, but never clip observed
     # data. The old default (min/max of predicted alone) wasted most of the
     # axis on empty tails and silently dropped out-of-range observations.
-    if x_range is None:
+    if x_range is None and outcome != "response":
         predicted_rt = plotting_df.loc[plotting_df["observed"] == "predicted", "rt"]
         lo, hi = predicted_rt.quantile([0.01, 0.99])
         observed_rt = plotting_df.loc[plotting_df["observed"] == "observed", "rt"]
@@ -787,14 +881,11 @@ def plot_predictive(
     # Then, plot the posterior predictive distribution against the observed data
     # Determine whether we are producing a single plot or a grid of plots
     if not extra_dims:
-        ax = _plot_predictive_1D(
-            data=plotting_df,
+        ax = kwargs.pop("ax", None)
+        render = partial(
+            _plot_predictive_1D,
+            plotting_df,
             plot_data=plot_data,
-            kind=kind,
-            bins=bins,
-            grid_points=grid_points,
-            bw_method=bw_method,
-            x_range=x_range,
             step=step,
             interval=intervals,
             uncertainty=uncertainty,
@@ -803,13 +894,49 @@ def plot_predictive(
             colors=colors,
             linestyles=linestyles_,
             linewidths=linewidths_,
-            title=title,
+            **kwargs,
+        )
+        polar_ax = None
+        if show_angle:
+            assert circular is not None
+            if outcome is None:
+                fig = plt.figure(figsize=(10, 4.5), layout="constrained")
+                ax = fig.add_subplot(121)
+                polar_ax = fig.add_subplot(122, projection="polar")
+                if title:
+                    fig.suptitle(title)
+            else:
+                polar_ax = ax or plt.figure().add_subplot(projection="polar")
+            render(
+                ax=polar_ax,
+                bins=16 if bins is None else bins,
+                value_column=circular[0],
+                circular_bounds=circular[1],
+                title=title if outcome == "response" else "Circular response",
+                xlabel=None if xlabel == _DEFAULT_XLABEL or outcome is None else xlabel,
+                ylabel="Probability per bin" if ylabel == "Density" else ylabel,
+                legend=legend and outcome == "response",
+            )
+            if outcome == "response":
+                return polar_ax
+        if ax is None:
+            ax = plt.gca()
+            if ax.name == "polar":
+                _, ax = plt.subplots()
+        ax = render(
+            ax=ax,
+            bins=bins,
+            kind=kind,
+            grid_points=grid_points,
+            bw_method=bw_method,
+            x_range=x_range,
+            title="Response time" if polar_ax is not None else title,
             xlabel=xlabel,
             ylabel=ylabel,
             legend=legend,
-            **kwargs,
         )
-
+        if polar_ax is not None:
+            return ax, polar_ax
         return ax
 
     # The multiple dimensions case

@@ -62,21 +62,32 @@ def data():
     )
 
 
-def _reference_logp(data, rl_alpha, scaler, a, z, t):
-    """Sum of logp: a NumPy Rescorla-Wagner learner plus PyTensor `logp_ddm`."""
+def _reference_rows(data, rl_alpha, scaler, a, z, t):
+    """Row-wise logp: a NumPy Rescorla-Wagner learner plus PyTensor `logp_ddm`.
+
+    A parameter is a scalar or holds one value per row.
+    """
+    n = len(data)
+    rl_alpha, scaler, a, z, t = (
+        np.full(n, x, dtype=float) for x in (rl_alpha, scaler, a, z, t)
+    )
     drifts = []
     for _, trials in data.groupby("participant_id", sort=False):
         q = np.array([0.5, 0.5])
         for response, reward in zip(trials["response"], trials["feedback"]):
-            drifts.append((q[1] - q[0]) * scaler)
+            row = len(drifts)
+            drifts.append((q[1] - q[0]) * scaler[row])
             arm = int(response > 0)
-            q[arm] += rl_alpha * (reward - q[arm])
-    n = len(drifts)
+            q[arm] += rl_alpha[row] * (reward - q[arm])
     obs = pt.matrix("obs", dtype="float64")
     params = [pt.vector(name, dtype="float64") for name in "vazt"]
     logp = pytensor.function([obs, *params], logp_ddm(obs, *params))
-    full = (np.full(n, x) for x in (a, z, t))
-    return logp(data[["rt", "response"]].to_numpy(), np.array(drifts), *full).sum()
+    return logp(data[["rt", "response"]].to_numpy(), np.array(drifts), a, z, t)
+
+
+def _reference_logp(data, **point):
+    """Sum of the reference logp over rows."""
+    return _reference_rows(data, **point).sum()
 
 
 def _observed_logp(model, with_grad=False):
@@ -125,6 +136,40 @@ def test_observed_logp_matches_reference(data, point):
     logp = _observed_logp(_analytical_model(data))(point)
 
     np.testing.assert_allclose(logp, _reference_logp(data, **point), rtol=0, atol=1e-9)
+
+
+@pytest.mark.parametrize("free", ["scaler", "rl_alpha"])
+def test_fixed_vectors_enter_the_likelihood(data, free):
+    """Each row is scored with its own values of the parameters fixed to vectors.
+
+    Every parameter but `free` (a model needs one estimated parameter) takes a
+    different value on every trial, and each row must match the NumPy learner.
+    The likelihood used to receive Bambi's ``0.0`` placeholder on every row.
+    """
+    rng = np.random.default_rng(5)
+    ranges = {
+        "rl_alpha": (0.05, 0.9),
+        "scaler": (1.0, 5.0),
+        "a": (1.0, 1.6),
+        "z": (0.4, 0.6),
+        "t": (0.05, 0.25),
+    }
+    fixed = {
+        name: rng.uniform(*ranges[name], len(data)) for name in TRUTH if name != free
+    }
+
+    pymc_model = _analytical_model(data, **fixed).pymc_model
+    obs = pymc_model.observed_RVs[0]
+    rowwise_logp = pm.compile(
+        inputs=[pymc_model[free]], outputs=pm.logp(obs, pymc_model.rvs_to_values[obs])
+    )
+
+    np.testing.assert_allclose(
+        rowwise_logp(np.asarray(TRUTH[free])),
+        _reference_rows(data, **fixed, **{free: TRUTH[free]}),
+        rtol=0,
+        atol=1e-9,
+    )
 
 
 def test_gradient_matches_finite_differences(data):
@@ -209,7 +254,7 @@ def test_kind_must_agree_with_model_config(data):
 
 
 def _register_rw_ddm(**kwargs):
-    """Register an HSSM-side RW + ddm RLSSM (0/1 responses)."""
+    """Register an HSSM-side RW + ddm RLSSM."""
     hssm.rl.register_rlssm_model(
         name="rw_ddm",
         decision_process="ddm",
@@ -218,7 +263,6 @@ def _register_rw_ddm(**kwargs):
         learning_process_bounds={"rl_alpha": (0.0, 1.0), "scaler": (0.0, 10.0)},
         learning_process_params_default=[0.2, 1.5],
         extra_fields=["feedback"],
-        choices=[0, 1],
         **kwargs,
     )
 

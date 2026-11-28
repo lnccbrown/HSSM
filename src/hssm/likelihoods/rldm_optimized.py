@@ -102,7 +102,7 @@ def make_rldm_logp_func(
     n_participants: int,
     n_trials: int,
     *,
-    model: str | PathLike | onnx.ModelProto = "angle.onnx",
+    model: str | PathLike | onnx.ModelProto = "angle_extended.onnx",
 ) -> Callable:
     """Create a log likelihood function for the RLDM model.
 
@@ -117,7 +117,8 @@ def make_rldm_logp_func(
         file, a loaded ``onnx.ModelProto``, or the name of a file in the
         ``franklab/HSSM`` Hugging Face repository. A ``str`` that is not an
         existing local path is looked up on the Hub, so pass a ``Path`` for local
-        files. Defaults to ``"angle.onnx"`` from the Hub.
+        files. Defaults to ``"angle_extended.onnx"`` from the Hub, the network
+        of the ``angle`` model.
 
     Returns
     -------
@@ -193,7 +194,7 @@ def make_rldm_logp_op(
     n_trials: int,
     n_params: int,
     *,
-    model: str | PathLike | onnx.ModelProto = "angle.onnx",
+    model: str | PathLike | onnx.ModelProto = "angle_extended.onnx",
 ) -> Op:
     """Create a pytensor Op for the likelihood function of RLDM model.
 
@@ -207,7 +208,7 @@ def make_rldm_logp_op(
         The number of model parameters.
     model : str, PathLike, or onnx.ModelProto, optional
         The ONNX model to use for the angle log likelihood; see
-        `make_rldm_logp_func`. Defaults to ``"angle.onnx"`` from the Hub.
+        `make_rldm_logp_func`. Defaults to ``"angle_extended.onnx"`` from the Hub.
 
     Returns
     -------

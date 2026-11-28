@@ -1,0 +1,66 @@
+{
+  "artifact": "ddm_cpn.onnx",
+  "sha256": "e523e84346b40cc7d461f6f0d968da36e6e2e1caef376203acc0f79c8287779e",
+  "purpose": "Test fixture only. A deliberately tiny choice-probability network (CPN) for the ddm model; its accuracy is irrelevant. The tests rely on its input SHAPE (1, 5) and on the log-sigmoid output (log-probabilities, <= 0).",
+  "contract": "[v, a, z, t, choice] -> log P(choice | theta)",
+  "input_columns": ["v", "a", "z", "t", "choice"],
+  "choices": [-1, 1],
+  "input_shape": [1, 5],
+  "ops": ["Gemm", "Tanh", "Gemm", "Tanh", "Gemm", "Neg", "Exp", "Constant", "Add", "Log"],
+  "issue": "https://github.com/lnccbrown/HSSM/issues/1324",
+  "date": "2026-09-10",
+  "derivation_method": "derived-from-lan",
+  "source_lan": {
+    "path": "tests/fixtures/ddm.onnx",
+    "sha256": "2fbc2199d61cf3ca67725d2262c563636655d05dd1873770825db34313c179f6",
+    "input_shape": [1, 6],
+    "input_columns": ["v", "a", "z", "t", "rt", "choice"]
+  },
+  "lanfactory": {
+    "version": "0.8.0",
+    "branch": "feat/derive-corpus",
+    "commit": "714b032"
+  },
+  "derive_aux": {
+    "command": "uv run --with 'pandas<3' derive-aux --from-onnx tests/fixtures/ddm.onnx --network-type cpn --model-name ddm --output-folder <scratch>/corpus --n-files 2 --n-theta-per-file 512 --seed 1",
+    "network_type": "cpn",
+    "aux_category": "choice",
+    "n_files": 2,
+    "n_theta_per_file": 512,
+    "n_rows_per_file": 1024,
+    "grid": {"n_points": 1000, "max_t": 20.0, "t_min": 0.0001},
+    "seed": 1,
+    "derive_stats": {
+      "derive_total_mass_mean": 1.0082721493778006,
+      "derive_total_mass_min": 0.7901444119098605,
+      "derive_total_mass_max": 1.630489301509661
+    }
+  },
+  "training": {
+    "command": "uv run --with 'pandas<3' torchtrain --config-path config_network_training_cpn.yaml --training-data-folder <scratch>/corpus --networks-path-base <scratch>/net --dl-workers 1",
+    "trainer": "lanfactory.trainers.ModelTrainerTorchMLP (unchanged)",
+    "yaml": {
+      "NETWORK_TYPE": "cpn",
+      "LAYER_SIZES": [32, 32, 1],
+      "ACTIVATIONS": ["tanh", "tanh", "linear (output; log-sigmoid applied in eval mode)"],
+      "loss": "bcelogit",
+      "OPTIMIZER_": "adam",
+      "LEARNING_RATE": 0.001,
+      "LR_SCHEDULER": "reduce_on_plateau",
+      "N_EPOCHS": 5,
+      "CPU_BATCH_SIZE": 128,
+      "TRAIN_VAL_SPLIT": 0.5,
+      "N_TRAINING_FILES": 2,
+      "WEIGHT_DECAY": 0.0,
+      "LABELS_LOWER_BOUND": "np.log(1e-7)",
+      "mlflow": "off"
+    },
+    "run_uuid": "37b1209ead6211f19c22870fa1aa7892",
+    "final_validation_loss": 0.6575
+  },
+  "checks": {
+    "lanfactory.onnx.contract.assert_single_trial_contract": {"input_shape": [1, 5], "input_width": 5},
+    "onnxruntime_output_max_over_200_random_inputs": -0.5956,
+    "onnxruntime_choice_sensitivity": {"theta": [0.5, 1.5, 0.5, 0.3], "choice=1": -0.70357823, "choice=-1": -0.79778457}
+  }
+}

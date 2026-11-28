@@ -111,6 +111,73 @@ def test_addm_rejects_invalid_setting_presets(setting_name, invalid_value, prese
     make_params.assert_not_called()
 
 
+def test_fixed_vector_enters_the_likelihood():
+    """Each row is scored with its own value of a parameter fixed to a vector.
+
+    The reference is the same model with the parameter fixed to a scalar: the
+    first half of the rows must match the model fixed to the first value, the
+    second half the model fixed to the second. The likelihood used to receive
+    Bambi's ``0.0`` placeholder on every row.
+    """
+    df = make_addm_dataframe(20)
+    first = np.arange(len(df)) < 10
+    cfg = aDDMConfig()
+    # Fixed at their defaults, so that the likelihood responds to `a`; `x0` stays
+    # free, because a model needs one estimated parameter.
+    others = {
+        name: value
+        for name, value in zip(cfg.list_params, cfg.params_default)
+        if name not in ("a", "x0")
+    }
+
+    def rowwise_logp(a):
+        pymc_model = hssm.aDDM(data=df, p_outlier=None, a=a, **others).pymc_model
+        logp = pymc_model.compile_logp(vars=pymc_model.observed_RVs, sum=False)
+        return logp(pymc_model.initial_point())[0]
+
+    low, high = rowwise_logp(1.0), rowwise_logp(1.6)
+
+    assert not np.allclose(low, high)
+    np.testing.assert_allclose(
+        rowwise_logp(np.where(first, 1.0, 1.6)), np.where(first, low, high)
+    )
+
+
+def test_fixed_vector_enters_the_simulator():
+    """Prior predictive draws use each row's value of a fixed-vector parameter.
+
+    A response time is ``t`` plus a decision time, so no row with ``t = 1.5``
+    can be simulated with a response time below 1.5.
+    """
+    df = make_addm_dataframe(20)
+    late = np.arange(len(df)) >= 10
+    model = hssm.aDDM(data=df, p_outlier=None, t=np.where(late, 1.5, 0.0))
+
+    draws = model.sample_prior_predictive(draws=5, random_seed=0)
+    rt = draws["prior_predictive"]["rt,response"].values[..., 0]
+
+    assert np.all(rt[..., late] >= 1.5)
+    assert np.any(rt[..., ~late] < 1.5)
+
+
+def test_fixed_vector_accepts_the_callers_own_frame():
+    """The row check for new data compares fixations by value.
+
+    The model stores ``sacc_array`` as padded tuples; the frame it was built
+    from holds arrays. Passing that frame back must not look like other rows.
+    """
+    df = make_addm_dataframe(20)
+    model = hssm.aDDM(data=df, p_outlier=None, t=np.full(len(df), 0.1))
+
+    model._check_fixed_vectors_for_new_data(df, "response")
+    as_lists = df.assign(sacc_array=[list(row) for row in df["sacc_array"]])
+    model._check_fixed_vectors_for_new_data(as_lists, "response")
+    with pytest.raises(ValueError, match="differs from `model.data`"):
+        model._check_fixed_vectors_for_new_data(
+            make_addm_dataframe(20, seed=3), "response"
+        )
+
+
 def test_is_hssmbase_subclass():
     """``aDDM`` is an ``HSSMBase`` subclass."""
     assert issubclass(hssm.aDDM, HSSMBase)

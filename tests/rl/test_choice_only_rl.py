@@ -269,6 +269,7 @@ def _make_shell_rlssm(config, lapse):
     """Build an _RLSSM shell for distribution-construction unit tests."""
     model = _RLSSM.__new__(_RLSSM)
     model.list_params = [*config.list_params, "p_outlier"]
+    model.params = {}  # no parameter is fixed to a vector
     model.model_config = config
     model._obs_dim = len(config.response)
     model.bounds = dict(config.bounds)
