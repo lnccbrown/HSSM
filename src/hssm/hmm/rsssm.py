@@ -28,7 +28,7 @@ import pytensor.tensor as pt
 from pymc.distributions.transforms import ordered as ordered_transform
 
 from ..base import HSSMBase
-from ..config import BaseModelConfig
+from ..config import BaseModelConfig, _resolve_response_domains
 from ..defaults import INITVAL_SETTINGS
 from ..modelconfig import get_default_model_config
 from .config import RSSSMConfig
@@ -287,8 +287,14 @@ class RSSSM(HSSMBase):
         # coding (e.g. `{1, 2}` for a model whose choices are `{-1, 1}`) or a
         # negative / NaN RT silently yields a *wrong* likelihood instead of the
         # error `HSSM` raises on the same data.
-        self.choices = self._resolve_choices(cfg)  # type: ignore[assignment]
-        self.n_choices = len(self.choices)
+        choices = tuple(self._resolve_choices(cfg))
+        self.n_choices = len(choices)
+        # `_post_check_data_sanity` validates each response column against
+        # `response_domains`, which `HSSMBase.__init__` takes from a validated
+        # config.  Resolve it the same way, from the emission model's choices.
+        self.response_domains, self.choices = _resolve_response_domains(
+            self.response, None, choices
+        )
         # `extra_fields` feeds bambi's trial-wise regression machinery, which the
         # direct-build path does not have: the emission is fed `(rt, response)`
         # only.  Accepting them would validate the columns and then ignore them.

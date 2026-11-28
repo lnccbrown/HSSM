@@ -252,7 +252,7 @@ def test_model_as_config_object_uses_registry_choices(small_single_participant):
         K=2,
         switching_params=["v"],
     )
-    assert m.choices == [-1, 1]
+    assert m.choices == (-1, 1)
     assert _logp_finite(m)
 
 
