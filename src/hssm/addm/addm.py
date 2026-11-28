@@ -262,6 +262,18 @@ class aDDM(HSSMBase):
         finally:
             self._continuation_override = None
 
+    def _check_fixed_vectors_for_new_data(
+        self, data: pd.DataFrame | None, kind: str
+    ) -> None:
+        """Compare ``sacc_array`` in the padded-tuple form that ``self.data`` holds.
+
+        The caller's own frame holds each row's fixations as an array or a list;
+        compared as given, it would differ from ``self.data`` on every row.
+        """
+        if data is not None and "sacc_array" in data.columns:
+            data = self._prepare_addm_data(data)
+        super()._check_fixed_vectors_for_new_data(data, kind)
+
     # ------------------------------------------------------------------ #
     # aDDM-specific data handling
     # ------------------------------------------------------------------ #

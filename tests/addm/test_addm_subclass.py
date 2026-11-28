@@ -160,6 +160,24 @@ def test_fixed_vector_enters_the_simulator():
     assert np.any(rt[..., ~late] < 1.5)
 
 
+def test_fixed_vector_accepts_the_callers_own_frame():
+    """The row check for new data compares fixations by value.
+
+    The model stores ``sacc_array`` as padded tuples; the frame it was built
+    from holds arrays. Passing that frame back must not look like other rows.
+    """
+    df = make_addm_dataframe(20)
+    model = hssm.aDDM(data=df, p_outlier=None, t=np.full(len(df), 0.1))
+
+    model._check_fixed_vectors_for_new_data(df, "response")
+    as_lists = df.assign(sacc_array=[list(row) for row in df["sacc_array"]])
+    model._check_fixed_vectors_for_new_data(as_lists, "response")
+    with pytest.raises(ValueError, match="differs from `model.data`"):
+        model._check_fixed_vectors_for_new_data(
+            make_addm_dataframe(20, seed=3), "response"
+        )
+
+
 def test_is_hssmbase_subclass():
     """``aDDM`` is an ``HSSMBase`` subclass."""
     assert issubclass(hssm.aDDM, HSSMBase)
