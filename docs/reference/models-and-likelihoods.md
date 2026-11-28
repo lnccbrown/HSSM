@@ -48,10 +48,13 @@ hssm.set_floatX("float64")
 model = hssm.HSSM(data=data, model="circular_diffusion", p_outlier=None)
 fit = model.sample(sampler="pymc", random_seed=42)
 predictions = model.sample_posterior_predictive(dt=fit, inplace=False, random_seed=43)
+rt_ax, direction_ax = model.plot_predictive(dt=predictions)
 ```
 
-Keep lapse mixtures off. Use `plot_predictive` for pooled RTs, and use the
-raw predictive angles for directional summaries. Quantile-probability plots
+Keep lapse mixtures off. The default predictive check compares both pooled RTs
+and the fraction of reports in each angular bin. To see only one, pass
+`outcome="rt"` or `outcome="response"`. Angles are plotted in the same frame
+as the data supplied to the fit; no target direction is assumed. Quantile-probability plots
 and model cartoons require categorical choices. The simulator and likelihood use
 a fixed radius, with no across-trial variability in drift or nondecision time
 unless modeled explicitly through covariates. This is a planar model with a

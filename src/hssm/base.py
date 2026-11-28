@@ -1384,9 +1384,19 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             raise ValueError("`kind` must be either 'response' or 'response_params'.")
 
     def plot_predictive(
-        self, **kwargs
-    ) -> mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]:
+        self, *, outcome: Literal["rt", "response"] | None = None, **kwargs
+    ) -> (
+        mpl.axes.Axes
+        | tuple[mpl.axes.Axes, mpl.axes.Axes]
+        | sns.FacetGrid
+        | list[sns.FacetGrid]
+    ):
         """Produce a posterior predictive plot.
+
+        With an RT and a circular response, the default returns two axes:
+        pooled RTs and reported directions, in that order. Select
+        `outcome="rt"` or `outcome="response"` to plot just one.
+        Categorical models retain their existing default.
 
         Equivalent to calling `hssm.plotting.plot_predictive()` with the
         model. Please see that function for
@@ -1394,9 +1404,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]
-            The matplotlib axis or seaborn FacetGrid object containing the plot.
+        Axes | tuple[Axes, Axes] | FacetGrid | list[FacetGrid]
+            The axes or facets containing the predictive check.
         """
+        if outcome is not None:
+            kwargs["outcome"] = outcome
         return plotting.plot_predictive(self, **kwargs)
 
     def plot_quantile_probability(
