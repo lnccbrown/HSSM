@@ -705,6 +705,34 @@ class TestGetRlssmModelConfig:
         spec = registry._get_decision_process_spec("inv_temp_softmax_3")
         assert spec["choices"] == [0, 1, 2]
 
+    def test_custom_ssm_declares_its_choices(
+        self,
+        annotated_ssm_base_logp: Any,
+        learning_process: dict[str, Any],
+    ) -> None:
+        """Choices declared by `register_ssm` are the default and are enforced."""
+        registry.register_ssm(
+            name="coded_ssm",
+            ssm_base_logp_func=annotated_ssm_base_logp,
+            list_params_ssm=["v", "a"],
+            bounds_ssm={"a": (0.3, 3.0)},
+            params_default_ssm=[0.0, 1.5],
+            choices=[-1, 1],
+        )
+        registry.register_rlssm_model(
+            name="on_coded",
+            decision_process="coded_ssm",
+            learning_process=learning_process,
+            learning_process_params=["rl_alpha"],
+            learning_process_bounds={"rl_alpha": (0.0, 1.0)},
+            learning_process_params_default=[0.2],
+            extra_fields=["feedback"],
+        )
+
+        assert registry.get_rlssm_model_config("on_coded").choices == (-1, 1)
+        with pytest.raises(ValueError, match=r"reads responses coded as \[-1, 1\]"):
+            registry.get_rlssm_model_config("on_coded", choices=[0, 1])
+
     def test_respects_explicit_empty_rl_fields(
         self,
         annotated_ssm_base_logp: Any,

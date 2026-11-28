@@ -25,7 +25,7 @@ from ._types import (
 from .defaults import (
     default_model_config,
 )
-from .modelconfig import get_default_model_config
+from .modelconfig import get_default_model_config, resolve_model_name
 from .register import register_model
 
 if TYPE_CHECKING:
@@ -240,6 +240,7 @@ class Config(BaseModelConfig):
         loglik_kind
             The kind of the log-likelihood for the model.
         """
+        model_name = resolve_model_name(model_name)
         model_name_casted = cast("SupportedModels", model_name)
         if all(
             [

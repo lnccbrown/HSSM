@@ -1475,14 +1475,27 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         )
         return self.model.predict(**kwargs)
 
-    def _reject_fixed_vectors(self, context: str | None = None) -> None:
-        """Raise for parameters fixed to a vector in classes that do not use it.
+    def _fixed_vector_params(self) -> dict[str, np.ndarray] | None:
+        """Return the parameters fixed to a vector, by name, in row order.
 
-        RLSSM and aDDM build their distribution without the fixed vectors, and so
-        does HSSM when `loglik` is a `pm.Distribution` class, so such a parameter
-        would be fitted and simulated with Bambi's scalar 0.0 placeholder on every
-        row, without a warning (#1453). `context` says when the class does not
-        support them, e.g. "when `loglik` is a `pm.Distribution` class".
+        `make_distribution` puts these vectors in place of the scalar 0.0 that
+        Bambi holds for such a parameter, in the likelihood and in the simulator.
+        """
+        fixed = {
+            name: param.prior
+            for name, param in self.params.items()
+            if isinstance(param.prior, np.ndarray)
+        }
+        return fixed or None
+
+    def _reject_fixed_vectors(self, context: str | None = None) -> None:
+        """Raise for parameters fixed to a vector where the model does not use it.
+
+        HSSM builds its distribution without the fixed vectors when `loglik` is a
+        `pm.Distribution` class, so such a parameter would be fitted and simulated
+        with Bambi's scalar 0.0 placeholder on every row, without a warning
+        (#1453). `context` says when the class does not support them, e.g. "when
+        `loglik` is a `pm.Distribution` class".
         """
         fixed_vector_names = [
             name
