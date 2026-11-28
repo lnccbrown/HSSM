@@ -144,6 +144,9 @@ def _ascending_initval(
 class RSSSM(HSSMBase):
     """Regime-Switching Sequential Sampling Model.
 
+    Experimental: the interface of this class may change in a later release
+    without a deprecation period.
+
     Parameters
     ----------
     data
