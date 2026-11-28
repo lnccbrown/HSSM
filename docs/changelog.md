@@ -1,6 +1,6 @@
 # Changelog
 
-### 0.5.1
+### 0.6.0
 
 This version includes the following changes:
 
@@ -131,7 +131,7 @@ This version includes the following changes:
    [#1324](https://github.com/lnccbrown/HSSM/issues/1324):
 
    ```text
-   CPN artifacts take the observed choice as their last input since HSSM 0.5.1
+   CPN artifacts take the observed choice as their last input since HSSM 0.6.0
    (input width n_params + 1 = 5); this network has input width 4.
    ```
 

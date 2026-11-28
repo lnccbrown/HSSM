@@ -50,7 +50,7 @@ def _(mo):
     model, evidence starts at the center of a disk. The location where it first
     hits the circle gives the angle; the time taken plus nondecision time gives RT.
 
-    **Requirements.** This walkthrough needs HSSM 0.5.1 or later, which installs
+    **Requirements.** This walkthrough needs HSSM 0.6.0 or later, which installs
     ssm-simulators 0.17.0 or later, the first release with the circular simulator.
 
     ## Simulate one participant
