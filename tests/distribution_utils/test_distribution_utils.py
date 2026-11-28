@@ -83,6 +83,16 @@ def _floored_at(edge):
     return np.where(NDT_RT_GRID <= edge, FLOOR, 1.0)
 
 
+def test_make_hssm_rv_keeps_expected_obs_dim_fifth():
+    """``expected_obs_dim`` is still the fifth positional argument, as on main."""
+    params = ["v", "a", "z", "t"]
+    distribution_utils.make_hssm_rv("ddm", params, None, False, 2)
+    with pytest.raises(
+        ValueError, match="observation width 2.*configured response width 3"
+    ):
+        distribution_utils.make_hssm_rv("ddm", params, None, False, 3)
+
+
 def test_make_hssm_rv():
     """Check that generated HSSM random variables sample deterministically."""
     params = ["v", "a", "z", "t"]
