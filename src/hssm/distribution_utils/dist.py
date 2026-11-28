@@ -41,6 +41,26 @@ MISSING_RT = -999.0
 
 LOGP_LB = -66.1  # a Python float takes the graph's dtype (see likelihoods.analytical)
 
+# Keyword arguments of `pm.Distribution` and its `.dist()` (plus `observed` and
+# `dims`, which Bambi adds). The parameters reach PyMC as keywords, so a
+# parameter with one of these names would be read as the keyword instead.
+PYMC_RESERVED_NAMES = frozenset(
+    {
+        "name",
+        "shape",
+        "size",
+        "dims",
+        "observed",
+        "rng",
+        "initval",
+        "total_size",
+        "transform",
+        "default_transform",
+        "dtype",
+        "return_next_rng",
+    }
+)
+
 
 def apply_param_bounds_to_loglik(
     logp: Any,
@@ -766,7 +786,21 @@ def make_distribution(
     -------
     type[pm.Distribution]
         A pymc.Distribution that uses the log-likelihood function.
+
+    Raises
+    ------
+    ValueError
+        If a name in ``list_params`` is one of ``PYMC_RESERVED_NAMES``.
     """
+    reserved = sorted(PYMC_RESERVED_NAMES.intersection(list_params))
+    if reserved:
+        raise ValueError(
+            f"Parameter name(s) {reserved} cannot be used: PyMC reads them as "
+            "keyword arguments of the distribution (`shape`, for example, sets "
+            "the shape of the response), not as parameters of the model. "
+            "Rename them in `list_params` and wherever the model refers to them."
+        )
+
     is_ready_made_rv = isinstance(rv, RandomVariable) or (
         isinstance(rv, type) and issubclass(rv, RandomVariable)
     )
