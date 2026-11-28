@@ -1,6 +1,6 @@
 # Changelog
 
-### 0.5.1
+### 0.6.0
 
 This version includes the following changes:
 
@@ -114,6 +114,10 @@ This version includes the following changes:
 
 55. **Regime-Switching Sequential Sampling Models (`RSSSM`, experimental)** (#957): a new top-level class for fitting SSMs whose parameters switch across hidden regimes that evolve as a Markov chain. The discrete regimes are marginalised out by the forward algorithm (one batched `pytensor.scan`, contributed as a scalar `pm.Potential`), leaving only continuous parameters for NUTS. Features: any HSSM-supported emission (analytical and LAN backends), `K >= 2` regimes generic in the number of participants (unbalanced panels supported), label-switching handled by an `ordered`-transform anchor (`AutoOrdering` / `OrderByParam` / `NoOrdering`), a three-mode per-parameter rule (shared / fixed-per-regime / inferred-per-regime), full and no pooling across participants, an estimable initial-state distribution, and per-regime `p_outlier` lapse mixtures. Post-hoc helpers `infer_regimes` (Forward-Filter Backward-Sample), `compute_log_likelihood` (per-trial logp for `arviz.loo`), and `plot_regime_recovery`. The class is experimental: its interface may change in a later release without a deprecation period.
 
+56. **Bambi is capped below 0.22.** HSSM now requires `bambi>=0.19.0,<0.22`; the requirement had no upper limit. Bambi's development branch restructures internals that HSSM uses, and HSSM does not import on it, so a Bambi release from that branch would have broken new HSSM installs. The cap will be raised once HSSM supports it.
+
+57. **`plot_model_cartoon` simulates its predicted RT histograms at the simulator's default time step** (closes #1413; by @AxelNoun). The histograms were simulated at `delta_t_model=0.01`, ten times coarser than the step the posterior predictive uses. A coarse step misses boundary crossings between grid points, so the plotted response times were too slow (about 7% on the mean upper-boundary RT in the gallery's default call). `delta_t_model` now applies only to the drawn geometry and the example trajectories. Plotted values change for a given `random_state`, and the renderer takes about a third longer.
+
 #### Breaking changes that require migration:
 
 1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.
@@ -131,7 +135,7 @@ This version includes the following changes:
    [#1324](https://github.com/lnccbrown/HSSM/issues/1324):
 
    ```text
-   CPN artifacts take the observed choice as their last input since HSSM 0.5.1
+   CPN artifacts take the observed choice as their last input since HSSM 0.6.0
    (input width n_params + 1 = 5); this network has input width 4.
    ```
 

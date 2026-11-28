@@ -1,6 +1,6 @@
 [project]
 name = "HSSM"
-version = "0.5.1"
+version = "0.6.0"
 description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
@@ -25,7 +25,10 @@ classifiers = [
 
 dependencies = [
     "absl-py>=2.5.0",
-    "bambi>=0.19.0",
+    # Capped below the next minor: Bambi's `dev` branch restructures internals
+    # that HSSM uses, and HSSM does not import on it (`bambi.model_components`
+    # is gone). Raise the cap once HSSM is ported.
+    "bambi>=0.19.0,<0.22",
     "h5netcdf>=1.8.1",
     "h5py>=3.16.0",
     "hddm-wfpt>=0.1.6",

@@ -1,6 +1,6 @@
 !!! warning "Experimental"
 
-    `hssm.RSSSM` is new in HSSM 0.5.1 and experimental: its interface may
+    `hssm.RSSSM` is new in HSSM 0.6.0 and experimental: its interface may
     change in a later release without a deprecation period.
 
 Use the `hssm.RSSSM` class to fit a **regime-switching sequential sampling
