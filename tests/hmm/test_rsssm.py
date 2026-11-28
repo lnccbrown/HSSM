@@ -41,6 +41,7 @@ from hssm.modelconfig import get_default_model_config
 from .conftest import (
     TUTORIAL_P,
     build_tutorial_forward_marginal,
+    compiled_mode,
     eval_at_point,
     make_panel,
     simulate_hmm_data,
@@ -1116,7 +1117,8 @@ def test_finite_gradient_at_init(small_single_participant, switching_params):
         switching_params=switching_params,
     )
     ip = m.pymc_model.initial_point()
-    grad = m.pymc_model.compile_dlogp()(ip)
+    with compiled_mode():
+        grad = m.pymc_model.compile_dlogp()(ip)
     assert np.all(np.isfinite(grad))
 
 
@@ -1276,8 +1278,37 @@ def _np_logsumexp(x, axis):
     return np.squeeze(m + np.log(np.sum(np.exp(x - m), axis=axis, keepdims=True)), axis)
 
 
+@pytest.fixture(scope="module")
+def compiled_forward():
+    """The forward marginal and its gradient, compiled once for any length.
+
+    ``fn(log_em, log_P, theta)`` takes a ``(1, T, 3)`` emission and returns the
+    marginal of ``log_em + theta`` under a uniform ``pi0``, and its derivative
+    w.r.t. the shift ``theta``.  The tests that use it are about the compiled
+    scan, so it is compiled in PyTensor's own mode; that compilation is the
+    expensive part and does not depend on ``T``, so the emission is an input
+    and one function serves every length.
+    """
+    import pytensor
+
+    K = 3
+    log_em = pt.tensor("log_em", shape=(1, None, K), dtype="float64")
+    log_P = pt.matrix("log_P", dtype="float64")
+    theta = pt.scalar("theta", dtype="float64")
+    marginal = forward_log_marginal(
+        log_em + theta,  # gradient flows through every step
+        log_P,
+        pt.as_tensor_variable(np.log(np.ones(K) / K)),
+        pt.ones_like(log_em[:, :, 0]),
+    )
+    with compiled_mode():
+        return pytensor.function(
+            [log_em, log_P, theta], [marginal, pt.grad(marginal, theta)]
+        )
+
+
 @pytest.mark.parametrize("T", [400, 500, 1000])
-def test_forward_gradient_finite_for_long_sequences(T):
+def test_forward_gradient_finite_for_long_sequences(compiled_forward, T):
     """The scaled forward keeps gradients finite (and correct) for long panels.
 
     The textbook un-normalised forward recursion drifts ~linearly with the
@@ -1294,35 +1325,25 @@ def test_forward_gradient_finite_for_long_sequences(T):
     -1]`` so the un-normalised ``log_alpha`` drifts far past the range where
     ``exp`` is representable.
     """
-    import pytensor
-
     rng = np.random.default_rng(0)
     K = 3
     base = rng.uniform(-18.0, -1.0, size=(1, T, K))
     praw = rng.uniform(0.1, 1.0, size=(K, K))
     P = praw / praw.sum(1, keepdims=True)
-    pi0 = np.ones(K) / K
 
-    theta = pt.scalar("theta")
-    log_em = pt.as_tensor_variable(base) + theta  # gradient flows through every step
-    marginal = forward_log_marginal(
-        log_em,
-        pt.as_tensor_variable(np.log(P)),
-        pt.as_tensor_variable(np.log(pi0)),
-        pt.ones((1, T)),
-    )
-    grad_fn = pytensor.function([theta], pt.grad(marginal, theta))
-    g = float(grad_fn(0.0))
+    _, grad = compiled_forward(base, np.log(P), 0.0)
+    g = float(grad)
     assert np.isfinite(g)
     assert abs(g - T) < 1e-6  # exact: d/dtheta (Z0 + T*theta) = T
 
 
-def test_forward_marginal_value_matches_numpy_reference_long():
+def test_forward_marginal_value_matches_numpy_reference_long(compiled_forward):
     """Scaled forward *value* matches an independent numpy log-forward at T=500.
 
     The brute-force enumeration test pins correctness at T=7; this pins the
     value for a long sequence (where the rewrite's normalisation could in
-    principle drift) against a stable numpy log-space forward.
+    principle drift) against a stable numpy log-space forward.  It is the
+    compiled function that is checked, as in the gradient test above.
     """
     rng = np.random.default_rng(3)
     K, T = 3, 500
@@ -1337,15 +1358,8 @@ def test_forward_marginal_value_matches_numpy_reference_long():
         a = _np_logsumexp(a[:, None] + log_P, axis=0) + log_em[0, t]
     ref = float(_np_logsumexp(a, axis=0))
 
-    got = float(
-        forward_log_marginal(
-            pt.as_tensor_variable(log_em),
-            pt.as_tensor_variable(log_P),
-            pt.as_tensor_variable(log_pi0),
-            pt.ones((1, T)),
-        ).eval()
-    )
-    assert abs(ref - got) < 1e-6
+    got, _ = compiled_forward(log_em, log_P, 0.0)  # same uniform pi0
+    assert abs(ref - float(got)) < 1e-6
 
 
 # ---------------------------------------------------------------------------
@@ -1426,7 +1440,8 @@ def test_p_outlier_switching_builds_lapse_mixture(small_single_participant):
     assert "p_outlier" in rvs and tuple(rvs["p_outlier"].type.shape) == (2,)
 
     ip = m.pymc_model.initial_point()
-    assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
+    with compiled_mode():
+        assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
 
     # The mixture genuinely alters the emission: p_outlier=0 vs 0.3 differ.
     fn, order = ffbs._compile_emission_fn(m)
@@ -1555,8 +1570,9 @@ def test_p_outlier_alone_is_not_an_anchor(small_single_participant):
     )
     assert "p_outlier" in {rv.name for rv in m.pymc_model.free_RVs}
     ip = m.pymc_model.initial_point()
-    assert np.isfinite(m.pymc_model.compile_logp()(ip))
-    assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
+    with compiled_mode():
+        assert np.isfinite(m.pymc_model.compile_logp()(ip))
+        assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
 
 
 def test_order_by_p_outlier_rejected(small_single_participant):
@@ -1594,9 +1610,10 @@ def test_no_pooling_fixed_scalar_and_list_build():
         participant_col="participant_id",
         a=[0.8, 0.9],
     )
-    assert _logp_finite(m2)
     ip = m2.pymc_model.initial_point()
-    assert np.all(np.isfinite(m2.pymc_model.compile_dlogp()(ip)))
+    with compiled_mode():
+        assert np.isfinite(m2.pymc_model.compile_logp()(ip))
+        assert np.all(np.isfinite(m2.pymc_model.compile_dlogp()(ip)))
 
 
 @pytest.mark.parametrize("fixed", [0.5, [0.2, 1.5]])
@@ -1644,8 +1661,9 @@ def test_unoccupied_and_imbalanced_regimes_do_not_crash():
         switching_params=["v"],
     )
     ip = m.pymc_model.initial_point()
-    assert np.isfinite(m.pymc_model.compile_logp()(ip))
-    assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
+    with compiled_mode():
+        assert np.isfinite(m.pymc_model.compile_logp()(ip))
+        assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
 
 
 def test_descending_anchor_builds_with_finite_gradient(small_single_participant):
@@ -1660,7 +1678,8 @@ def test_descending_anchor_builds_with_finite_gradient(small_single_participant)
     )
     assert "v" in {d.name for d in m.pymc_model.deterministics}  # exposed as -u
     ip = m.pymc_model.initial_point()
-    assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
+    with compiled_mode():
+        assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
 
 
 def test_descending_anchor_starts_in_support(small_single_participant):

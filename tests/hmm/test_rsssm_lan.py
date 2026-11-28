@@ -28,7 +28,7 @@ from hssm.hmm.likelihoods.emissions import (
     resolve_emission_dist,
 )
 
-from .conftest import eval_at_point
+from .conftest import compiled_mode, eval_at_point
 
 
 def _sim(model, theta, n=80, seed=0):
@@ -100,7 +100,8 @@ def test_lan_finite_gradient_at_init(ddm_df, backend):
         backend=backend,
     )
     ip = m.pymc_model.initial_point()
-    grad = m.pymc_model.compile_dlogp()(ip)
+    with compiled_mode():
+        grad = m.pymc_model.compile_dlogp()(ip)
     assert np.all(np.isfinite(grad))
 
 
