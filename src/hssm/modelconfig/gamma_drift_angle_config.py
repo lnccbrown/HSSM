@@ -18,12 +18,12 @@ def get_gamma_drift_angle_config() -> DefaultConfig:
         # Order is load-bearing: it is the column order of the ONNX input, and
         # it must match ssms.config.model_config["gamma_drift_angle"]["params"]
         # element for element. `theta` sits at index 4, between `t` and
-        # `shape` -- not appended at the end.
-        "list_params": ["v", "a", "z", "t", "theta", "shape", "scale", "c"],
+        # `k` -- not appended at the end.
+        "list_params": ["v", "a", "z", "t", "theta", "k", "scale", "c"],
         "choices": [-1, 1],
         "description": (
             "`gamma_drift` with an angled, collapsing decision bound: a "
-            "gamma-shaped drift bump (`shape`, `scale`, signed peak `c`) on "
+            "gamma-shaped drift bump (gamma shape `k`, `scale`, signed peak `c`) on "
             "top of a constant drift, with `theta` setting the bound's "
             "collapse angle."
         ),
@@ -42,7 +42,7 @@ def get_gamma_drift_angle_config() -> DefaultConfig:
                     "z": (0.1, 0.9),
                     "t": (0.001, 2.0),
                     "theta": (-0.1, 1.3),
-                    "shape": (2.0, 10.0),
+                    "k": (2.0, 10.0),
                     "scale": (0.01, 1.0),
                     "c": (-3.0, 3.0),
                 },

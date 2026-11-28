@@ -29,7 +29,13 @@ for the analytical likelihood instead.
 You can see the conversion in HSSM's own source: the black-box likelihoods
 wrap HDDM's Cython WFPT implementation and pass `a * 2` when they call it. The
 other parameters — `v`, `z`, `t`, `sv`, `sz`, `st` — carry over unchanged, and
-`z` is a relative starting point in `(0, 1)` in both packages.
+`z` is a relative starting point in `(0, 1)` in both packages. Two models are
+exceptions, because they read a variability parameter as a half-width where
+HDDM reads the full width. In `ddm_st` and `full_ddm_lan`, `st` is the
+half-width of the uniform non-decision-time kernel (`t ± st`, against HDDM's
+`t ± st/2`). In `full_ddm_lan`, `sz` is the half-width of the uniform
+starting-point kernel (`z ± sz`, against HDDM's `z ± sz/2`). Halve the HDDM
+value in these cases: an HDDM `st` of `0.2` is an `st` of `0.1`.
 
 ## Your data
 

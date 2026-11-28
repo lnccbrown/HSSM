@@ -13,6 +13,7 @@ from pymc.variational import Approximation
 
 import hssm
 from hssm import HSSM
+from hssm.base import HSSMBase
 from hssm.likelihoods import DDM, logp_ddm
 
 hssm.set_floatX("float32", update_jax=True)
@@ -171,6 +172,37 @@ def test_custom_model_int_choices(data_ddm):
     assert model.n_choices == 2
 
 
+def test_check_lapse_p_outlier_append_is_idempotent():
+    """`_check_lapse` must not duplicate a `p_outlier` already last in list_params.
+
+    The normal flow never feeds it a `p_outlier`-terminated `list_params` (named
+    models reset it from the SSM default, and no shipped config ships
+    `p_outlier`), but the append must still be idempotent so a custom config that
+    already ends in `p_outlier` is not given a second one.
+    """
+
+    class _Fake:
+        is_choice_only = False
+        n_choices = 2
+        has_lapse = True
+        # A lapse needs exactly one categorical response column.
+        response_domains = {"response": {"kind": "categorical", "values": (-1, 1)}}
+        _check_lapse = HSSMBase._check_lapse
+
+    fake = _Fake()
+    fake.list_params = ["v", "a", "z", "t", "p_outlier"]
+    fake._check_lapse(None)
+    assert fake.list_params == ["v", "a", "z", "t", "p_outlier"]
+    assert fake.list_params.count("p_outlier") == 1
+
+    # No-lapse path leaves list_params untouched.
+    fake2 = _Fake()
+    fake2.has_lapse = False
+    fake2.list_params = ["v", "a", "z", "t"]
+    fake2._check_lapse(None)
+    assert fake2.list_params == ["v", "a", "z", "t"]
+
+
 @pytest.mark.slow
 def test_model_definition_outside_include(data_ddm):
     """Accept parameter definitions outside include and reject duplicates."""
@@ -240,6 +272,27 @@ def test_sample_prior_predictive(data_ddm_reg):
         ],
     )
     model_regression_random_effect.sample_prior_predictive(draws=10)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("model", ["gamma_drift", "gamma_drift_angle"])
+def test_gamma_drift_prior_predictive_simulates_every_trial(data_ddm, model):
+    """One simulated (rt, response) pair per trial, under the default lapse.
+
+    As `shape`, the parameter now called `k` was read as PyMC's `shape`
+    keyword, which built the response as a single trial (#1456).
+    """
+    data = data_ddm.iloc[:20]
+    prior_predictive = HSSM(data=data, model=model).sample_prior_predictive(draws=3)
+
+    draws = prior_predictive["prior_predictive"]["rt,response"]
+    assert draws.shape[-2:] == (len(data), 2)
+
+
+def test_misspelled_parameter_names_the_model_parameters(data_ddm):
+    """A keyword that is neither a parameter nor a bambi argument is named."""
+    with pytest.raises(TypeError, match=r"\['vv'\] are not parameters of model 'ddm'"):
+        HSSM(data=data_ddm, vv=0.5)
 
 
 @pytest.mark.slow
@@ -672,6 +725,22 @@ class TestFixedVectorParams:
         assert "z" in idata.posterior.data_vars
 
 
+def test_fixed_vector_with_distribution_loglik_raises(data_ddm):
+    """A `pm.Distribution` class as `loglik` would use 0.0 for a fixed vector (#1453).
+
+    HSSM uses such a class as given, so neither its logp nor its RV receives
+    the vector in place of Bambi's scalar placeholder.
+    """
+    with pytest.raises(NotImplementedError, match="pm.Distribution"):
+        HSSM(
+            data=data_ddm,
+            model="ddm",
+            loglik=DDM,
+            loglik_kind="analytical",
+            t=np.full(len(data_ddm), 0.3),
+        )
+
+
 @pytest.mark.slow
 def test_sample_do(data_ddm):
     """Return intervention samples and the intervened PyMC model."""
@@ -854,7 +923,7 @@ def test_vi_idata_rejects_attached_approximation(data_ddm):
         _ = model.vi_idata
 
 
-def test_drop_parent_str_requires_datatree(data_ddm):
+def test_clean_predictive_datatree_requires_datatree(data_ddm):
     """Posterior cleanup rejects a missing trace object."""
     model = HSSM(data=data_ddm)
 
@@ -862,10 +931,10 @@ def test_drop_parent_str_requires_datatree(data_ddm):
         ValueError,
         match=r"Please provide a DataTree \(traces\) object\.",
     ):
-        model._drop_parent_str_from_datatree(None)
+        model._clean_predictive_datatree(None)
 
 
-def test_drop_parent_str_renames_response_mean(data_ddm):
+def test_clean_predictive_datatree_renames_response_mean(data_ddm):
     """Posterior cleanup restores the model's response-parameter name."""
     model = HSSM(data=data_ddm)
     traces = xr.DataTree.from_dict(
@@ -881,7 +950,7 @@ def test_drop_parent_str_renames_response_mean(data_ddm):
         }
     )
 
-    result = model._drop_parent_str_from_datatree(traces)
+    result = model._clean_predictive_datatree(traces)
 
     assert result is traces
     assert model._parent in result["posterior"].data_vars
@@ -898,6 +967,7 @@ def test_is_choice_only_and_deadline(data_ddm):
 
     model = HSSM(data=data_ddm, model="ddm", model_config=config_choice_only)
     assert model.model_config.is_choice_only
+    assert model._obs_dim == 1
     assert model.response_c == "response"
     assert model.response_str == "response"
 
@@ -914,6 +984,7 @@ def test_is_choice_only_and_deadline(data_ddm):
     assert len(model_with_deadline.response) == 2
     assert model_with_deadline.response_c == "c(response, deadline)"
     assert model_with_deadline.response_str == "response,deadline"
+    assert model_with_deadline._obs_dim == 1
 
 
 @pytest.mark.parametrize("mode", [None, "JAX"], ids=["default", "jax_linker"])
@@ -1012,3 +1083,18 @@ def test_ssms_registered_model_with_onnx(
     assert model.choices == (-1, 1)
     assert model.params["a"].bounds == (0.5, 2.0)
     assert np.isfinite(model.initial_point(transformed=False)["a"])
+
+
+def test_deprecated_model_name_builds_the_current_model(
+    data_angle, fixture_path, no_hf_hub_download
+):
+    """`model="angle_extended"` warns and builds the model `angle`."""
+    with pytest.warns(FutureWarning, match="'angle_extended' is deprecated"):
+        model = HSSM(
+            data=data_angle,
+            model="angle_extended",
+            loglik=fixture_path / "angle.onnx",
+        )
+
+    assert model.model_name == "angle"
+    assert model.params["v"].bounds == (-6.0, 6.0)

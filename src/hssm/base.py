@@ -7,10 +7,11 @@ This file defines the entry class HSSM.
 """
 
 import datetime
+import inspect
 import logging
 import warnings
 from abc import ABC, abstractmethod
-from copy import deepcopy
+from copy import copy, deepcopy
 from os import PathLike
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal, Union, cast
@@ -28,6 +29,7 @@ import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 from bambi.utils import get_aliased_name
+from formulae import model_description
 from pymc.model.transform.conditioning import do
 from pymc.pytensorf import resolve_backend_compile_kwargs
 from pymc.variational import Approximation
@@ -57,7 +59,7 @@ from hssm.utils import (
 )
 
 from . import plotting, tracking
-from .config import BaseModelConfig
+from .config import BaseModelConfig, ModelConfig
 from .modelconfig import list_models
 from .param import Params
 from .param import UserParam as Param
@@ -73,12 +75,23 @@ from .param.utils import _clamp_default_initval_to_bounds
 
 _logger = logging.getLogger("hssm")
 
+
 # NOTE: Temporary mapping from old sampler names to new ones in bambi 0.16.0
 _new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
     "mcmc": "pymc",
     "nuts_numpyro": "numpyro",
     "nuts_blackjax": "blackjax",
 }
+
+
+def _copy_response_config[T: BaseModelConfig | ModelConfig | dict](config: T) -> T:
+    """Detach response declarations without copying likelihoods or other payloads."""
+    snapshot = copy(config)
+    fields = snapshot if isinstance(snapshot, dict) else vars(snapshot)
+    for name in ("response", "choices", "response_domains"):
+        if name in fields:
+            fields[name] = deepcopy(fields[name])
+    return snapshot
 
 
 def _validate_setting_preset(name: str, value: object, preset: str) -> None:
@@ -110,6 +123,36 @@ def _get_regression_term_prior(prior: dict[str, Any], term: str) -> Any:
     Returns ``None`` when neither is given.
     """
     return prior.get(term, prior.get("common"))
+
+
+def _first_differing_column(
+    data: pd.DataFrame, reference: pd.DataFrame, columns: list[str]
+) -> tuple[str, int] | None:
+    """Find the first of `columns` whose values differ between two frames.
+
+    The two frames must have the same number of rows. Rows are compared by
+    position, so a different index or other dtypes (e.g. int and float) do not
+    make them differ, and missing values compare equal to each other. Returns
+    the column and the position of its first differing row, or None when the
+    values of all `columns` are the same.
+    """
+    for col in columns:
+        values = data[col].to_numpy()
+        reference_values = reference[col].to_numpy()
+        # Compare the missing-value masks, then the other values: NaN != NaN, and
+        # np.array_equal(..., equal_nan=True) raises TypeError on object columns.
+        missing = np.asarray(pd.isna(values), dtype=bool)
+        reference_missing = np.asarray(pd.isna(reference_values), dtype=bool)
+        differs = missing != reference_missing
+        both = ~missing & ~reference_missing
+        try:
+            differs[both] = values[both] != reference_values[both]
+        except (TypeError, ValueError):
+            # Values that cannot be compared (e.g. dates against numbers) differ.
+            differs[both] = True
+        if differs.any():
+            return col, int(np.argmax(differs))
+    return None
 
 
 class classproperty:
@@ -150,7 +193,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         columns "rt" and "response".
     model
         The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
-        "full_ddm", "angle", "angle_extended", "levy", "ornstein", "weibull",
+        "full_ddm", "angle", "levy", "ornstein", "weibull",
         "race_no_bias_angle_4",
         "ddm_seq2_no_bias", "gamma_drift", "gamma_drift_angle". If any other string
         is passed, the model will be considered custom, in which case all
@@ -244,6 +287,23 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         how to specify the likelihood function this parameter. If nothing is provided,
         a default likelihood function will be used. This parameter is required only if
         either `missing_data` or `deadline` is not `False`. Defaults to `None`.
+
+        The network follows the same single-trial input convention as the main
+        likelihood, with the model parameters (in `list_params` order, without
+        `p_outlier`) followed by any `extra_fields` and then one data column
+        **last**:
+
+        - without a deadline (choice-probability network, CPN):
+          `[θ..., choice] -> log P(choice | θ)`; HSSM passes each missing-RT
+          row's `response`, coded exactly as in `choices` (no remapping), so
+          such rows must carry a valid response;
+        - with a deadline (omission-probability network, OPN):
+          `[θ..., deadline] -> log P(rt > deadline | θ)`.
+
+        Either way the input width is `n_params + 1`; an ONNX network of a
+        different width is rejected at construction. A user-supplied callable
+        that takes only the parameters is still supported at the
+        `hssm.distribution_utils` level via `params_only=True`.
     process_initvals : optional
         If `True`, the model will process the initial values. Defaults to `True`.
         Processing also clamps a default initial value that falls outside its
@@ -357,21 +417,21 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.initval_jitter = initval_jitter
 
         # region ===== Store the pre-built config =====
-        self.model_config: BaseModelConfig = model_config
+        self.model_config = _copy_response_config(model_config)
+        configured_response = self.model_config.response
+        assert configured_response is not None
+        self._obs_dim = len(configured_response)
         # endregion
 
         # region ===== Set up shortcuts so old code will work ======
-        self.response: list[str] = (  # type: ignore[assignment]
-            list(self.model_config.response)
-            if self.model_config.response is not None
-            else []
-        )
+        self.response: list[str] = list(configured_response)  # type: ignore[assignment]
         self.list_params = (
             list(self.model_config.list_params)
             if self.model_config.list_params is not None
             else None
         )
         self.choices = self.model_config.choices  # type: ignore[assignment]
+        self.response_domains = self.model_config.response_domains or {}
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
@@ -381,13 +441,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # TODO: add to HSSMBase
         self.is_choice_only: bool = self.model_config.is_choice_only
 
-        if self.choices is None:
-            raise ValueError(
-                "`choices` must be provided either in `model_config` or as an argument."
-            )
-
-        self._validate_choices()
-
         # region Avoid mypy error later (None.append). Should list_params be Optional?
         if self.list_params is None:
             raise ValueError(
@@ -395,7 +448,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             )
         # endregion
 
-        self.n_choices = len(self.choices)  # type: ignore[arg-type]
+        self.n_choices = len(self.choices) if self.choices is not None else None
 
         self._pre_check_data_sanity()
 
@@ -419,6 +472,15 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             p_outlier=p_outlier,
             noncentered=model_noncentered,
         )
+        # `Params` took the parameters out of `kwargs`; the rest go to bmb.Model.
+        # Name a misspelled or renamed parameter here, before bambi rejects it as
+        # one of its own arguments.
+        unknown = sorted(kwargs.keys() - inspect.signature(bmb.Model).parameters.keys())
+        if unknown:
+            raise TypeError(
+                f"{unknown} are not parameters of model '{self.model_name}', whose "
+                f"parameters are {self.list_params}, nor arguments of `bambi.Model`."
+            )
 
         # Explicit group priors are authoritative, so reject any specification
         # that bambi cannot build or would silently alter under the effective
@@ -469,7 +531,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self.list_params,
             self.link,
             self._parent,
-            is_choice_only=self.is_choice_only,
+            obs_dim=self._obs_dim,
         )
 
         # Targeted statistical-identifiability warnings for common/group or
@@ -632,6 +694,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         exclude_keys = {"self", "kwargs", "__class__"}
         result = {k: v for k, v in local_vars.items() if k not in exclude_keys}
         result.update(extra_kwargs)
+        model_config = result.get("model_config")
+        if isinstance(model_config, (BaseModelConfig, ModelConfig, dict)):
+            result["model_config"] = _copy_response_config(model_config)
         return result
 
     def find_MAP(self, **kwargs):
@@ -1182,6 +1247,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         ------
         ValueError
             If the model has not been sampled yet and datatree is not provided.
+        ValueError
+            If `data` other than the model's own data is given with
+            `kind="response"` and a parameter is fixed to a vector, which has
+            values only for the rows of the model's data.
 
         Returns
         -------
@@ -1189,6 +1258,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             A DataTree object with the posterior predictive samples added,
             or None if inplace is True.
         """
+        self._check_fixed_vectors_for_new_data(data, kind)
+
         if dt is None:
             if self._inference_obj is None:
                 raise ValueError(
@@ -1330,9 +1401,19 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             raise ValueError("`kind` must be either 'response' or 'response_params'.")
 
     def plot_predictive(
-        self, **kwargs
-    ) -> mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]:
+        self, *, outcome: Literal["rt", "response"] | None = None, **kwargs
+    ) -> (
+        mpl.axes.Axes
+        | tuple[mpl.axes.Axes, mpl.axes.Axes]
+        | sns.FacetGrid
+        | list[sns.FacetGrid]
+    ):
         """Produce a posterior predictive plot.
+
+        With an RT and a circular response, the default returns two axes:
+        pooled RTs and reported directions, in that order. Select
+        `outcome="rt"` or `outcome="response"` to plot just one.
+        Categorical models retain their existing default.
 
         Equivalent to calling `hssm.plotting.plot_predictive()` with the
         model. Please see that function for
@@ -1340,9 +1421,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]
-            The matplotlib axis or seaborn FacetGrid object containing the plot.
+        Axes | tuple[Axes, Axes] | FacetGrid | list[FacetGrid]
+            The axes or facets containing the predictive check.
         """
+        if outcome is not None:
+            kwargs["outcome"] = outcome
         return plotting.plot_predictive(self, **kwargs)
 
     def plot_quantile_probability(
@@ -1378,8 +1461,134 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return plotting.plot_model_cartoon(self, **kwargs)
 
     def predict(self, **kwargs) -> DataTree:
-        """Generate samples from the predictive distribution."""
+        """Generate samples from the predictive distribution.
+
+        Raises
+        ------
+        ValueError
+            If `data` with rows other than the model's own is given with
+            `kind="response"` and a parameter is fixed to a vector (see
+            `sample_posterior_predictive`).
+        """
+        self._check_fixed_vectors_for_new_data(
+            kwargs.get("data"), kwargs.get("kind", "response_params")
+        )
         return self.model.predict(**kwargs)
+
+    def _fixed_vector_params(self) -> dict[str, np.ndarray] | None:
+        """Return the parameters fixed to a vector, by name, in row order.
+
+        `make_distribution` puts these vectors in place of the scalar 0.0 that
+        Bambi holds for such a parameter, in the likelihood and in the simulator.
+        """
+        fixed = {
+            name: param.prior
+            for name, param in self.params.items()
+            if isinstance(param.prior, np.ndarray)
+        }
+        return fixed or None
+
+    def _reject_fixed_vectors(self, context: str | None = None) -> None:
+        """Raise for parameters fixed to a vector where the model does not use it.
+
+        HSSM builds its distribution without the fixed vectors when `loglik` is a
+        `pm.Distribution` class, so such a parameter would be fitted and simulated
+        with Bambi's scalar 0.0 placeholder on every row, without a warning
+        (#1453). `context` says when the class does not support them, e.g. "when
+        `loglik` is a `pm.Distribution` class".
+        """
+        fixed_vector_names = [
+            name
+            for name, param in self.params.items()
+            if isinstance(param.prior, np.ndarray)
+        ]
+        if fixed_vector_names:
+            when = f" {context}" if context else ""
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support parameters fixed to a "
+                f"vector{when} ({fixed_vector_names}): the likelihood and the "
+                "simulator would use 0.0 in their place. Fix them to a scalar, or "
+                "give them a prior or a regression."
+            )
+
+    def _model_columns(self) -> list[str]:
+        """Return the columns of `self.data` that the model reads.
+
+        These are the response columns (with the deadline column, if any), the
+        variables of every regression formula and the extra fields. Other columns,
+        such as a timestamp or a note, do not reach the model.
+        """
+        used = set(self.response or [])
+        used.update(self.extra_fields or [])
+        formula = getattr(self, "formula", None)
+        if formula is not None:
+            for formula_str in formula.get_all_formulas():
+                used.update(model_description(formula_str).var_names)
+        return [col for col in self.data.columns if col in used]
+
+    def _check_fixed_vectors_for_new_data(
+        self, data: pd.DataFrame | None, kind: str
+    ) -> None:
+        """Refuse to simulate fixed-vector parameters on rows they have no value for.
+
+        A fixed vector holds one value per row of the model's data, and the RV
+        simulates row *i* of `self.data` with value *i* (#1453; with
+        `missing_data` or `deadline`, this also needs the vector reordered with
+        the rows, #1451). So
+        `data` is accepted only when its rows are the model's rows, in the same
+        order: the columns it shares with `self.data` among those the model reads
+        (response, formula variables, extra fields) must hold the same values,
+        and it must share at least one of them. The index, the dtypes and the
+        other columns do not matter. The plotting functions pass
+        `data=self.data`, which is accepted.
+        """
+        # Bambi 0.19 and 0.20 still accept "pps", a deprecated alias of "response".
+        if data is None or kind not in ("response", "pps"):
+            return
+        fixed_vector_names = [
+            name
+            for name, param in self.params.items()
+            if isinstance(param.prior, np.ndarray)
+        ]
+        if not fixed_vector_names:
+            return
+        requirement = (
+            f"Parameter(s) {fixed_vector_names} are fixed to a vector with one value "
+            "per row of the model's data, so `data` must hold those rows in the "
+            "order of `model.data`."
+        )
+        remedy = "Omit `data`, or build a model on the new data with its own vector."
+        model_columns = self._model_columns()
+        shared = [col for col in model_columns if col in data.columns]
+        if not shared:
+            # Without a column the model reads, nothing says which rows `data`
+            # holds (e.g. a constant session column), so they cannot be checked.
+            raise ValueError(
+                f"{requirement} `data` has none of the columns the model reads "
+                f"({model_columns}), so its rows cannot be matched to the rows of "
+                f"`model.data`. {remedy}"
+            )
+        if len(data) != len(self.data):
+            raise ValueError(
+                f"{requirement} `data` has {len(data)} rows and `model.data` has "
+                f"{len(self.data)}. {remedy}"
+            )
+        difference = _first_differing_column(data, self.data, shared)
+        if difference is None:
+            return
+        column, position = difference
+        reordered_hint = (
+            " With `missing_data` or `deadline`, the model moved the missing-RT "
+            "rows to the top: pass `model.data`."
+            if self.missing_data or self.deadline
+            else ""
+        )
+        raise ValueError(
+            f"{requirement} Column '{column}' differs from `model.data`, first at "
+            f"row {position} (by position). A row whose value in a column the "
+            "model reads has changed counts as another row, even if it is one of "
+            f"the model's rows.{reordered_hint} {remedy}"
+        )
 
     def sample_do(
         self,
@@ -1440,18 +1649,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         )
         do_dt = pm.sample_prior_predictive(model=do_model, draws=draws, **kwargs)
 
-        # clean up `rt,response_mean` to `v`
-        do_dt = self._drop_parent_str_from_datatree(dt=do_dt)
-
-        # rename otherwise inconsistent dims and coords
-        if "rt,response_extra_dim_0" in do_dt["prior_predictive"].dims:
-            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_dims(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
-        if "rt,response_extra_dim_0" in do_dt["prior_predictive"].coords:
-            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_vars(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
+        do_dt = self._clean_predictive_datatree(dt=do_dt)
 
         if return_model:
             return do_dt, do_model
@@ -1554,18 +1752,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     continue
                 self._inference_obj[group_name] = prior_predictive[group_name]
 
-        # clean up `rt,response_mean` to `v`
-        dt = self._drop_parent_str_from_datatree(dt=self._inference_obj)
-
-        # rename otherwise inconsistent dims and coords
-        if "rt,response_extra_dim_0" in dt["prior_predictive"].dims:
-            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_dims(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
-        if "rt,response_extra_dim_0" in dt["prior_predictive"].coords:
-            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_vars(
-                name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
-            )
+        dt = self._clean_predictive_datatree(dt=self._inference_obj)
 
         # Update self._inference_obj to match the cleaned datatree
         self._inference_obj = dt
@@ -1693,9 +1880,21 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 sum=kwargs.get("sum", True),
             )
         else:
-            new_model = pm.model.transform.conditioning.remove_value_transforms(
-                self.pymc_model
-            )
+            # `remove_value_transforms` goes through `fgraph_from_model`, which
+            # raises `NotImplementedError: Cannot convert models with non-default
+            # initial_values`. Explicit `initval=`s are irrelevant to the logp
+            # (RSSSM sets several), so clear them for the conversion and put them
+            # back afterwards.
+            initial_values = dict(self.pymc_model.rvs_to_initial_values)
+            try:
+                self.pymc_model.rvs_to_initial_values.update(
+                    dict.fromkeys(initial_values, None)
+                )
+                new_model = pm.model.transform.conditioning.remove_value_transforms(
+                    self.pymc_model
+                )
+            finally:
+                self.pymc_model.rvs_to_initial_values.update(initial_values)
             return new_model.compile_logp(
                 vars=kwargs.get("vars", None),
                 jacobian=kwargs.get("jacobian", True),
@@ -2191,9 +2390,21 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     + "parameter is not None"
                 )
         if self.has_lapse:
+            domain = (
+                next(iter(self.response_domains.values()))
+                if len(self.response_domains) == 1
+                else None
+            )
+            supports_lapse = domain is not None and domain["kind"] == "categorical"
+            if not supports_lapse:
+                raise ValueError(
+                    "`p_outlier` is supported only for one categorical response "
+                    "column. Set `p_outlier=None` or `p_outlier=0` for this model."
+                )
             if self.is_choice_only:
                 # Choice-only lapses are simulated as uniform random choices, so
                 # the likelihood must use the same uniform probability.
+                assert self.n_choices is not None
                 uniform = 1 / self.n_choices
                 if lapse is not None and not (
                     isinstance(lapse, int | float | np.floating)
@@ -2209,7 +2420,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
             else:
                 self.lapse = lapse
-            self.list_params.append("p_outlier")
+            # Append idempotently: a config whose `list_params` already ends in
+            # `p_outlier` must not get a duplicate (the append is otherwise
+            # non-idempotent).
+            if self.list_params[-1] != "p_outlier":
+                self.list_params.append("p_outlier")
             return
 
         if lapse is not None:
@@ -2242,8 +2457,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         return var_names
 
-    def _drop_parent_str_from_datatree(self, dt: DataTree | None) -> DataTree:
-        """Drop the parent_str variable from a DataTree object.
+    def _clean_predictive_datatree(self, dt: DataTree | None) -> DataTree:
+        """Normalize generated response names and dimensions.
 
         Parameters
         ----------
@@ -2252,20 +2467,32 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        xr.Dataset
+        DataTree
             The modified DataTree object.
         """
         if dt is None:
             raise ValueError("Please provide a DataTree (traces) object.")
-        else:
-            for group in dt.groups:
-                if group == "/":
-                    continue
-                if ("rt,response_mean" in dt[group].data_vars) and (
-                    self._parent not in dt[group].data_vars
-                ):
-                    dt[group] = dt[group].ds.rename({"rt,response_mean": self._parent})
-            return dt
+
+        response_mean = f"{self.response_str}_mean"
+        raw_response_dim = f"{self.response_str}_extra_dim_0"
+        response_dim = f"{self.response_str}_dim"
+        for group in dt.groups:
+            if group == "/":
+                continue
+            dataset = dt[group].ds
+            rename = {}
+            if response_mean in dataset.data_vars and self._parent not in dataset:
+                rename[response_mean] = self._parent
+            if group.rsplit("/", maxsplit=1)[-1] in {
+                "posterior_predictive",
+                "prior_predictive",
+            } and (
+                raw_response_dim in dataset.dims or raw_response_dim in dataset.coords
+            ):
+                rename[raw_response_dim] = response_dim
+            if rename:
+                dt[group] = dataset.rename(rename)
+        return dt
 
     def _postprocess_initvals_deterministic(
         self, initval_settings: dict = INITVAL_SETTINGS

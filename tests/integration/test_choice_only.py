@@ -27,6 +27,7 @@ import pytest
 import xarray as xr
 
 import hssm
+from hssm.modelconfig import get_default_model_config
 
 hssm.set_floatX("float32", update_jax=True)
 
@@ -73,14 +74,14 @@ COVERING_ARRAY = [
 ]
 
 
-@pytest.fixture(scope="module")
-def synthetic_data():
-    """Generate synthetic choice-only dataset for testing."""
+def synthetic_data(model_name):
+    """Generate a synthetic choice-only dataset with the model's own choices."""
     n_samples = 100
     rng = np.random.default_rng(seed=42)
+    choices = get_default_model_config(model_name)["choices"]
     return pd.DataFrame(
         {
-            "response": rng.choice([-1, 1], size=n_samples),
+            "response": rng.choice(choices, size=n_samples),
             "x": rng.standard_normal(n_samples),
         }
     )
@@ -110,11 +111,11 @@ def sample(model, sampler, step):
 
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, COVERING_ARRAY)
-def test_choice_only(synthetic_data, backend, sampler, step, shape):
+def test_choice_only(backend, sampler, step, shape):
     """Sample each covered (backend, sampler/step, model shape) cell."""
     model_name, params = MODEL_SHAPES[shape]
     model = hssm.HSSM(
-        data=synthetic_data,
+        data=synthetic_data(model_name),
         model=model_name,
         loglik_kind="analytical",
         model_config={"backend": backend},

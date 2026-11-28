@@ -99,7 +99,7 @@ def _(mo):
     loaded at all. This guide checks that likelihood, fits a simulated two-armed
     bandit with it, and compares the fit with the LAN.
 
-    Requires HSSM 0.5.1 or later.
+    Requires HSSM 0.6.0 or later.
     """)
     return
 

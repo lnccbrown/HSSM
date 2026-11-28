@@ -165,7 +165,7 @@ def _compute_log_likelihood(
     sample_new_groups = False
 
     # Get the aliased response name
-    response_aliased_name = get_aliased_name(model.response_component.term)
+    response_aliased_name = get_aliased_name(_get_response_term(model))
 
     if not inplace:
         dt = dt.copy(deep=True)
@@ -248,15 +248,26 @@ def log_likelihood(
     # Child classes pass "y_values" through the "y" kwarg
     y_values = kwargs.pop("y", None)
 
+    response_term = _get_response_term(model)
+    # HSSM builds its own response, so Bambi's multi-column responses are
+    # refused here instead of re-implementing Bambi's PyMC backend (#1452).
+    if any(
+        getattr(response_term, flag, False)
+        for flag in ("is_constrained", "is_truncated", "is_censored")
+    ):
+        raise NotImplementedError(
+            "`log_likelihood` does not support Bambi's `constrained(...)`, "
+            "`truncated(...)` and `censored(...)` responses."
+        )
+
     # Get the values of the outcome variable
     if y_values is None:  # when it's not handled by the specific family
         if data is None:
-            y_values = np.squeeze(model.response_component.term.data)
+            y_values = np.squeeze(response_term.data)
         else:
             y_values = response_evaluate_new_data(model, data)
 
     response_dist = get_response_dist(model.family)
-    response_term = model.response_component.term
     kwargs, coords = family._make_dist_kwargs_and_coords(model, posterior, **kwargs)
 
     # If it's multivariate, it's going to have a fourth coord,
@@ -277,52 +288,44 @@ def log_likelihood(
     # on_unused_input="ignore" is needed because fixed-vector parameters
     # are substituted with constants inside HSSMDistribution.logp(), making
     # the corresponding input variable unused in the compiled graph.
-    if not response_term.is_constrained:
-        # pyrefly: ignore[no-matching-overload]
-        rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
-        logp_compiled = pm.compile(
-            [val for key_, val in pt_dict.items()],
-            rv_logp,
-            mode=compile_mode,
-            allow_input_downcast=True,
-            on_unused_input="ignore",
-        )
-    else:
-        # Bounds are scalars, we can safely pick them from the first row
-        lower, upper = response_term.data[0, 1:]
-        lower = lower if lower != -np.inf else None
-        upper = upper if upper != np.inf else None
+    # pyrefly: ignore[no-matching-overload]
+    rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
+    logp_compiled = pm.compile(
+        [val for key_, val in pt_dict.items()],
+        rv_logp,
+        mode=compile_mode,
+        allow_input_downcast=True,
+        on_unused_input="ignore",
+    )
 
-        # Finally evaluate logp
-        rv_logp = pm.logp(
-            pm.Truncated.dist(
-                response_dist.dist(**kwargs_prep), lower=lower, upper=upper
-            ),
-            y_values,
-        )
-        logp_compiled = pm.compile(
-            [val for key_, val in pt_dict.items()],
-            rv_logp,
-            mode=compile_mode,
-            allow_input_downcast=True,
-            on_unused_input="ignore",
-        )
-
-    # Loop through chain and draws
-    for ids in itertools.product(coords["chain"].values, coords["draw"].values):
+    # Loop through chain and draws by position: the coordinate values need not
+    # be 0, 1, ..., e.g. once burn-in draws are dropped or the trace is thinned.
+    for i_chain, i_draw in itertools.product(range(n_chains), range(n_draws)):
         kwargs_tmp = {
             key_: (
-                val[ids[0], ids[1], ...]
+                val[i_chain, i_draw, ...]
                 if (val.shape[0] == n_chains and val.shape[1] == n_draws)
                 else val[0, 0, ...]
             )
             for key_, val in kwargs.items()
         }
 
-        output_array[ids[0], ids[1], :] = logp_compiled(**kwargs_tmp)
+        output_array[i_chain, i_draw, :] = logp_compiled(**kwargs_tmp)
 
     # output_array
     return xr.DataArray(output_array, coords=coords)
+
+
+def _get_response_term(model: bmb.Model) -> Any:
+    """Return the response term of a Bambi model.
+
+    ``Model.response_term`` replaces ``Model.response_component.term``, which is
+    deprecated in Bambi 0.21.0. The fallback keeps older Bambi versions allowed
+    by ``pyproject.toml`` working.
+    """
+    if hasattr(type(model), "response_term"):
+        return model.response_term
+    return model.response_component.term
 
 
 def get_response_dist(family: bmb.Family) -> type[pm.Distribution]:
@@ -540,7 +543,8 @@ def _random_sample(
 def _rearrange_data(data: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarray:
     """Rearrange a dataframe so that missing values are on top.
 
-    We assume the dataframe's first column can contain missing values coded as -999.0.
+    Missing values are coded as -999.0 in the ``rt`` column of a dataframe (its
+    first column if it has no ``rt`` column) and in the first column of an array.
 
     Parameters
     ----------
@@ -553,7 +557,11 @@ def _rearrange_data(data: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarra
         The rearranged dataframe.
     """
     if isinstance(data, pd.DataFrame):
-        missing_indices = data.iloc[:, 0] == -999.0
+        # `rt` need not be the first column, e.g. after a `participant_id` column.
+        rt = data["rt"] if "rt" in data.columns else data.iloc[:, 0]
+        # `fillna`: with a nullable dtype, `pd.NA` compares to `pd.NA`, and such a row
+        # would fall out of both splits below.
+        missing_indices = (rt == -999.0).fillna(False)
         split_missing = data.loc[missing_indices, :]
         split_not_missing = data.loc[~missing_indices, :]
 
@@ -629,19 +637,35 @@ def predictive_dt_to_dataframe(
         The DataTree object to convert.
     predictive_group : Literal["posterior_predictive", "prior_predictive"]
         The predictive group to convert.
+    response_str
+        Comma-separated physical response column names in configured order.
+    response_dim
+        Name of the vector response coordinate. Scalar responses have no such
+        coordinate.
 
     Returns
     -------
     pd.DataFrame:
         A dataframe with the predictive samples.
     """
-    df = dt[predictive_group].ds.to_dataframe().reset_index(drop=False)
+    predictive = dt[predictive_group].ds[response_str]
+    df = predictive.to_dataframe().reset_index()
+    response_names = response_str.split(",")
+    if response_dim not in df.columns:
+        if any(dim not in {"chain", "draw", "__obs__"} for dim in predictive.dims):
+            raise ValueError(
+                f"Predictive response coordinate {response_dim!r} is missing."
+            )
+        return df.loc[:, ["chain", "draw", "__obs__", response_str]].rename(
+            columns={response_str: response_names[0]}
+        )
+
     df_wide = df.pivot_table(
         index=["chain", "draw", "__obs__"], columns=response_dim, values=response_str
     ).reset_index()
 
     df_wide.columns.name = None
-    df_wide = df_wide.rename(columns={0: "rt", 1: "response"})
+    df_wide = df_wide.rename(columns=dict(enumerate(response_names)))
     return df_wide
 
 

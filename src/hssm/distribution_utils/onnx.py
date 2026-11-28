@@ -60,8 +60,11 @@ def make_jax_logp_funcs_from_onnx(
         standard case for LANs and other likelihoods that condition on
         observed data.
         If True, the callable signature is ``f(*params)`` with no data
-        argument.  This is used for Choice Probability Networks (CPNs)
-        and Outcome Probability Networks (OPNs).
+        argument, for networks that take only the parameters. CPN and OPN
+        artifacts do **not** use this: they take the observed choice
+        (CPN) or the deadline (OPN) as their last input, so ``data`` is
+        the corresponding single column and the input vector is
+        ``[*params, column]``.
     return_jit
         If `True`, the function will return a JIT-compiled version of the vectorized
         logp function, its VJP, and the non-jitted version of the logp function.
@@ -108,11 +111,9 @@ def make_jax_logp_funcs_from_onnx(
         else:
             data = inputs[0]
             dist_params = inputs[1:]
+            # Each parameter is squeezed to a scalar, so this is always 1-D, also
+            # with a single parameter (a network of width 2, `[param, column]`).
             param_vector = jnp.array([inp.squeeze() for inp in dist_params])
-            # AF-TODO: Unclear if trailing dimension of 1 is actually ever
-            # happening.
-            if param_vector.shape[-1] == 1:
-                param_vector = param_vector.squeeze(axis=-1)
             input_vector = jnp.concatenate((param_vector, data))
 
         return jax_func(input_vector)

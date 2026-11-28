@@ -5,7 +5,9 @@ import pytest
 import pytensor
 import pytensor.tensor as pt
 import numpy as np
+import pandas as pd
 
+import hssm
 from hssm.utils import _rearrange_data
 from hssm.distribution_utils import (
     assemble_callables,
@@ -23,31 +25,39 @@ def fixture_path():
 
 
 @pytest.fixture
-def data():
+def rng():
+    return np.random.default_rng(1324)
+
+
+@pytest.fixture
+def data(rng):
     arr = np.ones((100, 3), dtype=np.float32)
-    arr[:, 0] = np.random.rand(100)
-    arr[:, 2] = np.random.rand(100)
+    arr[:, 0] = rng.random(100)
+    arr[:, 1] = rng.choice([-1.0, 1.0], 100)
+    arr[:, 2] = rng.random(100)
     missing_indices = arr[:, 0] > arr[:, 2]
     arr[missing_indices, 0] = -999.0
     return _rearrange_data(arr)
 
 
-# AF-TODO: Reactivate CPN case
 # AF-TODO: Something is broken about the is_vector == False case
 # cases = product(["opn", "cpn"], [True, False])
-cases = product(["opn"], [True])
+cases = product(["opn", "cpn"], [True])
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("cpn, is_vector", cases)
-def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
+def test_make_missing_data_callable(data, rng, fixture_path, cpn, is_vector):
     is_cpn = cpn == "cpn"
     is_deadline = not is_cpn
 
+    # Both networks take one data column as their last input: the deadline
+    # (OPN) or the observed choice (CPN, #1324). Dropping the deadline column
+    # for the CPN makes the response the last column in both cases.
     if is_cpn:
         data = data[:, :-1]
 
-    v = pt.as_tensor_variable(np.random.rand(100) if is_vector else np.random.rand())
+    v = pt.as_tensor_variable(rng.random(100) if is_vector else rng.random())
     a = pt.as_tensor_variable(0.2)
     z = pt.as_tensor_variable(0.3)
     t = pt.as_tensor_variable(0.4)
@@ -60,7 +70,7 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
         missing_onnx_path,
         backend="jax",
         params_is_reg=[is_vector] + [False] * 3,
-        params_only=is_cpn,
+        params_only=False,
     )
 
     missing_callable_pytensor = make_missing_data_callable(
@@ -68,11 +78,9 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
         backend="pytensor",
     )
 
-    missing_result_jax = missing_callable_jax(
-        None if is_cpn else data[:, -1:], *dist_params
-    ).eval()
+    missing_result_jax = missing_callable_jax(data[:, -1:], *dist_params).eval()
     missing_result_pytensor = missing_callable_pytensor(
-        None if is_cpn else data[:, -1:], *dist_params
+        data[:, -1:], *dist_params
     ).eval()
 
     np.testing.assert_array_almost_equal(
@@ -83,10 +91,10 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
 
     # Second, test if the gradient of the callables in jax and pytensor give the same result
     v_grad_jax = pytensor.grad(
-        missing_callable_jax(None if is_cpn else data[:, -1:], *dist_params).sum(), v
+        missing_callable_jax(data[:, -1:], *dist_params).sum(), v
     ).eval()
     v_grad_pytensor = pytensor.grad(
-        missing_callable_pytensor(None if is_cpn else data[:, -1:], *dist_params).sum(),
+        missing_callable_pytensor(data[:, -1:], *dist_params).sum(),
         v,
     ).eval()
 
@@ -116,7 +124,7 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
         *dist_params[1:],
     ).eval()
     missing_data_jax = missing_callable_jax(
-        None if is_cpn else data[:n_missing, -1:],
+        data[:n_missing, -1:],
         v[:n_missing] if is_vector else v,
         *dist_params[1:],
     ).eval()
@@ -124,7 +132,7 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
     assembled_loglik_jax = assemble_callables(
         logp_callable_jax,
         missing_callable_jax,
-        params_only=is_cpn,
+        params_only=False,
         has_deadline=is_deadline,
     )
 
@@ -150,7 +158,7 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
     assembled_loglik_pytensor = assemble_callables(
         logp_callable_pytensor,
         missing_callable_pytensor,
-        params_only=is_cpn,
+        params_only=False,
         has_deadline=is_deadline,
     )
 
@@ -160,7 +168,7 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
         *dist_params[1:],
     ).eval()
     missing_data_pytensor = missing_callable_pytensor(
-        None if is_cpn else data[:n_missing, -1:],
+        data[:n_missing, -1:],
         v[:n_missing] if is_vector else v,
         *dist_params[1:],
     ).eval()
@@ -214,3 +222,66 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
     # ).eval()
 
     # np.testing.assert_array_almost_equal(v_grad_jax, v_grad_pytensor, decimal=DECIMAL)
+
+
+def test_rearrange_data_finds_rt_column_by_name():
+    """Missing-RT rows go on top even when ``rt`` is not the first column."""
+    df = pd.DataFrame(
+        {
+            "participant_id": [0, 0, 1, 1],
+            "rt": [0.5, -999.0, 0.7, -999.0],
+            "response": [1.0, -1.0, 1.0, -1.0],
+        }
+    )
+
+    assert _rearrange_data(df).index.tolist() == [1, 3, 0, 2]
+
+
+def test_rearrange_data_keeps_rows_with_nullable_na_rt():
+    """A ``pd.NA`` in a nullable ``rt`` column does not drop the row."""
+    df = pd.DataFrame(
+        {
+            "participant_id": [0, 0, 0],
+            "rt": pd.array([0.5, -999.0, pd.NA], dtype="Float64"),
+            "response": [1.0, -1.0, 1.0],
+        }
+    )
+
+    assert _rearrange_data(df).index.tolist() == [1, 0, 2]
+
+
+def test_missing_data_loglik_does_not_depend_on_column_order(fixture_path):
+    """The model log-density is the same wherever the ``rt`` column sits.
+
+    ``assemble_callables`` scores the first ``n_missing`` rows with the missing-data
+    network, so the missing-RT rows must be on top whatever the column order.
+    """
+    df = pd.DataFrame(
+        {
+            "rt": [0.9, -999.0, 1.2, -999.0, 0.6],
+            "response": [1.0, -1.0, 1.0, 1.0, -1.0],
+        }
+    )
+
+    def model_logp(data):
+        model = hssm.HSSM(
+            data=data,
+            model="ddm",
+            loglik_kind="analytical",
+            missing_data=True,
+            loglik_missing_data=fixture_path / "ddm_cpn.onnx",
+            p_outlier=None,
+            v={"prior": {"name": "Uniform", "lower": -3.0, "upper": 3.0}},
+            a=1.0,
+            z=0.5,
+            t=0.2,
+        )
+        assert (model.data["rt"].iloc[:2] == -999.0).all()
+        return model.pymc_model.compile_logp()({"v_interval__": np.array(0.3)})
+
+    rt_first = model_logp(df)
+    rt_second = model_logp(
+        df.assign(participant_id=0)[["participant_id", "rt", "response"]]
+    )
+
+    np.testing.assert_allclose(rt_second, rt_first, rtol=1e-6)
