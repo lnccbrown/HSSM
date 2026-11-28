@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import bambi as bmb
 import jax.numpy as jnp
 import numpy as np
@@ -204,14 +206,18 @@ def test_inv_temp_softmax_preserves_lan_matrix_float_dtype():
 @pytest.mark.parametrize(
     ("responses", "match"),
     [
-        ([0, 1.5, 0, 1], "integral"),
-        ([0, "left", 0, 1], "numeric"),
-        ([0, np.inf, 0, 1], "finite"),
+        ([0, 1.5, 0, 1], "Invalid responses"),
+        (
+            [0, "left", 0, 1],
+            r"column 'response'.*string label 'left'.*integer choice codes \(0, 1\)",
+        ),
+        (["0", "1", "0", "1"], r"string label '0'.*integer choice codes \(0, 1\)"),
+        ([0, np.inf, 0, 1], "finite numeric"),
         ([0, 2, 0, 1], "Invalid responses"),
     ],
 )
 def test_choice_only_rlssm_validates_response_labels(responses, match):
-    """Choice-only RLSSM response labels are checked before logp evaluation."""
+    """Choice-only labels use the same exact domain checks as other models."""
     with pytest.raises(ValueError, match=match):
         hssm.RLSSM(
             data=_fake_choice_only_data(responses),
@@ -232,11 +238,39 @@ def test_choice_only_rlssm_warns_for_missing_declared_choices():
         )
 
 
+@pytest.mark.parametrize(
+    ("setting_name", "invalid_value", "preset"),
+    [
+        ("prior_settings", "SAFE", "safe"),
+        ("link_settings", "LOG_LOGIT", "log_logit"),
+    ],
+)
+def test_choice_only_rlssm_rejects_invalid_setting_presets(
+    setting_name, invalid_value, preset
+):
+    """Choice-only RLSSM uses the shared preset validation path."""
+    with patch("hssm.base.Params.from_user_specs") as make_params:
+        with pytest.raises(
+            ValueError,
+            match=rf"`{setting_name}` must be either '{preset}' or None",
+        ):
+            hssm.RLSSM(
+                data=_fake_choice_only_data([0, 1, 0, 1]),
+                model_config=_fake_choice_only_config(),
+                p_outlier=None,
+                process_initvals=False,
+                **{setting_name: invalid_value},
+            )
+
+    make_params.assert_not_called()
+
+
 def _make_shell_rlssm(config, lapse):
     """Build an _RLSSM shell for distribution-construction unit tests."""
     model = _RLSSM.__new__(_RLSSM)
     model.list_params = [*config.list_params, "p_outlier"]
     model.model_config = config
+    model._obs_dim = len(config.response)
     model.bounds = dict(config.bounds)
     model.lapse = lapse
     model.data = pd.DataFrame({"response": [0, 1], "rt": [0.5, 0.6]})

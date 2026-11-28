@@ -13,7 +13,7 @@ import sys
 
 from .addm import aDDM, aDDMConfig
 from .config import ModelConfig
-from .datasets import load_data
+from .datasets import list_data, load_data
 from .defaults import show_defaults
 from .hmm import RSSSM
 from .hssm import HSSM
@@ -24,6 +24,7 @@ from .prior import Prior
 from .register import register_model
 from .rl import RLSSM, register_rlssm_model
 from .simulator import simulate_data
+from .tracking import list_runs, load_run, track
 from .utils import check_data_for_rl, set_floatX
 
 _logger = logging.getLogger("hssm")
@@ -40,8 +41,11 @@ __all__ = [
     "aDDM",
     "aDDMConfig",
     "Link",
+    "list_data",
     "list_models",
+    "list_runs",
     "load_data",
+    "load_run",
     "ModelConfig",
     "Param",
     "Prior",
@@ -49,6 +53,7 @@ __all__ = [
     "register_model",
     "register_rlssm_model",
     "simulate_data",
+    "track",
     "set_floatX",
     "show_defaults",
 ]

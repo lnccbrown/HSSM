@@ -9,8 +9,8 @@
   "build": { "dockerfile": "../Dockerfile", "context": ".." },
   "remoteUser": "hssm",
 
-  // Editable dev env on top of the image. `uv sync` installs the project + the
-  // default `dev` group (pytest, ruff, mypy, pre-commit) from uv.lock into .venv.
+  // Editable dev env on top of the image. `uv sync` resolves pyproject.toml and
+  // installs the project + default `dev` group (pytest, ruff, mypy, pre-commit).
   // ponytail: dev group only — `uv sync --group notebook` / `--group docs` are one
   // command away when a contributor needs the heavy notebook/docs stacks.
   // onCreateCommand runs during prebuilds, so the venv is baked in → fast startup.

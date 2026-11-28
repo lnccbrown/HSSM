@@ -244,7 +244,7 @@ def test_make_param_from_defaults():
     assert isinstance(param.link, Link)
 
 
-def test_make_params():
+def test_make_params(data_ddm_reg):
     model = create_mock_model("ddm")
     kwargs = kw()
     user_params_dict = collect_user_params(model, include, kwargs, p_outlier)
@@ -286,7 +286,8 @@ def test_make_params():
     assert params_dict["t"].prior.args["sigma"] == 2.0
     assert isinstance(params_dict["t"], DefaultParam)
 
-    model = create_mock_model("ddm", global_formula="t ~ x + z")
+    model = create_mock_model("ddm", global_formula="t ~ x + w")
+    setattr(model, "data", data_ddm_reg.assign(w=data_ddm_reg["y"]))
 
     params_dict = make_params(model, user_params_dict)
     assert all(param_name in params_dict for param_name in model.list_params)
@@ -320,12 +321,12 @@ def test_make_params():
 
     assert params_dict["t"].name == "t"
     assert isinstance(params_dict["t"], RegressionParam)
-    assert params_dict["t"].formula == "t ~ x + z"
+    assert params_dict["t"].formula == "t ~ x + w"
     assert params_dict["t"].prior is None
     assert params_dict["t"].bounds is not None
 
 
-def test_from_user_specs():
+def test_from_user_specs(data_ddm_reg):
     model = create_mock_model("ddm")
     kwargs = kw()
 
@@ -336,7 +337,8 @@ def test_from_user_specs():
     assert params.parent_param is params["v"]
     assert all(not params[param].is_parent for param in ["a", "z", "t", "p_outlier"])
 
-    model = create_mock_model("ddm", global_formula="t ~ x + z")
+    model = create_mock_model("ddm", global_formula="t ~ x + w")
+    setattr(model, "data", data_ddm_reg.assign(w=data_ddm_reg["y"]))
 
     params = Params.from_user_specs(model, include, kwargs, p_outlier)
     assert all(param_name in params for param_name in model.list_params)
@@ -372,6 +374,7 @@ def test_parse_bambi(data_ddm_reg):
     # Has global formula
     kwargs = kw()
     model = create_mock_model("ddm", global_formula="t ~ x + y")
+    setattr(model, "data", data_ddm_reg)
     params = Params.from_user_specs(model, include, kwargs, p_outlier)
 
     formula, priors, links = params.parse_bambi(model=model)
@@ -410,3 +413,83 @@ def test_parse_bambi(data_ddm_reg):
         assert isinstance(priors["t"][key], bmb.Prior)
 
     assert links == {"t": "identity"}
+
+
+def test_make_params_prepares_formula_once_for_safe_priors(data_ddm_reg, monkeypatch):
+    """Reuse one Formulae design when safe priors need structural metadata."""
+    calls = 0
+    original = RegressionParam._get_design_matrices
+
+    def counted_get_design_matrices(self, data, extra_namespace):
+        nonlocal calls
+        calls += 1
+        return original(self, data, extra_namespace)
+
+    monkeypatch.setattr(
+        RegressionParam, "_get_design_matrices", counted_get_design_matrices
+    )
+    model = create_mock_model("ddm", global_formula="t ~ x + y", prior_settings="safe")
+    setattr(model, "data", data_ddm_reg)
+
+    params = Params.from_user_specs(model, include, kw(), p_outlier)
+
+    assert calls == 1
+    assert params["t"]._common_term_names == {"Intercept", "x", "y"}
+    assert params["t"]._group_term_names == {}
+
+
+def test_make_params_prepares_formula_without_safe_priors(data_ddm_reg):
+    """Prepare structural metadata even when safe priors are disabled."""
+    model = create_mock_model("ddm", global_formula="t ~ x + (0 + y | x)")
+    setattr(model, "data", data_ddm_reg)
+
+    params = Params.from_user_specs(model, include, kw(), p_outlier)
+
+    regression = params["t"]
+    assert regression.prior is None
+    assert regression._common_term_names == {"Intercept", "x"}
+    assert regression._group_term_names == {"y|x": "y"}
+    assert regression._group_terms_with_common == set()
+
+
+def test_make_params_prepares_rhs_only_formula(cavanagh_test):
+    """Preserve RHS-only shorthand in a complete HSSM model build."""
+    model = HSSM(
+        data=cavanagh_test,
+        model="ddm",
+        include=[
+            {
+                "name": "v",
+                "formula": "1 + theta + (0 + theta | participant_id)",
+            }
+        ],
+        prior_settings=None,
+        z=0.5,
+        p_outlier=0.0,
+        process_initvals=False,
+    )
+
+    regression = model.params["v"]
+    assert regression.formula == "v ~ 1 + theta + (0 + theta | participant_id)"
+    assert regression._common_term_names == {"Intercept", "theta"}
+    assert regression._group_term_names == {
+        "theta|participant_id": "theta",
+    }
+    assert regression._group_terms_with_common == {"theta|participant_id"}
+    assert regression.prior is None
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [
+        "v ~ 1 + a",
+        "v ~ 1 + C(stim) + a",
+        "1 + (1 + a | participant_id)",
+    ],
+)
+def test_make_params_rejects_column_named_like_a_parameter(cavanagh_test, formula):
+    """A data column with a parameter's name fails early, naming the column."""
+    data = cavanagh_test.rename(columns={"theta": "a"})
+
+    with pytest.raises(ValueError, match=r"uses the data column\(s\) \['a'\]"):
+        HSSM(data=data, model="ddm", include=[{"name": "v", "formula": formula}])

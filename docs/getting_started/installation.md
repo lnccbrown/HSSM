@@ -39,6 +39,79 @@ pip install hssm[cuda12]  # CUDA 12
 pip install hssm[cuda13]  # CUDA 13
 ```
 
+GPUs are fastest in single precision: call `hssm.set_floatX("float32")` before
+building the model. This also keeps JAX's matrix multiplications at full float32
+precision. JAX would otherwise run them as TF32 on NVIDIA GPUs from Ampere on,
+which can stall the sampler on LAN likelihoods. If you have already chosen a
+precision, through `JAX_DEFAULT_MATMUL_PRECISION` or `jax.config.update`,
+`set_floatX` leaves it as it is. Full float32 costs speed: on one RTX A5000, a
+LAN log-likelihood and its gradient on 10,000 or more trials took about 1.3x as
+long as under TF32, and data-center GPUs (A100, H100) can lose more. If you want
+TF32's speed, set `JAX_DEFAULT_MATMUL_PRECISION=tensorfloat32` before importing
+JAX.
+
+### Install HSSM (with run tracking)
+
+To keep a record of each fit — the model, the sampler settings, the diagnostics
+and the traces — install the `tracking` extra, which adds MLflow:
+
+```bash
+uv add "hssm[tracking]"       # or: uv pip install "hssm[tracking]"
+pip install "hssm[tracking]"  # with pip
+```
+
+See [Track fits with MLflow](../how_to/track_with_mlflow.md).
+
+## Optional: a faster simulator backend (GSL + OpenMP)
+
+HSSM simulates through [`ssm-simulators`](https://github.com/lnccbrown/ssm-simulators),
+whose prebuilt wheels ship a portable, single-threaded build. If the package is
+instead compiled on your machine with the GNU Scientific Library present, it
+gains a multithreaded (OpenMP) backend with a validated parallel random-number
+generator — useful when simulation is the bottleneck, for example in
+posterior-predictive sampling.
+
+First install the system libraries (a one-time step):
+
+```bash
+# macOS
+brew install gsl libomp
+
+# Debian / Ubuntu
+sudo apt-get install libgsl-dev build-essential
+```
+
+Then tell your installer to build `ssm-simulators` from source while keeping
+wheels for everything else. With `uv`, add one line to your project and every
+`uv sync` does the right thing from then on:
+
+```toml
+[tool.uv]
+no-binary-package = ["ssm-simulators"]
+```
+
+Or as a one-off install (the flag names the dependency to compile; `hssm` is
+what you are installing):
+
+```bash
+uv pip install --no-binary ssm-simulators hssm
+```
+
+```bash
+pip install hssm --no-binary ssm-simulators
+```
+
+**Verify it worked.** If GSL is not found at build time, the build still
+succeeds and silently produces the same single-threaded backend as the wheel —
+so check:
+
+```bash
+python -c "from cssm._openmp_status import is_gsl_available, is_openmp_available; print('GSL:', is_gsl_available(), '| OpenMP:', is_openmp_available())"
+```
+
+Both should print `True`. If not, confirm the system libraries above are
+installed and reinstall with the same flag.
+
 !!! note
 
     JAX's CUDA wheels are Linux-only and require a compatible NVIDIA driver

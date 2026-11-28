@@ -1,29 +1,86 @@
 """Tests for HSSM distribution utility helpers."""
 
+import os
+import subprocess
+import sys
 from unittest.mock import patch
 
 import bambi as bmb
 import numpy as np
+import pandas as pd
 import pymc as pm
+import pytensor
 import pytensor.tensor as pt
 import pytest
 
 import hssm
 from hssm import distribution_utils
+from hssm.config import Config
+from hssm.defaults import default_model_config
 from hssm.distribution_utils import dist as dist_module
 from hssm.distribution_utils.dist import (
+    LOGP_LB,
     _apply_lapse_model,
     _create_arg_arrays,
     _extract_size,
     _get_p_outlier,
+    _ndt_lower_edge,
     apply_param_bounds_to_loglik,
     ensure_positive_ndt,
     make_distribution,
     make_distribution_for_supported_model,
 )
 from hssm.likelihoods.analytical import DDM, logp_ddm
+from hssm.likelihoods.blackbox import logp_full_ddm
+from hssm.register import register_model
 
-hssm.set_floatX("float32")
+
+@pytest.fixture(autouse=True)
+def _float32():
+    """Run every test in this file in float32, whatever ran before it.
+
+    The expected values below are float32 ones. Setting floatX at import does
+    not give the tests that precision: pytest imports every test module before
+    the first test runs, and any earlier test can leave another floatX behind.
+    """
+    floatX = pytensor.config.floatX
+    hssm.set_floatX("float32")
+    yield
+    hssm.set_floatX(floatX)
+
+
+# LOGP_LB as these float32 graphs store it.
+FLOOR = np.float32(LOGP_LB)
+
+# Response times for the ndt_edge_shift wiring tests. With t = 0.5 and st = 0.1
+# the candidate edges are 0.5 (no declaration), 0.45 (scale 0.5), 0.4 (scale 1.0)
+# and 0.2 (scale 3.0); every grid point keeps 0.01 clear of all of them, so
+# float32 rounding of the edge cannot move a point across it.
+NDT_RT_GRID = np.array([0.1, 0.19, 0.21, 0.3, 0.39, 0.41, 0.49, 0.51, 0.6, 1.0])
+NDT_BOUNDS = {
+    "v": (-3.0, 3.0),
+    "a": (0.3, 2.5),
+    "z": (0.1, 0.9),
+    "t": (0.0, 2.0),
+    "st": (0.0, 1.0),
+}
+
+
+def _flat_logp(data, v, a, z, t, st):
+    """Score every response 1.0, so only the guard's floor can change a value."""
+    return pt.ones_like(data[:, 0])
+
+
+def _ndt_grid_data():
+    """Return the grid as a (rt, response) array and as an HSSM data frame."""
+    response = np.where(np.arange(NDT_RT_GRID.size) % 2 == 0, 1.0, -1.0)
+    data = np.column_stack([NDT_RT_GRID, response])
+    return data, pd.DataFrame(data, columns=["rt", "response"])
+
+
+def _floored_at(edge):
+    """Return the expected logp on the grid for a floor at ``edge``."""
+    return np.where(NDT_RT_GRID <= edge, FLOOR, 1.0)
 
 
 def test_make_hssm_rv():
@@ -60,6 +117,53 @@ def test_make_hssm_rv():
     random_sample = wfpt_rv.rng_fn(rng, *true_values, size=100)
 
     assert random_sample.shape == (100, 2)
+
+
+def test_likelihood_only_model_uses_configured_width():
+    """An unregistered simulator prevents prediction, not fitting."""
+    data = pd.DataFrame({"rt": [1.0, 2.0], "x": [2.0, 3.0], "y": [3.0, 4.0]})
+    model = hssm.HSSM(
+        data=data,
+        model="likelihood_only_test",
+        model_config={
+            "response": list(data),
+            "response_domains": {k: {"kind": "continuous"} for k in ("x", "y")},
+            "list_params": ["v"],
+            "default_priors": {"v": {"name": "Normal", "mu": 0, "sigma": 1}},
+        },
+        loglik=lambda data, v: -pt.sum(pt.square(data - v[..., None]), axis=-1),
+        loglik_kind="analytical",
+        p_outlier=None,
+    )
+    assert model.model_distribution.rv_op.signature == "()->(3)"
+    assert np.isfinite(
+        model.pymc_model.compile_logp()(model.pymc_model.initial_point())
+    )
+    with pytest.raises(ValueError, match="likelihood_only_test"):
+        model.sample_prior_predictive(draws=1)
+
+
+@pytest.mark.parametrize("name", ["ddm", "ddm_deadline"])
+def test_named_simulator_still_checks_its_width(name):
+    """A real simulator, including a generated variant, must match the config."""
+    with pytest.raises(
+        ValueError, match="observation width 2.*configured response width 3"
+    ):
+        distribution_utils.make_hssm_rv(name, ["v"], expected_obs_dim=3)
+
+
+def test_lapse_responses_use_a_registered_models_choices(registered_ssms_model):
+    """A model registered in ssm-simulators after import draws lapse responses
+    from its own choices, not from ssm-simulators' fallback [0, 1, 2]."""
+    rv = distribution_utils.make_hssm_rv(
+        registered_ssms_model["name"],
+        ["v", "a", "z", "t"],
+        lapse=bmb.Prior("Uniform", lower=0.0, upper=1.0),
+    )
+    # p_outlier = 1: every response is a lapse draw.
+    sample = rv.rng_fn(np.random.default_rng(1), *[0.5, 1.0, 0.5, 0.3], 1.0, 200)
+
+    assert set(np.unique(sample[:, 1])) == {-1.0, 1.0}
 
 
 def test_lapse_distribution():
@@ -108,13 +212,65 @@ def test_apply_lapse_model_rejects_numeric_lapse_distribution():
         )
 
 
+@pytest.mark.parametrize("shape", [(2000,), (3, 2000), (2, 3, 500)])
+@pytest.mark.parametrize("trialwise", [False, True], ids=["scalar", "trialwise"])
+@pytest.mark.parametrize("is_choice_only", [False, True], ids=["rt", "choice_only"])
+def test_apply_lapse_model_gives_each_lapse_row_its_own_draw(
+    shape, trialwise, is_choice_only
+):
+    """Lapse rows hold independent draws, and the same rows lapse as before (#1507).
+
+    `np.putmask` handed out the lapse draws by flat position in `sims_out`, so
+    several lapse rows shared one (rt, response) pair.
+    """
+    p_outlier = np.broadcast_to(
+        np.linspace(0.0, 0.1, shape[-1]) if trialwise else 0.05, shape
+    ).copy()
+    # 0.5 is neither a choice nor inside the lapse RT support: it marks non-lapse rows.
+    sims_out = np.full(shape if is_choice_only else (*shape, 2), 0.5)
+
+    out = _apply_lapse_model(
+        sims_out=sims_out.copy(),
+        p_outlier=p_outlier if trialwise else 0.05,
+        rng=np.random.default_rng(0),
+        lapse_dist=0.5
+        if is_choice_only
+        else bmb.Prior("Uniform", lower=5.0, upper=20.0),
+        choices=[-1, 1],
+        is_choice_only=is_choice_only,
+    )
+
+    # Which rows lapse is the function's first draw from the generator.
+    expected_lapse = (
+        np.random.default_rng(0).binomial(n=1, p=p_outlier, size=shape).astype(bool)
+    )
+    is_lapse = out != 0.5 if is_choice_only else out[..., 0] != 0.5
+    np.testing.assert_array_equal(is_lapse, expected_lapse)
+    np.testing.assert_array_equal(out[~is_lapse], sims_out[~is_lapse])
+
+    lapse_rows = out[is_lapse]
+    responses = lapse_rows if is_choice_only else lapse_rows[:, 1]
+    assert set(np.unique(responses)) == {-1.0, 1.0}
+    if not is_choice_only:
+        lapse_rt = lapse_rows[:, 0]
+        assert ((lapse_rt >= 5.0) & (lapse_rt <= 20.0)).all()
+        assert np.unique(lapse_rt).size == lapse_rt.size
+
+
 @pytest.mark.parametrize("rv", ["choice_only_model", lambda *args, **kwargs: None])
 def test_make_distribution_forwards_choice_only_to_generated_rv(monkeypatch, rv):
     """Generated RVs must keep the choice-only support-shape contract."""
     captured = {}
 
-    def fake_make_hssm_rv(simulator_fun, list_params, lapse=None, is_choice_only=False):
+    def fake_make_hssm_rv(
+        simulator_fun,
+        list_params,
+        lapse=None,
+        is_choice_only=False,
+        expected_obs_dim=None,
+    ):
         captured["is_choice_only"] = is_choice_only
+        captured["expected_obs_dim"] = expected_obs_dim
 
         class FakeRV:
             def __call__(self):
@@ -132,6 +288,7 @@ def test_make_distribution_forwards_choice_only_to_generated_rv(monkeypatch, rv)
     )
 
     assert captured["is_choice_only"] is True
+    assert captured["expected_obs_dim"] is None
 
 
 @pytest.mark.slow
@@ -159,7 +316,7 @@ def test_apply_param_bounds_to_loglik():
         apply_param_bounds_to_loglik(
             logp, list_params, scalar_in_bound, scalar_out_of_bound, bounds=bounds
         ).eval(),
-        -66.1,
+        FLOOR,
     )
 
     results_vector = np.asarray(
@@ -168,7 +325,7 @@ def test_apply_param_bounds_to_loglik():
         ).eval(),
     )
 
-    np.testing.assert_array_equal(results_vector[out_of_bound_indices], -66.1)
+    np.testing.assert_array_equal(results_vector[out_of_bound_indices], FLOOR)
 
     np.testing.assert_array_equal(
         results_vector[~out_of_bound_indices], logp[~out_of_bound_indices]
@@ -207,12 +364,12 @@ def test_make_distribution():
 
     np.testing.assert_array_equal(
         Dist.logp(data, scalar_in_bound, scalar_out_of_bound).eval(),
-        -66.1,
+        FLOOR,
     )
 
     results_vector = np.asarray(Dist.logp(data, scalar_in_bound, random_vector).eval())
 
-    np.testing.assert_array_equal(results_vector[out_of_bound_indices], -66.1)
+    np.testing.assert_array_equal(results_vector[out_of_bound_indices], FLOOR)
 
     np.testing.assert_array_equal(
         results_vector[~out_of_bound_indices],
@@ -220,6 +377,75 @@ def test_make_distribution():
         * scalar_in_bound
         * random_vector[~out_of_bound_indices],
     )
+
+
+def test_make_distribution_floors_at_t_without_declaration():
+    """A parameter named st does not move the edge unless a config declares it.
+
+    Pins that the guard infers nothing from parameter names: with no
+    ``ndt_edge_shift`` the floor sits at t, exactly as for a model without st.
+    """
+
+    def fake_logp_function(data, v, a, z, t, st):
+        """Make up a fake log likelihood function for this test only."""
+        return np.ones(data.shape[0])
+
+    rt = np.array([0.2, 0.3, 0.31, 0.4, 0.5, 0.6])
+    data = np.column_stack([rt, np.ones(rt.size)])
+
+    Dist = make_distribution(
+        rv="fake",
+        loglik=fake_logp_function,
+        list_params=["v", "a", "z", "t", "st"],
+    )
+
+    result = np.asarray(Dist.logp(data, 0.5, 0.5, 0.5, 0.5, 0.2).eval())
+
+    np.testing.assert_array_equal(result, [FLOOR] * 5 + [1.0])
+
+
+@pytest.mark.parametrize(
+    ("scale", "edge"),
+    [(1.0, 0.4), (3.0, 0.2)],
+    ids=["scale_1", "scale_3"],
+)
+def test_make_distribution_applies_declared_ndt_edge_shift(scale, edge):
+    """A declared shift moves the floor to t - scale * param, at both call sites.
+
+    The lapse path wraps the floored logp in the outlier mixture, so it is
+    compared against the mixture of the expected floor rather than to the floor
+    itself. It also evaluates the data to score the lapse density, so it is
+    handed a tensor, as pm.logp would.
+    """
+    data, _ = _ndt_grid_data()
+    declaration = {"param": "st", "scale": scale}
+
+    Dist = make_distribution(
+        rv="fake",
+        loglik=_flat_logp,
+        list_params=["v", "a", "z", "t", "st"],
+        ndt_edge_shift=declaration,
+    )
+    result = np.asarray(Dist.logp(data, 0.5, 0.5, 0.5, 0.5, 0.1).eval())
+    np.testing.assert_array_equal(result, _floored_at(edge))
+
+    lapse = bmb.Prior("Uniform", lower=0.0, upper=10.0)
+    DistLapse = make_distribution(
+        rv="fake",
+        loglik=_flat_logp,
+        list_params=["v", "a", "z", "t", "st"],
+        lapse=lapse,
+        ndt_edge_shift=declaration,
+    )
+    result_lapse = np.asarray(
+        DistLapse.logp(
+            pt.as_tensor_variable(data), 0.5, 0.5, 0.5, 0.5, 0.1, 0.05
+        ).eval()
+    )
+    expected_lapse = np.log(
+        0.95 * np.exp(_floored_at(edge)) + 0.05 * np.exp(-np.log(10.0)) + 1e-29
+    )
+    np.testing.assert_allclose(result_lapse, expected_lapse, rtol=1e-6)
 
 
 @pytest.mark.slow
@@ -258,9 +484,11 @@ def test_extra_fields(data_ddm):
 
     true_values = dict(v=0.5, a=1.5, z=0.5, t=0.5)
 
-    np.testing.assert_almost_equal(
+    # rtol, not decimals: one float32 ulp of these values is about 2.4e-7.
+    np.testing.assert_allclose(
         pm.logp(DDM.dist(**true_values), data_ddm).eval(),
         pm.logp(DDM_WITH_XY.dist(**true_values), data_ddm).eval() / 2.0,
+        rtol=1e-6,
     )
 
     data_ddm_copy = data_ddm.copy()
@@ -275,10 +503,11 @@ def test_extra_fields(data_ddm):
         lapse=None,
     )
 
-    np.testing.assert_almost_equal(
+    np.testing.assert_allclose(
         pm.logp(DDM.dist(**true_values), data_ddm).eval(),
         pm.logp(ddm_model_xy.model_distribution.dist(**true_values), data_ddm).eval()
         / 2.0,
+        rtol=1e-6,
     )
 
     ddm_model = hssm.HSSM(data=data_ddm)
@@ -299,30 +528,89 @@ def test_extra_fields(data_ddm):
         + 0.05
         * pt.exp(pm.logp(pm.Uniform.dist(lower=0.0, upper=20.0), data_ddm["rt"].values))
     )
-    np.testing.assert_almost_equal(
+    np.testing.assert_allclose(
         pm.logp(
             ddm_model.model_distribution.dist(**true_values, p_outlier=0.05), data_ddm
         ).eval(),
         ddm_model_p_logp_lapse.eval(),
+        rtol=1e-6,
     )
 
 
-@pytest.mark.slow
-def test_ensure_positive_ndt():
-    """Check that non-decision times above RT receive the sentinel logp."""
-    data = np.zeros((1000, 2))
-    data[:, 0] = np.random.uniform(size=1000)
+@pytest.mark.parametrize("edge", [0.5, 0.3])
+@pytest.mark.parametrize("trialwise", [False, True], ids=["scalar", "trialwise"])
+def test_ensure_positive_ndt(edge, trialwise):
+    """Response times at or below the given edge receive the sentinel logp.
 
-    logp = np.random.uniform(size=1000)
+    The guard takes the edge ready-made, so the only things to pin are the
+    inclusive comparison (one response time sits exactly on the edge), the
+    exemption for missing responses (-999.0 is below any edge but keeps its
+    logp), and that a trial-wise edge tensor is accepted.
+    """
+    rt = np.array([0.1, 0.25, 0.29, 0.31, 0.4, 0.49, 0.51, 0.6, 1.0, -999.0, edge])
+    data = np.column_stack([rt, np.ones(rt.size)])
+    logp = np.arange(1.0, rt.size + 1.0)
 
-    list_params = ["v", "a", "z", "t"]
-    dist_params = [0.5] * 4
+    lower_edge = pt.as_tensor_variable(
+        pm.pytensorf.floatX(np.full(rt.size, edge) if trialwise else edge)
+    )
 
-    after_replacement = ensure_positive_ndt(data, logp, list_params, dist_params).eval()
-    mask = data[:, 0] - 0.5 <= 1e-15
+    after = ensure_positive_ndt(data, logp, lower_edge).eval()
+    mask = (rt - edge <= 1e-15) & (rt != -999.0)
 
-    assert np.all(after_replacement[mask] == np.array(-66.1))
-    assert np.all(after_replacement[~mask] == logp[~mask])
+    assert np.all(after[mask] == FLOOR)
+    assert np.all(after[~mask] == logp[~mask])
+
+
+@pytest.mark.parametrize(
+    ("list_params", "values", "ndt_edge_shift", "expected"),
+    [
+        (["v", "a", "z"], [0.5, 1.0, 0.5], None, None),
+        (["v", "a", "z"], [0.5, 1.0, 0.5], {"param": "a", "scale": 1.0}, None),
+        (["v", "a", "z", "t"], [0.5, 1.0, 0.5, 0.5], None, 0.5),
+        (["v", "a", "z", "t", "st"], [0.5, 1.0, 0.5, 0.5, 0.1], None, 0.5),
+        (
+            ["v", "a", "z", "t", "st"],
+            [0.5, 1.0, 0.5, 0.5, 0.1],
+            {"param": "st", "scale": 0.5},
+            0.45,
+        ),
+        (
+            ["v", "a", "z", "tau", "t"],
+            [0.5, 1.0, 0.5, 0.1, 0.5],
+            {"param": "tau", "scale": 2.0},
+            0.3,
+        ),
+        (
+            ["v", "a", "z", "t", "st"],
+            [0.5, 1.0, 0.5, 0.5, np.array([0.1, 0.2])],
+            {"param": "st", "scale": 1.0},
+            np.array([0.4, 0.3]),
+        ),
+    ],
+    ids=[
+        "no_t_is_no_floor",
+        "no_t_ignores_declaration",
+        "t_only",
+        "st_without_declaration",
+        "declared_st",
+        "declared_param_not_named_st",
+        "trialwise_param",
+    ],
+)
+def test_ndt_lower_edge(list_params, values, ndt_edge_shift, expected):
+    """The resolver reads only ``t`` and the declaration, nothing else by name."""
+    dist_params = [pt.as_tensor_variable(pm.pytensorf.floatX(v)) for v in values]
+
+    edge = _ndt_lower_edge(list_params, dist_params, ndt_edge_shift)
+
+    if expected is None:
+        assert edge is None
+    elif ndt_edge_shift is None:
+        # With nothing declared the edge is t itself, not a copy of it.
+        assert edge is dist_params[list_params.index("t")]
+    else:
+        np.testing.assert_allclose(edge.eval(), expected, rtol=1e-6)
 
 
 def test_make_likelihood_callable():
@@ -473,3 +761,194 @@ class TestGetPOutlier:
 
         assert p_outlier is None
         assert new_arg_arrays is arg_arrays
+
+
+@pytest.mark.parametrize(
+    ("scale", "edge"),
+    [(1.0, 0.4), (3.0, 0.2)],
+    ids=["scale_1", "scale_3"],
+)
+def test_registered_ndt_edge_shift_reaches_logp(scale, edge):
+    """A registry entry's declaration reaches the compiled logp through HSSM.
+
+    Route: register_model -> Config.from_defaults -> HSSM -> make_distribution.
+    """
+    name = "ndt_edge_shift_registry_model"
+    data, df = _ndt_grid_data()
+
+    register_model(
+        name,
+        response=["rt", "response"],
+        list_params=["v", "a", "z", "t", "st"],
+        choices=[-1, 1],
+        description=None,
+        likelihoods={
+            "analytical": {
+                "loglik": _flat_logp,
+                "backend": None,
+                "default_priors": {},
+                "bounds": NDT_BOUNDS,
+                "extra_fields": None,
+                "ndt_edge_shift": {"param": "st", "scale": scale},
+            }
+        },
+    )
+    try:
+        model = hssm.HSSM(model=name, data=df, p_outlier=None, lapse=None)
+    finally:
+        default_model_config.pop(name, None)
+
+    result = np.asarray(
+        model.model_distribution.logp(data, 0.5, 0.5, 0.5, 0.5, 0.1).eval()
+    )
+    np.testing.assert_array_equal(result, _floored_at(edge))
+
+
+@pytest.mark.parametrize(
+    ("scale", "edge"),
+    [(1.0, 0.4), (3.0, 0.2)],
+    ids=["scale_1", "scale_3"],
+)
+def test_model_config_ndt_edge_shift_reaches_logp(scale, edge):
+    """A user's model_config declaration reaches the compiled logp through HSSM.
+
+    Route: model_config dict -> ModelConfig -> Config.update_config -> HSSM ->
+    make_distribution.
+    """
+    data, df = _ndt_grid_data()
+
+    model = hssm.HSSM(
+        model="ndt_edge_shift_custom_model",
+        data=df,
+        loglik=_flat_logp,
+        loglik_kind="analytical",
+        model_config={
+            "list_params": ["v", "a", "z", "t", "st"],
+            "choices": [-1, 1],
+            "bounds": NDT_BOUNDS,
+            "ndt_edge_shift": {"param": "st", "scale": scale},
+        },
+        p_outlier=None,
+        lapse=None,
+    )
+
+    result = np.asarray(
+        model.model_distribution.logp(data, 0.5, 0.5, 0.5, 0.5, 0.1).eval()
+    )
+    np.testing.assert_array_equal(result, _floored_at(edge))
+
+
+@pytest.mark.parametrize(
+    ("scale", "edge"),
+    [(0.5, 0.45), (3.0, 0.2)],
+    ids=["scale_half", "scale_3"],
+)
+def test_make_distribution_for_supported_model_forwards_ndt_edge_shift(
+    monkeypatch, scale, edge
+):
+    """make_distribution_for_supported_model forwards the registry declaration.
+
+    full_ddm is the one bundled model with a declaration; its blackbox entry is
+    patched to the flat stand-in likelihood and to the scale under test so the
+    floored set reads off the grid.
+    """
+    data, _ = _ndt_grid_data()
+
+    def flat_logp_full_ddm(data, v, a, z, t, sz, sv, st):
+        return np.ones(data.shape[0])
+
+    # Registers full_ddm on first use, so the entry below exists.
+    Config.from_defaults("full_ddm", "blackbox")
+    entry = default_model_config["full_ddm"]["likelihoods"]["blackbox"]
+    monkeypatch.setitem(entry, "loglik", flat_logp_full_ddm)
+    monkeypatch.setitem(entry, "ndt_edge_shift", {"param": "st", "scale": scale})
+
+    Dist = make_distribution_for_supported_model("full_ddm", loglik_kind="blackbox")
+
+    # v, a, z, t, sz, sv, st
+    result = np.asarray(Dist.logp(data, 1.0, 1.0, 0.5, 0.5, 0.1, 0.3, 0.1).eval())
+    np.testing.assert_array_equal(result, _floored_at(edge))
+
+
+def test_full_ddm_keeps_likelihood_for_rt_below_t():
+    """full_ddm returns hddm_wfpt's own log-likelihood on both sides of t.
+
+    hddm_wfpt reads st as the full width, so it assigns real density to response
+    times in (t - st / 2, t]. A guard that floors every rt <= t replaces that
+    density with LOGP_LB; the t - st / 2 edge that full_ddm's config declares
+    must leave it untouched. The response times run from below t - st to above
+    t, so they cover the band the guard floors, the band hddm_wfpt itself scores
+    as zero density, and the band it does not.
+    """
+    # v, a, z, t, sz, sv, st. Cast once so that both sides see the same values
+    # whichever floatX is in effect.
+    params = pm.pytensorf.floatX([1.0, 1.0, 0.5, 0.4, 0.1, 0.3, 0.3])
+    rt = np.linspace(0.06, 0.46, 21)
+    data = pm.pytensorf.floatX(np.column_stack([rt, np.ones_like(rt)]))
+
+    # lapse defaults to None, so there is no p_outlier mixture on the HSSM side.
+    Dist = make_distribution_for_supported_model("full_ddm", loglik_kind="blackbox")
+
+    # Equal up to the float32 rounding of the output.
+    np.testing.assert_allclose(
+        Dist.logp(data, *params).eval(),
+        logp_full_ddm(data, *params),
+        rtol=1e-6,
+    )
+
+
+@pytest.mark.parametrize(
+    ("size", "expected"), [(None, (2,)), ((1,), (1, 2)), ((3,), (3, 2))]
+)
+def test_rt_single_draw_keeps_the_requested_shape(size, expected):
+    """ssms squeezes a single (rt, response) draw; the RV restores its batch axis."""
+    rv = distribution_utils.make_hssm_rv("ddm", ["v", "a", "z", "t"])()
+
+    assert pm.draw(rv(0.5, 1.5, 0.5, 0.3, size=size), random_seed=5).shape == expected
+
+
+_FREE_RV_NAMES = """
+import numpy as np
+import pandas as pd
+
+import hssm
+
+theta = dict(v=0.5, a=1.5, z=0.5, t=0.3)
+ddm_data = hssm.simulate_data(model="ddm", theta=theta, size=20, random_state=1)
+choices = np.random.default_rng(1).choice(3, size=20)
+for model, data in [
+    ("ddm", ddm_data),
+    ("softmax_inv_temperature_3", pd.DataFrame({"response": choices})),
+]:
+    rvs = hssm.HSSM(data=data, model=model).pymc_model.free_RVs
+    print("free_RVs:", model, *[rv.name for rv in rvs])
+"""
+
+
+def _free_rv_names(hash_seed: str) -> dict[str, list[str]]:
+    result = subprocess.run(
+        [sys.executable, "-c", _FREE_RV_NAMES],
+        env={**os.environ, "PYTHONHASHSEED": hash_seed},
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,  # the assertion below reports the failure with its stderr
+    )
+    assert result.returncode == 0, result.stderr
+    lines = [line.split() for line in result.stdout.splitlines()]
+    return {line[1]: line[2:] for line in lines if line[:1] == ["free_RVs:"]}
+
+
+def test_free_rv_order_does_not_depend_on_the_hash_seed():
+    """bambi orders the auxiliary parameters as a set; the family keeps list_params.
+
+    With bambi's set, the DDM (SSMFamily) gives ['z', 'a', 't', 'v'] under hash
+    seed 1 and ['t', 'z', 'a', 'v'] under seed 2, and the choice-only model
+    (OrderedFamily) puts logit2 before logit1, so a seeded sample() differs
+    between processes.
+    """
+    expected = {
+        "ddm": ["a", "z", "t", "v"],
+        "softmax_inv_temperature_3": ["logit1", "logit2", "beta"],
+    }
+    assert _free_rv_names("1") == _free_rv_names("2") == expected

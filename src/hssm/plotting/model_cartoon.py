@@ -28,6 +28,7 @@ from .utils import (
     _get_plotting_df,
     _get_title,
     _hdi_to_intervals,
+    _set_facet_suptitle,
     _subset_df,
     _to_dt_group,
     _use_traces_or_sample,
@@ -365,8 +366,7 @@ def _plot_model_cartoon_2D(
             )
 
     if title:
-        g.figure.subplots_adjust(top=0.9)
-        g.figure.suptitle(title)
+        _set_facet_suptitle(g, title)
 
     g.set_xlabels(xlabel)
     g.set_ylabels(ylabel)
@@ -389,10 +389,9 @@ def compute_merge_necessary_deterministics(
             if param in [
                 deterministic.name for deterministic in model.pymc_model.deterministics
             ]:
-                # pymc >= 6.3 types the return as `Dataset | DataTree`, but a
-                # Dataset input (with merge_dataset=False) always yields a
-                # Dataset — pin it so `xr.merge` picks the Dataset overload.
                 deterministics_list.append(
+                    # compute_deterministics is annotated Dataset | DataTree;
+                    # it returns a Dataset when given one (group_ds)
                     cast(
                         "xr.Dataset",
                         pm.compute_deterministics(

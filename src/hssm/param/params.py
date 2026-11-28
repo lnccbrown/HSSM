@@ -8,10 +8,11 @@ processing the parameters and applying user specifications.
 from __future__ import annotations
 
 from collections import UserDict
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import bambi as bmb
 import numpy as np
+from formulae import model_description
 
 from .param import Param
 from .regression_param import RegressionParam
@@ -20,6 +21,7 @@ from .user_param import UserParam
 
 if TYPE_CHECKING:
     from ..hssm import HSSM
+    from .parameterization import NoncenteredSetting
 
 
 class Params(UserDict[str, Param]):
@@ -74,6 +76,7 @@ class Params(UserDict[str, Param]):
         include: list[dict[str, Any] | UserParam],
         kwargs: dict[str, Any],
         p_outlier: float | dict | bmb.Prior | None,
+        noncentered: NoncenteredSetting = True,
     ) -> "Params":
         """Create Params from user specifications.
 
@@ -87,6 +90,8 @@ class Params(UserDict[str, Param]):
             Keyword arguments specifying the parameters.
         p_outlier
             The prior specification for the outlier probability.
+        noncentered
+            The model-level group-specific parameterization setting.
 
         Returns
         -------
@@ -94,7 +99,7 @@ class Params(UserDict[str, Param]):
             The Params object with the specified parameters.
         """
         user_params = collect_user_params(model, include, kwargs, p_outlier)
-        params = make_params(model, user_params)
+        params = make_params(model, user_params, noncentered)
         return cls(params)
 
     def parse_bambi(
@@ -253,7 +258,11 @@ def collect_user_params(
     return user_params
 
 
-def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Param]:
+def make_params(
+    model: HSSM,
+    user_params: dict[str, UserParam],
+    noncentered: NoncenteredSetting = True,
+) -> dict[str, Param]:
     """Make parameters from a dict of UserParams.
 
     Parameters
@@ -262,6 +271,8 @@ def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Par
         The HSSM model.
     user_params
         A dictionary with the parameter names as keys and UserParam objects as values.
+    noncentered
+        The model-level group-specific parameterization setting.
 
     Returns
     -------
@@ -281,13 +292,36 @@ def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Par
         else:
             param = make_param_from_defaults(model, name)
 
-        if model.prior_settings == "safe":
-            if isinstance(param, RegressionParam):
-                param.make_safe_priors(model.data, model.additional_namespace, is_ddm)
+        if isinstance(param, RegressionParam):
+            _check_formula_columns(param, model)
+            design_matrices = param._prepare_formula_terms(
+                model.data, model.additional_namespace
+            )
+            if model.prior_settings == "safe":
+                param._make_safe_priors(design_matrices, is_ddm, noncentered)
 
         param.process_prior()
         params[name] = param
     return params
+
+
+def _check_formula_columns(param: RegressionParam, model: HSSM) -> None:
+    """Reject a formula that uses a data column named like a model parameter.
+
+    Such a column clashes with the parameter when the PyMC model is built: it fails
+    with a misleading "Variable name ... already exists" error, or builds without
+    any message, depending on the other regressions in the model.
+    """
+    rhs = cast("str", param.formula).split("~")[-1]
+    used = model_description(f"response ~ {rhs}").var_names
+    clashes = sorted(used & set(model.list_params or []) & set(model.data.columns))
+    if clashes:
+        example = f"data.rename(columns={{{clashes[0]!r}: {clashes[0] + '_data'!r}}})"
+        raise ValueError(
+            f"The formula for '{param.name}' uses the data column(s) {clashes}, which "
+            f"have the name of a parameter of the '{model.model_name}' model. Rename "
+            f"the column(s) in `data`, for example `{example}`."
+        )
 
 
 def make_param_from_user_param(model: HSSM, name: str, user_param: UserParam) -> Param:

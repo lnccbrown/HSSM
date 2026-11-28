@@ -2,7 +2,7 @@
 
 ``aDDM`` mirrors :class:`hssm.rl.rlssm.RLSSM`: it builds a differentiable
 PyTensor ``Op`` from the vendored JAX kernel in ``__init__``, injects it into a
-copy of the config via ``dataclasses.replace(loglik=op, backend="jax")``, and
+private copy of the config, and
 overrides :meth:`_make_model_distribution` to consume that Op directly.
 
 Unlike ``RLSSM`` there is **no** balanced-panel reshape (each trial's likelihood
@@ -12,7 +12,7 @@ the subclass: column validation (:meth:`_validate_addm_columns`) and
 materializing the 2-D ``sacc_array`` covariate (:meth:`_stack_sacc_array`).
 """
 
-from dataclasses import replace
+from copy import copy
 from typing import Any, Literal, cast
 
 import bambi as bmb
@@ -43,8 +43,17 @@ class aDDM(HSSMBase):
     include
         Optional list of regression/parameter specifications (HSSM's standard
         ``include=[...]`` machinery), e.g. a hierarchical regression on ``eta``.
-    p_outlier, lapse, prior_settings, missing_data, deadline, **kwargs
+    prior_settings
+        Generated regression-term prior preset. ``"safe"`` uses HSSM defaults;
+        ``None`` delegates missing regression-term priors to Bambi. Parameters without
+        regressions retain their explicit, model-config, or bounds-derived priors.
+        Defaults to ``"safe"``.
+    p_outlier, lapse, missing_data, deadline
         Forwarded to :class:`hssm.base.HSSMBase`.
+    **kwargs
+        Additional keyword arguments forwarded to :class:`hssm.base.HSSMBase`,
+        including ``link_settings``. That link-function preset accepts
+        ``"log_logit"`` or ``None`` and defaults to ``None``.
     """
 
     def __init__(
@@ -65,7 +74,7 @@ class aDDM(HSSMBase):
         # Default to the complete default config (every aDDMConfig field defaults).
         # NOTE: this is the factory, NOT aDDMConfig.get_defaults() (which is the
         # abstract per-param method).
-        model_config = model_config or aDDMConfig()
+        model_config = copy(model_config) if model_config is not None else aDDMConfig()
         model_config.validate()
 
         # aDDM-specific column/shape validation (lives on the subclass; no
@@ -93,8 +102,8 @@ class aDDM(HSSMBase):
             extra_fields=list(model_config.extra_fields or []),
         )
 
-        # Inject the Op + backend, leaving the caller's config object unmodified.
-        model_config = replace(model_config, loglik=loglik_op, backend="jax")
+        model_config.loglik = loglik_op
+        model_config.backend = "jax"
 
         super().__init__(
             data=data,
@@ -143,6 +152,9 @@ class aDDM(HSSMBase):
             lapse=self.lapse,
             extra_fields=extra_fields_data,
             params_is_trialwise=params_is_trialwise,
+            n_choices=self.n_choices,
+            has_deadline=bool(self.deadline),
+            expected_obs_dim=self._obs_dim,
         )
         # Expose the observed fixations to the RV's generative path so
         # posterior-predictive draws condition on them (see _push_rv_extra_fields).
@@ -205,6 +217,7 @@ class aDDM(HSSMBase):
         kind: Literal["response", "response_params"] = "response",
         draws: int | float | list[int] | np.ndarray | None = None,
         safe_mode: bool = True,
+        random_seed: int | np.random.Generator | None = None,
         continuation_mode: str | None = None,
         continuation_params: dict | None = None,
     ) -> DataTree | None:
@@ -234,7 +247,14 @@ class aDDM(HSSMBase):
         self._continuation_override: tuple[str, dict | None] | None = (mode, params)
         try:
             return super().sample_posterior_predictive(
-                dt, data, inplace, include_group_specific, kind, draws, safe_mode
+                dt,
+                data,
+                inplace,
+                include_group_specific,
+                kind,
+                draws,
+                safe_mode,
+                random_seed,
             )
         finally:
             self._continuation_override = None

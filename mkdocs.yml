@@ -1,3 +1,7 @@
+# Theme, palette, fonts, logo and stylesheets come from the shared brand base
+# (vendored from HSSMSpine docs-brand/; do not redefine them here).
+INHERIT: docs/overrides/.mkdocs-brand-notebooks.yml
+
 site_name: HSSM
 site_url: https://lnccbrown.github.io/HSSM/
 repo_name: lnccbrown/HSSM
@@ -6,114 +10,177 @@ edit_uri: edit/main/docs
 
 validation:
   omitted_files: warn
-  # phase-2 consolidation targets, deliberately unlisted until then
-not_in_nav: |
-  tutorials/attentional_ddm.py
   absolute_links: warn
   unrecognized_links: warn
   anchors: warn
 
+# phase-2 consolidation targets, deliberately unlisted until then
+not_in_nav: |
+  tutorials/attentional_ddm.py
+  tutorials/centered_vs_noncentered_basic_logic.py
+  tutorials/choice_only_models.py
+  tutorials/main_tutorial.py
+  tutorials/main_tutorial_scenic_route.py
+  tutorials/link_functions.py
+  tutorials/parameterization_per_parameter.py
+  tutorials/poisson_race.py
+  tutorials/random_slope_safe_priors.py
+  tutorials/track_with_mlflow.py
+  how_to/rlssm_analytical_ddm.py
+
+exclude_docs: |
+  overrides/
+  tutorials/likelihoods.ipynb
+  how_to/custom_onnx_likelihoods.ipynb
+
 nav:
   - Home:
       - Overview: index.md
-      - Credits: credits.md
-      - License: license.md
-      - Changelog: changelog.md
-  - Getting Started:
-      - Getting HSSM:
+  - Learn:
+      - Overview: learn/index.md
+      - Get started:
           - Installation: getting_started/installation.md
-      - Using HSSM:
-          - Quickstart Guide: getting_started/getting_started.ipynb
+          - Quickstart: getting_started/getting_started.ipynb
+          - The HSSM tutorial: tutorials/main_tutorial.ipynb
+          - The HSSM tutorial — scenic route: tutorials/main_tutorial_scenic_route.ipynb
           - Hierarchical modeling: getting_started/hierarchical_modeling.ipynb
-  - API References:
+          - A complete scientific workflow: tutorials/scientific_workflow_hssm.ipynb
+      - Model walkthroughs:
+          - Hierarchical DDM regressions: tutorials/ddm_hierarchical_tutorial.ipynb
+          - Choice-only models: tutorials/choice_only_models.ipynb
+          - Poisson race models: tutorials/poisson_race.ipynb
+          - HMM with DDM emissions: tutorials/hmm_ddm_regime_switching.ipynb
+          - Regime-switching SSMs (RSSSM), two regimes: tutorials/rsssm_regime_switching.ipynb
+          - Regime-switching SSMs (RSSSM), three regimes: tutorials/rsssm_k3.ipynb
+          - Attentional DDM (aDDM): tutorials/attentional_ddm.ipynb
+      - Reinforcement learning models:
+          - RLSSM basics: tutorials/rlssm_basic.ipynb
+          - Choice-only RLSSM: tutorials/choice_only_rlssm.ipynb
+          - Custom RLSSMs with ssms.rl: tutorials/rlssm_advanced.ipynb
+          - A restless learner: tutorials/rlssm_restless_learner.ipynb
+          - Registering custom RLSSMs in HSSM: tutorials/rlssm_hssm_custom_models.ipynb
+  - How-to guides:
+      - Overview: how_to/index.md
+      - Building models:
+          - Specify priors and fix parameters: how_to/specify_priors.ipynb
+          - Specify hierarchical group priors: how_to/specify_group_priors.md
+          - Model outliers with lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
+          - Regress on p_outlier: tutorials/tutorial_p_outlier_regression.ipynb
+          - Use stimulus coding: tutorials/tutorial_stim_coding.ipynb
+          - Add smooth effects with hsgp(): tutorials/hsgp_regression.ipynb
+      - Sampling and diagnostics:
+          - Set initial values: tutorials/initial_values.ipynb
+          - Use alternative samplers (Bayeux): tutorials/tutorial_bayeux.ipynb
+          - Run variational inference: tutorials/variational_inference.ipynb
+      - Working with results:
+          - Plot posteriors and predictions: tutorials/plotting.ipynb
+          - Posterior predictive plot gallery: tutorials/ppc_gallery.ipynb
+          - Model cartoon plot gallery: tutorials/cartoon_gallery.ipynb
+          - Compare and interpret models: how_to/compare_models.ipynb
+          - Get trial-wise parameters: tutorials/tutorial_trial_wise_parameters.ipynb
+          - Run Bayesian t-tests on the posterior: tutorials/tutorial_bayesian_t_test.ipynb
+          - Simulate data with the do-operator: tutorials/do_operator.ipynb
+          - Save and load models: tutorials/save_load_tutorial.ipynb
+          - Track fits with MLflow: how_to/track_with_mlflow.md
+          - Track fits with MLflow (notebook): tutorials/track_with_mlflow.ipynb
+      - Custom likelihoods and models:
+          - Bring your own likelihood (external trainers): how_to/external_trainers.md
+          - Custom models from JAX callables: tutorials/jax_callable_contribution_onnx_example.ipynb
+          - Custom models from ONNX files (blackbox): tutorials/blackbox_contribution_onnx_example.ipynb
+          - Integrate an sbi NRE (ONNX): tutorials/sbi_nre_integration.ipynb
+          - Integrate a BayesFlow NRE (ONNX): tutorials/bayesflow_nre_onnx_integration.ipynb
+          - Integrate a BayesFlow LRE (JAX callable): tutorials/bayesflow_lre_integration.ipynb
+          - Use the analytical DDM in an RLSSM: how_to/rlssm_analytical_ddm.ipynb
+          - Use the low-level API with PyMC: tutorials/pymc.ipynb
+          - Compile a log-posterior function: tutorials/compile_logp.ipynb
+      - Contributing to HSSM:
+          - Developing locally: local_development.md
+          - Contribution guide: CONTRIBUTING.md
+  - Explanations:
+      - Coming from HDDM: explanations/coming_from_hddm.md
+      - Likelihood kinds in HSSM: explanations/likelihoods.md
+      - Link functions and safe priors: tutorials/link_functions.ipynb
+      - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
+      - Random-slope prior diagnostics: tutorials/random_slope_safe_priors.ipynb
+      - Choosing a parameterization per parameter: tutorials/parameterization_per_parameter.ipynb
+  - Reference:
+      - Overview: reference/index.md
+      - Built-in models and likelihoods: reference/models-and-likelihoods.md
+      - The ONNX likelihood contract: how_to/custom_onnx_likelihoods.md
       - HSSM core classes:
           - hssm.HSSM: api/hssm.md
+          - hssm.aDDM and hssm.aDDMConfig: api/addm.md
           - hssm.RSSSM: api/rsssm.md
           - hssm.Param: api/param.md
-          - hssm.ModelConfig: api/model_config.md
+          - Model configuration and response domains: api/model_config.md
           - hssm.Prior: api/prior.md
           - hssm.Link: api/link.md
           - hssm.rl: api/rl.md
       - Useful functions:
+          - Model discovery and registration: api/model_registry.md
           - hssm.load_data: api/load_data.md
+          - hssm.list_data: api/list_data.md
           - hssm.simulate_data: api/simulate_data.md
           - hssm.set_floatX: api/set_floatx.md
           - hssm.show_defaults: api/show_defaults.md
           - hssm.check_data_for_rl: api/check_data_for_rl.md
+          - hssm.track: api/tracking.md
       - Likelihoods:
           - hssm.likelihoods: api/likelihoods.md
       - Working with distributions:
           - hssm.distribution_utils: api/distribution_utils.md
       - Plotting:
           - hssm.plotting: api/plotting.md
-  - Tutorials:
-      - Main tutorial: tutorials/main_tutorial.ipynb
-      - Hierarchical DDM: tutorials/ddm_hierarchical_tutorial.ipynb
-      - Choice-only models: tutorials/choice_only_models.ipynb
-      - Choice-only RLSSM: tutorials/choice_only_rlssm.ipynb
-      - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
-      - Plotting: tutorials/plotting.ipynb
-      - Posterior predictive plot gallery: tutorials/ppc_gallery.ipynb
-      - Model cartoon plot gallery: tutorials/cartoon_gallery.ipynb
-      - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
-      - Variational Inference: tutorials/variational_inference.ipynb
-      - Hierarchical Variational Inference: tutorials/variational_inference_hierarchical.ipynb
-      - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
-      - Per-parameter centered vs. non-centered parameterization: tutorials/parameterization_per_parameter.ipynb
-      - Smooth effects with HSGP regressions: tutorials/hsgp_regression.ipynb
-      - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
-      - RLSSM — Basic tutorial: tutorials/rlssm_basic.ipynb
-      - RLSSM — Custom models with ssms.rl: tutorials/rlssm_advanced.ipynb
-      - RLSSM — Restless learner: tutorials/rlssm_restless_learner.ipynb
-      - RLSSM — Registering custom models in HSSM: tutorials/rlssm_hssm_custom_models.ipynb
-      - Custom models: tutorials/jax_callable_contribution_onnx_example.ipynb
-      - BayesFlow LRE Integration: tutorials/bayesflow_lre_integration.ipynb
-      - BayesFlow NLE Integration (ONNX): tutorials/bayesflow_nle_onnx_integration.ipynb
-      - sbi NRE Integration (ONNX): tutorials/sbi_nre_integration.ipynb
-      - Custom models from onnx files: tutorials/blackbox_contribution_onnx_example.ipynb
-      - Using compiled log-likelihood functions: tutorials/compile_logp.ipynb
-      - Saving and loading models: tutorials/save_load_tutorial.ipynb
-      - Bayesian t-test: tutorials/tutorial_bayesian_t_test.ipynb
-      - Using the do-operator: tutorials/do_operator.ipynb
-      - Getting trial-wise parameters: tutorials/tutorial_trial_wise_parameters.ipynb
-      - Stim Coding: tutorials/tutorial_stim_coding.ipynb
-      - P-outlier Regression: tutorials/tutorial_p_outlier_regression.ipynb
-      - Sampling with Bayeux: tutorials/tutorial_bayeux.ipynb
-      - Hidden Markov Models with DDM emissions: tutorials/hmm_ddm_regime_switching.ipynb
-      - Regime-Switching SSMs (RSSSM) — two regimes (K=2): tutorials/rsssm_regime_switching.ipynb
-      - Regime-Switching SSMs (RSSSM) — three regimes (K=3): tutorials/rsssm_k3.ipynb
-      - Setting initial values: tutorials/initial_values.ipynb
-      - Poisson race models: tutorials/poisson_race.ipynb
-  - Contributed Tutorials:
-      - Winterbrain 2025 Workshop Talk 1: tutorials/hssm_tutorial_workshop_1.ipynb
-      - Winterbrain 2025 Workshop Talk 2: tutorials/hssm_tutorial_workshop_2.ipynb
-      - Scientific Workflow: tutorials/scientific_workflow_hssm.ipynb
-      - MathPsych Workshop 2025: tutorials/pymc_to_hssm.ipynb
-
-  - Contributing:
-      - Developing locally: local_development.md
-      - Contributing: CONTRIBUTING.md
-
+      - Project and site:
+          - Changelog: changelog.md
+          - The HSSM ecosystem: ecosystem/index.md
+          - Credits: credits.md
+          - License: license.md
+      - Historical tutorial snapshots:
+          - Winterbrain 2025 — Talk 1: archive/hssm_tutorial_workshop_1.ipynb
+          - Winterbrain 2025 — Talk 2: archive/hssm_tutorial_workshop_2.ipynb
+          - PyMC to HSSM — MathPsych 2025: archive/pymc_to_hssm.ipynb
 plugins:
   - search
   - autorefs
   - redirects:
       redirect_maps:
         api/defaults.md: api/show_defaults.md
+        tutorials/likelihoods.md: explanations/likelihoods.md
+        tutorials/hssm_tutorial_workshop_1.md: https://lnccbrown.github.io/HSSM/archive/hssm_tutorial_workshop_1/
+        tutorials/hssm_tutorial_workshop_2.md: https://lnccbrown.github.io/HSSM/archive/hssm_tutorial_workshop_2/
+        tutorials/pymc_to_hssm.md: https://lnccbrown.github.io/HSSM/archive/pymc_to_hssm/
+        tutorials/variational_inference_hierarchical.md: https://lnccbrown.github.io/HSSM/tutorials/variational_inference/
+        tutorials/bayesflow_nle_onnx_integration.md: https://lnccbrown.github.io/HSSM/tutorials/bayesflow_nre_onnx_integration/
   - mkdocs-jupyter:
+      ignore:
+        - tutorials/attentional_ddm.py
+        - tutorials/centered_vs_noncentered_basic_logic.py
+        - tutorials/choice_only_models.py
+        - tutorials/main_tutorial.py
+        - tutorials/main_tutorial_scenic_route.py
+        - tutorials/link_functions.py
+        - tutorials/parameterization_per_parameter.py
+        - tutorials/poisson_race.py
+        - tutorials/random_slope_safe_priors.py
+        - tutorials/track_with_mlflow.py
+        - how_to/rlssm_analytical_ddm.py
       execute: true
       execute_ignore:
         - getting_started/getting_started.ipynb
+        - how_to/specify_priors.ipynb
+        - how_to/compare_models.ipynb
         - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
-        - tutorials/attentional_ddm.py
+        - tutorials/attentional_ddm.ipynb
+        - tutorials/main_tutorial_scenic_route.ipynb
+        - tutorials/link_functions.ipynb
+        - tutorials/random_slope_safe_priors.ipynb
         - tutorials/hsgp_regression.ipynb
         - tutorials/ddm_hierarchical_tutorial.ipynb
         - tutorials/choice_only_models.ipynb
         - tutorials/choice_only_rlssm.ipynb
-        - tutorials/likelihoods.ipynb
         - tutorials/variational_inference.ipynb
-        - tutorials/variational_inference_hierarchical.ipynb
         - tutorials/centered_vs_noncentered_basic_logic.ipynb
         - tutorials/parameterization_per_parameter.ipynb
         - tutorials/initial_values.ipynb
@@ -130,8 +197,8 @@ plugins:
         - tutorials/hmm_ddm_regime_switching.ipynb
         - tutorials/rsssm_regime_switching.ipynb
         - tutorials/rsssm_k3.ipynb
-        - tutorials/hssm_tutorial_workshop_1.ipynb
-        - tutorials/hssm_tutorial_workshop_2.ipynb
+        - archive/hssm_tutorial_workshop_1.ipynb
+        - archive/hssm_tutorial_workshop_2.ipynb
         - tutorials/rlssm_basic.ipynb
         - tutorials/rlssm_advanced.ipynb
         - tutorials/rlssm_restless_learner.ipynb
@@ -141,14 +208,20 @@ plugins:
         - tutorials/ppc_gallery.ipynb
         - tutorials/cartoon_gallery.ipynb
         - tutorials/scientific_workflow_hssm.ipynb
-        - tutorials/pymc_to_hssm.ipynb
+        - archive/pymc_to_hssm.ipynb
         - tutorials/tutorial_bayeux.ipynb
         - tutorials/bayesflow_lre_integration.ipynb
-        - tutorials/bayesflow_nle_onnx_integration.ipynb
+        - tutorials/bayesflow_nre_onnx_integration.ipynb
         - tutorials/sbi_nre_integration.ipynb
         - tutorials/poisson_race.ipynb
+        - tutorials/track_with_mlflow.ipynb
+        - how_to/rlssm_analytical_ddm.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
+      no_prompt: true
+      remove_tag_config:
+        remove_input_tags:
+          - remove-input
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -180,9 +253,6 @@ plugins:
             filters:
               - "!^_"
 theme:
-  logo: images/navlogo.png
-  favicon: images/navlogo.png
-  name: material
   custom_dir: docs/overrides
   features:
     - navigation.tracking
@@ -198,41 +268,15 @@ theme:
     - content.action.edit
     - header.autohide
     - announce.dismiss
-  palette:
-    # Palette toggle for automatic mode
-    - media: "(prefers-color-scheme)"
-      scheme: ocean
-      primary: custom
-      toggle:
-        icon: material/brightness-auto
-        name: Switch to light mode
-
-    # Palette toggle for light mode
-    - media: "(prefers-color-scheme: light)"
-      scheme: ocean
-      primary: custom
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: custom
-      toggle:
-        icon: material/brightness-4
-        name: Switch to system preference
 
 extra:
+  release_announcement: true
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/lnccbrown/HSSM
     - icon: material/forum
       link: https://github.com/lnccbrown/HSSM/discussions
   homepage: "https://lnccbrown.github.io/HSSM/"
-
-extra_css:
-  - "styles/extra.css"
 
 markdown_extensions:
   - toc:
@@ -247,12 +291,9 @@ markdown_extensions:
   - pymdownx.snippets
   - pymdownx.superfences
   - attr_list
+  - md_in_html
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
-copyright: >-
-  Copyright &copy; Brown University —
-  <a href="https://lnccbrown.github.io/HSSM/">HSSM</a> ·
-  <a href="https://lnccbrown.github.io/ssm-simulators/">ssm-simulators</a> ·
-  <a href="https://lnccbrown.github.io/LANfactory/">LANfactory</a>
+copyright: Copyright © 2023 Brown University. All Rights Reserved.

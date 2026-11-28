@@ -14,26 +14,32 @@ continuation; installed by a plain ``uv sync``) and marimo::
 
     uv run --with marimo marimo edit docs/tutorials/attentional_ddm.py
 
-Sampling is gated behind a button, so the simulator/handshake sections are
-instant on load.
+Sampling is gated behind a button in live marimo. Set ``FULL_RUN=1`` before
+opening the notebook for the full 500-draw/300-tune publication configuration;
+the default is a small implementation check.
 
 To publish into the docs, export with outputs and wire into mkdocs (see the
 marimo-notebooks skill)::
 
-    uv run --with marimo marimo export ipynb docs/tutorials/attentional_ddm.py \
-        -o docs/tutorials/attentional_ddm.ipynb --include-outputs
+    HSSM_DOCS_STATIC=1 FULL_RUN=1 \
+      uv run --group notebook --group docs marimo export ipynb --no-sandbox \
+        docs/tutorials/attentional_ddm.py \
+        --output docs/tutorials/attentional_ddm.ipynb \
+        --include-outputs --force
 """
 
 # ruff: noqa: E501, B018, D401, PLR1711  (generated marimo notebook: prose, cell display exprs + bare cell returns)
 import marimo
 
-__generated_with = "0.23.13"
+__generated_with = "0.24.0"
 app = marimo.App(width="medium")
+# docs-require-full-run: true
 
 
 @app.cell
 def _():
     import logging
+    import os
     import warnings
 
     warnings.filterwarnings("ignore")
@@ -49,10 +55,38 @@ def _():
     import hssm
 
     hssm.set_floatX("float64")
-    return Simulator, az, hssm, mo, np, pd, plt
+    # A generated ipynb runs outside the marimo editor, so targeted Jupyter CI
+    # automatically follows the complete static path. The explicit override is
+    # needed while `marimo export --include-outputs` runs inside marimo itself.
+    static_docs = (
+        os.environ.get("HSSM_DOCS_STATIC") == "1" or not mo.running_in_notebook()
+    )
+    full_run = os.environ.get("FULL_RUN") == "1"
+    run_config = (
+        {
+            "mode": "full",
+            "sim_trials": 3000,
+            "data_trials": 300,
+            "draws": 500,
+            "tune": 300,
+            "chains": 2,
+            "ppc_draws": 100,
+        }
+        if full_run
+        else {
+            "mode": "quick",
+            "sim_trials": 750,
+            "data_trials": 80,
+            "draws": 20,
+            "tune": 20,
+            "chains": 1,
+            "ppc_draws": 20,
+        }
+    )
+    return Simulator, az, hssm, mo, np, pd, plt, run_config, static_docs
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     # Attentional DDM (aDDM)
@@ -66,12 +100,18 @@ def _(mo):
     This notebook: **(1)** poke the simulator, **(2)** see the covariate handshake,
     **(3)** fit a trial-wise regression and recover it. The simulator is driven via
     ssm-simulators' high-level `Simulator` class — the same path HSSM's PPC uses.
+
+    **Execution status.** The published page consumes a committed full-run static
+    export from this marimo source without re-executing it. Live marimo keeps the
+    controls interactive and gates sampling behind a button. Jupyter uses fixed
+    controls and executes the complete path (a quick check by default; set
+    `FULL_RUN=1` for the full publication configuration).
     """)
     return
 
 
 @app.cell
-def _(Simulator, np):
+def _(Simulator, np, run_config):
     sim = Simulator(
         "addm"
     )  # configure the aDDM simulator once (params [eta,kappa,a,b,x0,t])
@@ -100,11 +140,11 @@ def _(Simulator, np):
             "sigma": np.ones(n),
         }
 
-    fix = make_fixations(3000, seed=0)
+    fix = make_fixations(run_config["sim_trials"], seed=0)
     return extra_fields, fix, make_fixations, sim
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ## 1. Explore the simulator
@@ -117,18 +157,35 @@ def _(mo):
     return
 
 
-@app.cell
-def _(mo):
-    eta_s = mo.ui.slider(0.0, 1.0, value=0.3, step=0.05, label="eta (attention)")
-    kappa_s = mo.ui.slider(0.1, 3.0, value=1.0, step=0.1, label="kappa (drift scale)")
-    a_s = mo.ui.slider(0.5, 3.0, value=1.5, step=0.1, label="a (boundary)")
-    b_s = mo.ui.slider(0.0, 1.0, value=0.2, step=0.05, label="b (collapse)")
-    mo.vstack([eta_s, kappa_s, a_s, b_s])
-    return a_s, b_s, eta_s, kappa_s
+@app.cell(hide_code=True)
+def _(mo, static_docs):
+    if static_docs:
+        sim_parameters = {"eta": 0.3, "kappa": 1.0, "a": 1.5, "b": 0.2}
+        _controls = mo.md(
+            "**Parameters used for the static output:** "
+            "`eta=0.3`, `kappa=1.0`, `a=1.5`, `b=0.2`. "
+            "Open the marimo source to explore other values interactively."
+        )
+    else:
+        _eta = mo.ui.slider(0.0, 1.0, value=0.3, step=0.05, label="eta (attention)")
+        _kappa = mo.ui.slider(
+            0.1, 3.0, value=1.0, step=0.1, label="kappa (drift scale)"
+        )
+        _a = mo.ui.slider(0.5, 3.0, value=1.5, step=0.1, label="a (boundary)")
+        _b = mo.ui.slider(0.0, 1.0, value=0.2, step=0.05, label="b (collapse)")
+        sim_parameters = {
+            "eta": _eta.value,
+            "kappa": _kappa.value,
+            "a": _a.value,
+            "b": _b.value,
+        }
+        _controls = mo.vstack([_eta, _kappa, _a, _b])
+    _controls
+    return (sim_parameters,)
 
 
 @app.cell
-def _(a_s, b_s, eta_s, extra_fields, fix, kappa_s, np, plt, sim):
+def _(extra_fields, fix, np, plt, sim, sim_parameters):
     def simulate(eta, kappa, a, b, fixations, seed=1):
         # theta is (n_trials, 6) = [eta, kappa, a, b, x0, t]; one row per fixation
         # trial (all sharing these params here), n_samples=1 draw each.
@@ -146,7 +203,7 @@ def _(a_s, b_s, eta_s, extra_fields, fix, kappa_s, np, plt, sim):
         keep = rt != -999.0
         return rt[keep], ch[keep]
 
-    _rt, _ch = simulate(eta_s.value, kappa_s.value, a_s.value, b_s.value, fix)
+    _rt, _ch = simulate(**sim_parameters, fixations=fix)
     _fig, _ax = plt.subplots(figsize=(7, 3.2))
     _ax.hist(_rt[_ch == 1], bins=40, alpha=0.6, label="choice +1 (upper)")
     _ax.hist(_rt[_ch == -1], bins=40, alpha=0.6, label="choice -1 (lower)")
@@ -154,11 +211,12 @@ def _(a_s, b_s, eta_s, extra_fields, fix, kappa_s, np, plt, sim):
     _ax.set_ylabel("count")
     _ax.set_title(f"P(+1) = {np.mean(_ch == 1):.3f}   (n = {_rt.size})")
     _ax.legend()
+    plt.close(_fig)
     _fig
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## 2. The covariate handshake
@@ -211,11 +269,12 @@ def _(extra_fields, fix, np, plt, sim):
     _ax.set_ylabel("density")
     _ax.set_title("Conditioning on the observed fixations changes the prediction")
     _ax.legend()
+    plt.close(_fig)
     _fig
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ### How the handshake is wired
@@ -239,7 +298,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ## 3. Simulate a dataset with a trial-wise `eta`
@@ -253,8 +312,8 @@ def _(mo):
 
 
 @app.cell
-def _(extra_fields, make_fixations, np, pd, sim):
-    _f = make_fixations(300, seed=42)
+def _(extra_fields, make_fixations, np, pd, run_config, sim):
+    _f = make_fixations(run_config["data_trials"], seed=42)
     _n = _f["n"]
     x = np.random.default_rng(1).uniform(0.0, 1.0, _n)
     _eta_true = 0.2 + 0.3 * x
@@ -302,7 +361,7 @@ def _(extra_fields, make_fixations, np, pd, sim):
     return (data,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ## 4. Fit a trial-wise regression on `eta`
@@ -319,12 +378,13 @@ def _(data, hssm):
     model = hssm.aDDM(
         data=data,
         include=[{"name": "eta", "formula": "eta ~ 1 + x"}],
+        initval_jitter=0,
     )
     model
     return (model,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo, model, np):
     # The handshake, on the built model: the observed fixations are stashed on the
     # RV class, ready for the generative (PPC) path to forward to the simulator.
@@ -339,16 +399,36 @@ def _(mo, model, np):
     return
 
 
-@app.cell
-def _(mo):
-    run_inference = mo.ui.run_button(label="Run inference (samples, ~2-3 min)")
-    mo.md(f"## 5. Fit and recover\n\n{run_inference}")
+@app.cell(hide_code=True)
+def _(mo, run_config, static_docs):
+    if static_docs:
+        run_inference = True
+        _mode = run_config["mode"]
+        _full_run_marker = "true" if _mode == "full" else "false"
+        _status = mo.md(
+            "## 5. Fit and recover\n\n"
+            f"The static artifact runs the **{_mode}** configuration: "
+            f"{run_config['chains']} chain(s), {run_config['tune']} tuning draws, "
+            f"and {run_config['draws']} retained draws. Initialization jitter is "
+            "disabled (`initval_jitter=0`), and sampling uses the fixed seed "
+            "`20240830`.\n\n"
+            f"<!-- hssm-full-run-artifact: {_full_run_marker} -->\n"
+            "<!-- hssm-deterministic-init: true -->"
+        )
+    else:
+        _button = mo.ui.run_button(label="Run inference")
+        run_inference = _button.value
+        _status = mo.md(
+            "## 5. Fit and recover\n\n"
+            f"{_button}\n\nSet `FULL_RUN=1` before opening marimo for the "
+            "published 500-draw configuration."
+        )
+    _status
     return (run_inference,)
 
 
 @app.cell
-def _(mo, model, run_inference):
-    mo.stop(not run_inference.value, mo.md("*Click the button above to sample.*"))
+def _(model, run_config, run_inference):
     # aDDM auto-selects the JAX numpyro NUTS sampler (approx_differentiable + jax
     # backend), so this already samples in JAX. cores=1 keeps the chains sequential
     # — measured to be the right call on CPU. A single chain uses only ~6 of 18
@@ -359,35 +439,76 @@ def _(mo, model, run_inference):
     # chain_method="vectorized" 2.86x, forced-device "parallel" 2.24x; PyMC fork
     # (cores>1) deadlocks. Genuinely parallel chains want a GPU (numpyro
     # chain_method="vectorized" vmaps both chains onto the one device).
-    idata = model.sample(
-        draws=300,
-        tune=300,
-        chains=2,
-        cores=1,
-        idata_kwargs={"log_likelihood": False},
-    )
+    if run_inference:
+        idata = model.sample(
+            draws=run_config["draws"],
+            tune=run_config["tune"],
+            chains=run_config["chains"],
+            cores=1,
+            random_seed=20240830,
+            progressbar=False,
+            idata_kwargs={"log_likelihood": False},
+        )
+    else:
+        idata = None
     return (idata,)
 
 
 @app.cell
-def _(az, idata):
+def _(az, idata, mo):
     # Truth: eta_Intercept ~ 0.2, eta_x ~ 0.3, kappa 1, a 1.5, b 0.2, x0 0, t 0.
-    az.summary(
-        idata,
-        var_names=["eta", "kappa", "a", "b", "x0", "t"],
-        filter_vars="like",
+    _summary = (
+        az.summary(
+            idata,
+            var_names=["eta", "kappa", "a", "b", "x0", "t"],
+            filter_vars="like",
+        )
+        if idata is not None
+        else mo.md("*Run inference to display the recovery summary.*")
     )
+    _summary
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
+def _(az, idata, mo):
+    if idata is not None:
+        _divergences = int(idata.sample_stats["diverging"].sum().item())
+        _retained_draws = idata.posterior.sizes["chain"] * idata.posterior.sizes["draw"]
+        # ArviZ returns a DataTree for direct diagnostics on PyMC 6 traces. Keep
+        # this reader-facing boundary narrow by asking summary for an unrounded
+        # DataFrame, the same normalized representation displayed just above.
+        _exact_summary = az.summary(
+            idata,
+            var_names=["eta", "kappa", "a", "b", "x0", "t"],
+            filter_vars="like",
+            round_to="none",
+        )
+        _max_rhat = float(_exact_summary["r_hat"].max())
+        _min_bulk_ess = float(_exact_summary["ess_bulk"].min())
+        _diagnostic = mo.md(
+            f"**Divergences:** {_divergences} across {_retained_draws} retained "
+            "draws. Interpret this count together with recovery, trace shape, "
+            "R-hat, and effective sample sizes.  \n"
+            f"**Maximum rank-normalized R-hat:** `{_max_rhat!r}`; "
+            f"**minimum bulk ESS:** `{_min_bulk_ess!r}`."
+        )
+    else:
+        _diagnostic = mo.md("*Run inference to display sampler diagnostics.*")
+    _diagnostic
+    return
+
+
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ### Diagnostics — is everything working as expected?
 
-    - **Recovery** (below): each posterior should cover its orange ground-truth line.
-    - **Trace**: the two chains should overlap and look like white noise (good mixing);
-      also check `r_hat ~ 1.0` and `ess_bulk` in the summary above.
+    - **Recovery** (below): compare each blue posterior interval with the matching
+      ground-truth value listed in the figure title.
+    - **Trace**: when multiple chains run, they should overlap and look like white
+      noise (good mixing); also check `r_hat ~ 1.0` and `ess_bulk` in the summary
+      above.
     - **Pair**: look for funnels / tight ridges (hard geometry).
     - **Posterior predictive** (§6): predicted RTs should track the observed ones.
     """)
@@ -408,11 +529,16 @@ def _(az, idata, plt):
     }
     # arviz 1.x dropped `plot_posterior`/`ref_val`; forest intervals with the
     # true values in the title give the same recovery-at-a-glance check.
-    az.plot_forest(idata, var_names=list(_truth), combined=True)
-    _fig = plt.gcf()
-    _fig.suptitle(
-        "truth: " + ", ".join(f"{k}={v}" for k, v in _truth.items()), fontsize=9
-    )
+    if idata is not None:
+        az.plot_forest(idata, var_names=list(_truth), combined=True)
+        _fig = plt.gcf()
+        _fig.suptitle(
+            "truth: " + ", ".join(f"{k}={v}" for k, v in _truth.items()),
+            fontsize=9,
+        )
+        plt.close(_fig)
+    else:
+        _fig = None
     _fig
     return
 
@@ -420,9 +546,14 @@ def _(az, idata, plt):
 @app.cell
 def _(az, idata, plt):
     # Trace: chain mixing / convergence for a few key parameters.
-    az.plot_trace(idata, var_names=["eta_Intercept", "eta_x", "a", "t"])
-    plt.tight_layout()
-    plt.gcf()
+    if idata is not None:
+        az.plot_trace(idata, var_names=["eta_Intercept", "eta_x", "a", "t"])
+        plt.tight_layout()
+        _trace = plt.gcf()
+        plt.close(_trace)
+    else:
+        _trace = None
+    _trace
     return
 
 
@@ -430,15 +561,20 @@ def _(az, idata, plt):
 def _(az, idata, plt):
     # Pair: posterior geometry + correlations. (arviz 1.x plot_pair dropped the
     # `kind`/`divergences` kwargs.)
-    az.plot_pair(
-        idata,
-        var_names=["eta_Intercept", "eta_x", "a", "t"],
-    )
-    plt.gcf()
+    if idata is not None:
+        az.plot_pair(
+            idata,
+            var_names=["eta_Intercept", "eta_x", "a", "t"],
+        )
+        _pair = plt.gcf()
+        plt.close(_pair)
+    else:
+        _pair = None
+    _pair
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ## 6. Posterior predictive checks
@@ -455,14 +591,21 @@ def _(mo):
 
 
 @app.cell
-def _(idata, model, plt):
-    model.sample_posterior_predictive(idata, kind="response", draws=100)
-    model.plot_predictive(x_range=(-4, 4))
-    plt.gcf()
+def _(idata, model, plt, run_config):
+    if idata is not None:
+        model.sample_posterior_predictive(
+            idata, kind="response", draws=run_config["ppc_draws"]
+        )
+        model.plot_predictive(x_range=(-4, 4))
+        _ppc = plt.gcf()
+        plt.close(_ppc)
+    else:
+        _ppc = None
+    _ppc
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ### Fixation-continuation policies
@@ -490,22 +633,27 @@ def _(mo):
 
 
 @app.cell
-def _(idata, model, plt):
+def _(idata, model, plt, run_config):
     # Same fitted model, a different continuation policy — chosen per call, no re-fit.
     _gamma = {"dist": "gamma", "dist_params": {"a": 6.0, "scale": 0.1}}
-    model.sample_posterior_predictive(
-        idata,
-        kind="response",
-        draws=100,
-        continuation_mode="sample_continuation",
-        continuation_params=_gamma,
-    )
-    model.plot_predictive(x_range=(-4, 4))
-    plt.gcf()
+    if idata is not None:
+        model.sample_posterior_predictive(
+            idata,
+            kind="response",
+            draws=run_config["ppc_draws"],
+            continuation_mode="sample_continuation",
+            continuation_params=_gamma,
+        )
+        model.plot_predictive(x_range=(-4, 4))
+        _continuation_ppc = plt.gcf()
+        plt.close(_continuation_ppc)
+    else:
+        _continuation_ppc = None
+    _continuation_ppc
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## 7. Model cartoon
@@ -529,17 +677,22 @@ def _(mo):
 
 @app.cell
 def _(hssm, idata, model, plt):
-    hssm.plotting.plot_model_cartoon(
-        model,
-        dt=idata,
-        n_samples=8,
-        n_trajectories=5,
-        bins=25,
-        plot_predictive_mean=True,
-        plot_predictive_samples=False,
-        title="aDDM model cartoon",
-    )
-    plt.gcf()
+    if idata is not None:
+        hssm.plotting.plot_model_cartoon(
+            model,
+            dt=idata,
+            n_samples=8,
+            n_trajectories=5,
+            bins=25,
+            plot_predictive_mean=True,
+            plot_predictive_samples=False,
+            title="aDDM model cartoon",
+        )
+        _cartoon = plt.gcf()
+        plt.close(_cartoon)
+    else:
+        _cartoon = None
+    _cartoon
     return
 
 

@@ -22,8 +22,7 @@ The key difference from `hssm.hssm.HSSM` is the likelihood:
 """
 
 import logging
-import warnings
-from dataclasses import replace
+from copy import copy
 from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
@@ -34,15 +33,19 @@ import pymc as pm
 if TYPE_CHECKING:
     from pytensor.graph import Op
 
+    from hssm._types import LoglikKind
+
 
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
+    INITVAL_SETTINGS,
 )
 from hssm.distribution_utils import make_distribution
 from hssm.rl.likelihoods.builder import make_rl_logp_op
 from hssm.rl.utils import validate_balanced_panel
 
 from ..base import HSSMBase, classproperty
+from ..param.utils import _clamp_default_initval_to_bounds
 from .config import RLSSMConfig
 from .registry import DEFAULT_RLSSM_MODEL, get_rlssm_model_config, list_models
 
@@ -91,9 +94,13 @@ class _RLSSM(HSSMBase):
     lapse : dict | bmb.Prior | None, optional
         Lapse distribution. Defaults to ``None``.
     link_settings : Literal["log_logit"] | None, optional
-        Link-function preset. Defaults to ``None``.
+        Link-function preset for regression parameters without an explicit link.
+        Accepts ``"log_logit"`` or ``None``. Defaults to ``None``.
     prior_settings : Literal["safe"] | None, optional
-        Prior preset. Defaults to ``"safe"``.
+        Generated regression-term prior preset. ``"safe"`` uses HSSM defaults;
+        ``None`` delegates missing regression-term priors to Bambi. Parameters without
+        regressions retain their explicit, model-config, or bounds-derived priors.
+        Defaults to ``"safe"``.
     extra_namespace : dict | None, optional
         Extra variables for formula evaluation. Defaults to ``None``.
     missing_data : bool | float, optional
@@ -143,7 +150,8 @@ class _RLSSM(HSSMBase):
         # ===== save/load serialisation =====
         self._init_args = self._store_init_args(locals(), kwargs)
 
-        # Validate config (ensures ssm_logp_func is present, etc.)
+        # Validation resolves response metadata; keep the caller's inputs unchanged.
+        model_config = copy(model_config)
         model_config.validate()
 
         # RLSSM reshapes rows into (n_participants, n_trials, ...) by position,
@@ -177,9 +185,6 @@ class _RLSSM(HSSMBase):
         # Infer panel structure and validate balance BEFORE calling super so any
         # error surfaces before the expensive model-build steps.
         n_participants, n_trials = validate_balanced_panel(data, participant_col)
-        if model_config.is_choice_only:
-            self._validate_choice_only_responses(data, model_config)
-
         # Store RL-specific state on self BEFORE super().__init__() so that
         # _make_model_distribution() (called from super) can access them.
         self.n_participants = n_participants
@@ -203,14 +208,8 @@ class _RLSSM(HSSMBase):
             extra_fields=list(model_config.extra_fields or []),
         )
 
-        # Build a new RLSSMConfig with the Op and backend injected, leaving
-        # the caller's object unmodified (dataclasses.replace creates a shallow
-        # copy with only the specified fields overridden).
-        #
-        # backend is hardcoded to "jax" because the entire RLSSM likelihood
-        # stack is JAX-only. See ssm_logp_func, make_rl_logp_op, and
-        #  _make_model_distribution for details.
-        model_config = replace(model_config, loglik=loglik_op, backend="jax")
+        model_config.loglik = loglik_op
+        model_config.backend = "jax"  # The RLSSM likelihood stack is JAX-only.
 
         # missing_data and deadline are guaranteed False, and
         # loglik_missing_data guaranteed None, at this point (guards above
@@ -232,58 +231,33 @@ class _RLSSM(HSSMBase):
             **kwargs,
         )
 
-    @staticmethod
-    def _validate_choice_only_responses(
-        data: pd.DataFrame,
-        model_config: RLSSMConfig,
+    def _postprocess_initvals_deterministic(
+        self, initval_settings: dict = INITVAL_SETTINGS
     ) -> None:
-        """Validate response labels for RLSSM choice-only observed data."""
-        if not model_config.response:
-            return
-        response_col = model_config.response[0]
-        if response_col not in data.columns:
-            return
-        if model_config.choices is None:
-            return
+        """Start simple parameters at the config's ``params_default``.
 
-        responses = data[response_col]
-        numeric_responses = pd.to_numeric(responses, errors="coerce")
-        non_numeric = numeric_responses.isna() & ~responses.isna()
-        if non_numeric.any():
-            raise ValueError(
-                "Choice-only RLSSM response labels must be numeric. "
-                f"Invalid values: {responses[non_numeric].unique().tolist()}"
+        A bounds-derived prior starts at its midpoint, which need not be a valid
+        point of the decision process: the LBA requires ``b > A``, and in the
+        ssms box both start at 0.5. A user-specified prior keeps its own start,
+        and HSSM's shared defaults in ``initval_settings`` keep precedence.
+        """
+        super()._postprocess_initvals_deterministic(initval_settings)
+        shared = initval_settings[None]
+        for name, value in zip(
+            self.model_config.list_params or [],
+            self.model_config.params_default,  # type: ignore[attr-defined]
+        ):
+            # Regressions start through their terms, not under the bare name.
+            if name not in self._initvals or name in shared:
+                continue
+            # The default may lie outside a user's prior, e.g. b ~ Uniform(0.8, 0.95).
+            user_param = self.params[name].user_param
+            if user_param is not None and user_param.prior is not None:
+                continue
+            start = _clamp_default_initval_to_bounds(
+                value, name, self.params[name].bounds
             )
-
-        response_values = numeric_responses.to_numpy(dtype=float)
-        if not np.all(np.isfinite(response_values)):
-            raise ValueError("Choice-only RLSSM response labels must be finite.")
-
-        if not np.all(np.equal(response_values, np.round(response_values))):
-            raise ValueError("Choice-only RLSSM response labels must be integral.")
-
-        response_ints = response_values.astype(int)
-        unique_responses = np.unique(response_ints)
-        choices = np.asarray(model_config.choices, dtype=int)
-
-        if np.any(~np.isin(unique_responses, choices)):
-            invalid_responses = sorted(
-                unique_responses[~np.isin(unique_responses, choices)].tolist()
-            )
-            raise ValueError(
-                f"Invalid responses found in your dataset: {invalid_responses}"
-            )
-
-        missing_responses = sorted(np.setdiff1d(choices, unique_responses).tolist())
-        if missing_responses:
-            warnings.warn(
-                (
-                    f"You set choices to be {model_config.choices}, but "
-                    f"{missing_responses} are missing from your dataset."
-                ),
-                UserWarning,
-                stacklevel=2,
-            )
+            self._initvals[name] = np.asarray(start, self._initvals[name].dtype)
 
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Build a pm.Distribution using the pre-built RL log-likelihood Op.
@@ -341,11 +315,6 @@ class _RLSSM(HSSMBase):
         if self.model_config.is_choice_only and isinstance(
             lapse, int | float | np.floating
         ):
-            if not 0 < float(lapse) <= 1:
-                raise ValueError(
-                    "Choice-only RLSSM scalar lapse probabilities must satisfy "
-                    "0 < lapse <= 1."
-                )
             # Base._check_lapse() supplies choice-only scalar lapse as
             # 1 / n_choices, while make_distribution() expects float lapse
             # values to already be log probabilities.
@@ -360,6 +329,9 @@ class _RLSSM(HSSMBase):
             extra_fields=extra_fields_data,
             params_is_trialwise=params_is_trialwise,
             is_choice_only=self.model_config.is_choice_only,
+            # __init__ takes an RLSSMConfig, which is where ndt_edge_shift lives.
+            ndt_edge_shift=cast("RLSSMConfig", self.model_config).ndt_edge_shift,
+            expected_obs_dim=self._obs_dim,
         )
 
 
@@ -421,7 +393,9 @@ class RLSSM(_RLSSM):
     Parameters
     ----------
     data : pd.DataFrame
-        Trial-level data (balanced panel required).
+        Trial-level data (balanced panel required). Rows must be grouped by
+        participant and, within each participant, in trial order: the learning
+        sequence is read from row order.
     model : str | None, optional
         Name of an ``ssms.rl`` preset or custom registered RLSSM model. Defaults
         to ``"2AB_RW_DDM"``.
@@ -447,15 +421,26 @@ class RLSSM(_RLSSM):
     lapse : dict | bmb.Prior | None, optional
         Lapse distribution. Defaults to ``None``.
     link_settings : Literal["log_logit"] | None, optional
-        Link-function preset. Defaults to ``None``.
+        Link-function preset for regression parameters without an explicit link.
+        Accepts ``"log_logit"`` or ``None``. Defaults to ``None``.
     prior_settings : Literal["safe"] | None, optional
-        Prior preset. Defaults to ``"safe"``.
+        Generated regression-term prior preset. ``"safe"`` uses HSSM defaults;
+        ``None`` delegates missing regression-term priors to Bambi. Parameters without
+        regressions retain their explicit, model-config, or bounds-derived priors.
+        Defaults to ``"safe"``.
     extra_namespace : dict | None, optional
         Extra variables for formula evaluation. Defaults to ``None``.
     process_initvals : bool, optional
         Whether to post-process initial values. Defaults to ``True``.
     initval_jitter : float, optional
         Jitter magnitude for initial values.
+    decision_process_loglik_kind : LoglikKind | None, optional
+        Which likelihood of the decision process to use, e.g. ``"analytical"``
+        for the exact DDM instead of the default ``"approx_differentiable"``
+        LAN. ``None`` uses the registry default. With *model_config*, it must
+        match ``model_config.decision_process_loglik_kind``. A decision process
+        registered with `hssm.rl.register_ssm` has a single likelihood, so for
+        it the kind is only a label.
     **kwargs
         Additional keyword arguments forwarded to `bmb.Model`.
     """
@@ -499,6 +484,7 @@ class RLSSM(_RLSSM):
         extra_namespace: dict[str, Any] | None = None,
         process_initvals: bool = True,
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
+        decision_process_loglik_kind: "LoglikKind | None" = None,
         **kwargs: Any,
     ) -> None:
         # Capture simplified args BEFORE calling super so they can be
@@ -517,12 +503,28 @@ class RLSSM(_RLSSM):
                 "model_config was provided; ignoring model, learning_process, "
                 "decision_process, and choices arguments."
             )
+        # Unlike the structural overrides, a likelihood kind is not ignored:
+        # silently fitting the LAN after asking for "analytical" would be wrong.
+        if (
+            model_config is not None
+            and decision_process_loglik_kind is not None
+            and decision_process_loglik_kind
+            != model_config.decision_process_loglik_kind
+        ):
+            raise ValueError(
+                f"decision_process_loglik_kind={decision_process_loglik_kind!r} "
+                "conflicts with model_config.decision_process_loglik_kind="
+                f"{model_config.decision_process_loglik_kind!r}. Build the config "
+                "with get_rlssm_model_config(..., decision_process_loglik_kind=...) "
+                "or drop one of the two."
+            )
 
         model_config = model_config or get_rlssm_model_config(
             model=model or DEFAULT_RLSSM_MODEL,
             choices=choices,
             learning_process=learning_process,
             decision_process=decision_process,
+            decision_process_loglik_kind=decision_process_loglik_kind,
         )
 
         # missing_data / deadline are intentionally omitted — _RLSSM defaults

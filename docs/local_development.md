@@ -70,3 +70,14 @@ We recommend that you run the test suite with `uv run` command:
 ```sh
 uv run pytest
 ```
+
+### Build the documentation
+
+Use the repository entry point so local builds match documentation CI. The
+build command runs the documentation weight guard and strict MkDocs validation;
+the serve command starts the same environment for local preview.
+
+```sh
+./scripts/docs.sh build
+./scripts/docs.sh serve
+```

@@ -131,6 +131,7 @@ def _compute_log_likelihood(
     dt: xr.DataTree,
     data: pd.DataFrame | None,
     inplace: bool = True,
+    compile_mode: str | None = None,
 ) -> xr.DataTree | None:
     """Compute the model's log-likelihood.
 
@@ -147,6 +148,10 @@ def _compute_log_likelihood(
     inplace : bool
         If True` it will modify `dt` in-place. Otherwise, it will return a copy of
         `dt` with the `log_likelihood` group added.
+    compile_mode : str, optional
+        PyTensor compilation mode for the response log-probability graph. JAX-backed
+        HSSM models pass ``"JAX"`` so their custom likelihood Ops use their
+        ``jax_funcify`` registrations instead of PyMC's default Numba linker.
 
     Returns
     -------
@@ -160,7 +165,7 @@ def _compute_log_likelihood(
     sample_new_groups = False
 
     # Get the aliased response name
-    response_aliased_name = get_aliased_name(model.response_component.term)
+    response_aliased_name = get_aliased_name(_get_response_term(model))
 
     if not inplace:
         dt = dt.copy(deep=True)
@@ -171,10 +176,19 @@ def _compute_log_likelihood(
         dt, data, include_group_specific, sample_new_groups
     )
 
-    required_kwargs = {"model": model, "posterior": dt["posterior"], "data": data}
+    required_kwargs = {
+        "model": model,
+        # `.children[...]` is typed as DataTree; `dt[...]` is DataTree | DataArray
+        "posterior": dt.children["posterior"],
+        "data": data,
+        "compile_mode": compile_mode,
+    }
 
     if not model.family:
         raise ValueError("Model family is not defined. Cannot compute log-likelihood.")
+    # bambi annotates `posterior` as a DataArray, but a DataTree's "posterior"
+    # child is itself a DataTree, which is what it is handed and handles.
+    # pyrefly: ignore[bad-argument-type]
     log_likelihood_out = log_likelihood(model.family, **required_kwargs).to_dataset(
         name=response_aliased_name
     )
@@ -196,8 +210,9 @@ def _compute_log_likelihood(
 def log_likelihood(
     family: bmb.Family,
     model: bmb.Model,
-    posterior: xr.DataArray,
+    posterior: xr.Dataset | xr.DataTree,
     data: pd.DataFrame | None = None,
+    compile_mode: str | None = None,
     **kwargs,
 ) -> xr.DataArray:
     """Evaluate the model log-likelihood.
@@ -210,12 +225,14 @@ def log_likelihood(
     ----------
     model : bambi.Model
         The model
-    posterior : xr.Dataset
-        The xarray dataset that contains the draws for
-        all the parameters in the posterior.
+    posterior : xr.Dataset | xr.DataTree
+        The xarray dataset (or the `posterior` group of a DataTree) that
+        contains the draws for all the parameters in the posterior.
         It must contain the parameters that are needed
         in the distribution of the response, or
         the parameters that allow to derive them.
+    compile_mode : str, optional
+        PyTensor compilation mode for the response log-probability graph.
     kwargs :
         Parameters that are used to get draws but do
         not appear in the posterior object or
@@ -231,15 +248,26 @@ def log_likelihood(
     # Child classes pass "y_values" through the "y" kwarg
     y_values = kwargs.pop("y", None)
 
+    response_term = _get_response_term(model)
+    # HSSM builds its own response, so Bambi's multi-column responses are
+    # refused here instead of re-implementing Bambi's PyMC backend (#1452).
+    if any(
+        getattr(response_term, flag, False)
+        for flag in ("is_constrained", "is_truncated", "is_censored")
+    ):
+        raise NotImplementedError(
+            "`log_likelihood` does not support Bambi's `constrained(...)`, "
+            "`truncated(...)` and `censored(...)` responses."
+        )
+
     # Get the values of the outcome variable
     if y_values is None:  # when it's not handled by the specific family
         if data is None:
-            y_values = np.squeeze(model.response_component.term.data)
+            y_values = np.squeeze(response_term.data)
         else:
             y_values = response_evaluate_new_data(model, data)
 
     response_dist = get_response_dist(model.family)
-    response_term = model.response_component.term
     kwargs, coords = family._make_dist_kwargs_and_coords(model, posterior, **kwargs)
 
     # If it's multivariate, it's going to have a fourth coord,
@@ -260,50 +288,44 @@ def log_likelihood(
     # on_unused_input="ignore" is needed because fixed-vector parameters
     # are substituted with constants inside HSSMDistribution.logp(), making
     # the corresponding input variable unused in the compiled graph.
-    if not response_term.is_constrained:
-        # pyrefly: ignore[no-matching-overload]
-        rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
-        logp_compiled = pm.compile(
-            [val for key_, val in pt_dict.items()],
-            rv_logp,
-            allow_input_downcast=True,
-            on_unused_input="ignore",
-        )
-    else:
-        # Bounds are scalars, we can safely pick them from the first row
-        lower, upper = response_term.data[0, 1:]
-        lower = lower if lower != -np.inf else None
-        upper = upper if upper != np.inf else None
+    # pyrefly: ignore[no-matching-overload]
+    rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
+    logp_compiled = pm.compile(
+        [val for key_, val in pt_dict.items()],
+        rv_logp,
+        mode=compile_mode,
+        allow_input_downcast=True,
+        on_unused_input="ignore",
+    )
 
-        # Finally evaluate logp
-        rv_logp = pm.logp(
-            pm.Truncated.dist(
-                response_dist.dist(**kwargs_prep), lower=lower, upper=upper
-            ),
-            y_values,
-        )
-        logp_compiled = pm.compile(
-            [val for key_, val in pt_dict.items()],
-            rv_logp,
-            allow_input_downcast=True,
-            on_unused_input="ignore",
-        )
-
-    # Loop through chain and draws
-    for ids in itertools.product(coords["chain"].values, coords["draw"].values):
+    # Loop through chain and draws by position: the coordinate values need not
+    # be 0, 1, ..., e.g. once burn-in draws are dropped or the trace is thinned.
+    for i_chain, i_draw in itertools.product(range(n_chains), range(n_draws)):
         kwargs_tmp = {
             key_: (
-                val[ids[0], ids[1], ...]
+                val[i_chain, i_draw, ...]
                 if (val.shape[0] == n_chains and val.shape[1] == n_draws)
                 else val[0, 0, ...]
             )
             for key_, val in kwargs.items()
         }
 
-        output_array[ids[0], ids[1], :] = logp_compiled(**kwargs_tmp)
+        output_array[i_chain, i_draw, :] = logp_compiled(**kwargs_tmp)
 
     # output_array
     return xr.DataArray(output_array, coords=coords)
+
+
+def _get_response_term(model: bmb.Model) -> Any:
+    """Return the response term of a Bambi model.
+
+    ``Model.response_term`` replaces ``Model.response_component.term``, which is
+    deprecated in Bambi 0.21.0. The fallback keeps older Bambi versions allowed
+    by ``pyproject.toml`` working.
+    """
+    if hasattr(type(model), "response_term"):
+        return model.response_term
+    return model.response_component.term
 
 
 def get_response_dist(family: bmb.Family) -> type[pm.Distribution]:
@@ -343,12 +365,51 @@ def set_floatX(dtype: Literal["float32", "float64"], update_jax: bool = True):
     update_jax : optional
         Whether this function also sets float type for JAX by changing the
         `jax_enable_x64` setting in JAX config. Defaults to True.
+
+    Notes
+    -----
+    With `dtype="float32"` and `update_jax=True`, JAX's
+    `jax_default_matmul_precision` is also set to `"highest"`, unless you have
+    already chosen a precision (through the `JAX_DEFAULT_MATMUL_PRECISION`
+    environment variable or `jax.config.update`). JAX's default runs float32
+    matrix multiplications on NVIDIA GPUs from Ampere on as TF32, whose 10-bit
+    mantissa can stall NUTS on LAN likelihoods. On TPUs, `"highest"` likewise
+    replaces JAX's default of bfloat16 matrix multiplications. On CPUs the
+    setting changes nothing. Full float32 costs speed: on one RTX A5000, a LAN
+    log-likelihood and its gradient on 10,000 or more trials took about 1.3x as
+    long as under TF32, and data-center GPUs (A100, H100), whose TF32
+    throughput is much higher than their float32 throughput, can lose more. To
+    trade precision for speed, set `JAX_DEFAULT_MATMUL_PRECISION=tensorfloat32`
+    before importing JAX. Calling
+    `jax.config.update("jax_default_matmul_precision", "tensorfloat32")` after
+    this function works too, but only in the current process (see below).
+
+    The precision is also written to the environment (`floatX` into
+    `PYTENSOR_FLAGS`, and JAX's matmul precision into
+    `JAX_DEFAULT_MATMUL_PRECISION`). Processes started afterwards, such as
+    PyMC's chains under the `"spawn"` or `"forkserver"` start method, are fresh
+    interpreters that read these settings from the environment. A forkserver that
+    is already running keeps the environment it started with, so call this
+    function before the first multi-process PyMC fit. A `jax.config.update`
+    after this function does not reach the environment, so the workers keep the
+    precision written here; the environment variable set before importing JAX
+    covers both. With `update_jax=False`, `PYTENSOR_FLAGS` still carries
+    `floatX`, and PyTensor's JAX dispatch sets `jax_enable_x64` from it in the
+    workers, so float32 turns x64 off there.
     """
     if dtype not in ["float32", "float64"]:
         raise ValueError('`dtype` must be either "float32" or "float64".')
 
     pytensor.config.floatX = dtype
     _logger.info("Setting PyTensor floatX type to %s.", dtype)
+    # A fresh interpreter imports PyTensor with floatX from PYTENSOR_FLAGS, and
+    # PyTensor's JAX dispatch then sets jax_enable_x64 from it.
+    flags = [
+        flag
+        for flag in os.environ.get("PYTENSOR_FLAGS", "").split(",")
+        if flag.strip() and flag.split("=")[0].strip() != "floatX"
+    ]
+    os.environ["PYTENSOR_FLAGS"] = ",".join([*flags, f"floatX={dtype}"])
 
     if update_jax:
         jax_enable_x64 = dtype == "float64"
@@ -359,6 +420,16 @@ def set_floatX(dtype: Literal["float32", "float64"], update_jax: bool = True):
             + "If this is not intended, please set `jax` to False.",
             jax_enable_x64,
         )
+
+        # None: nobody has chosen a precision, so JAX would use TF32 on GPUs.
+        if dtype == "float32" and jax.config.jax_default_matmul_precision is None:
+            jax.config.update("jax_default_matmul_precision", "highest")
+            _logger.info(
+                'Setting "jax_default_matmul_precision" to "highest" '
+                "(full float32 matrix multiplications, no TF32 on GPUs)."
+            )
+        if precision := jax.config.jax_default_matmul_precision:
+            os.environ["JAX_DEFAULT_MATMUL_PRECISION"] = precision
 
 
 def _print_prior(term: CommonTerm | GroupSpecificTerm) -> str:
@@ -472,7 +543,8 @@ def _random_sample(
 def _rearrange_data(data: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarray:
     """Rearrange a dataframe so that missing values are on top.
 
-    We assume the dataframe's first column can contain missing values coded as -999.0.
+    Missing values are coded as -999.0 in the ``rt`` column of a dataframe (its
+    first column if it has no ``rt`` column) and in the first column of an array.
 
     Parameters
     ----------
@@ -485,7 +557,11 @@ def _rearrange_data(data: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarra
         The rearranged dataframe.
     """
     if isinstance(data, pd.DataFrame):
-        missing_indices = data.iloc[:, 0] == -999.0
+        # `rt` need not be the first column, e.g. after a `participant_id` column.
+        rt = data["rt"] if "rt" in data.columns else data.iloc[:, 0]
+        # `fillna`: with a nullable dtype, `pd.NA` compares to `pd.NA`, and such a row
+        # would fall out of both splits below.
+        missing_indices = (rt == -999.0).fillna(False)
         split_missing = data.loc[missing_indices, :]
         split_not_missing = data.loc[~missing_indices, :]
 
@@ -561,19 +637,35 @@ def predictive_dt_to_dataframe(
         The DataTree object to convert.
     predictive_group : Literal["posterior_predictive", "prior_predictive"]
         The predictive group to convert.
+    response_str
+        Comma-separated physical response column names in configured order.
+    response_dim
+        Name of the vector response coordinate. Scalar responses have no such
+        coordinate.
 
     Returns
     -------
     pd.DataFrame:
         A dataframe with the predictive samples.
     """
-    df = dt[predictive_group].ds.to_dataframe().reset_index(drop=False)
+    predictive = dt[predictive_group].ds[response_str]
+    df = predictive.to_dataframe().reset_index()
+    response_names = response_str.split(",")
+    if response_dim not in df.columns:
+        if any(dim not in {"chain", "draw", "__obs__"} for dim in predictive.dims):
+            raise ValueError(
+                f"Predictive response coordinate {response_dim!r} is missing."
+            )
+        return df.loc[:, ["chain", "draw", "__obs__", response_str]].rename(
+            columns={response_str: response_names[0]}
+        )
+
     df_wide = df.pivot_table(
         index=["chain", "draw", "__obs__"], columns=response_dim, values=response_str
     ).reset_index()
 
     df_wide.columns.name = None
-    df_wide = df_wide.rename(columns={0: "rt", 1: "response"})
+    df_wide = df_wide.rename(columns=dict(enumerate(response_names)))
     return df_wide
 
 
@@ -615,58 +707,6 @@ class SuppressOutput:
         self._stderr_context.__exit__(exc_type, exc_value, traceback)
         self._null_file.close()
         logging.disable(logging.NOTSET)  # Re-enable logging
-
-
-@contextlib.contextmanager
-def _force_jax_nuts_no_jitter(active: bool = True):
-    """Temporarily disable the JAX-NUTS initial-value jitter inside ``pm.sample``.
-
-    PyMC 6's ``pm.sample(nuts_sampler="numpyro"|"blackjax")`` always calls
-    ``pymc.sampling.jax.sample_jax_nuts`` with its default ``jitter=True`` and exposes
-    no supported way to turn it off (passing ``jitter`` via ``nuts=`` routes it into the
-    NumPyro/BlackJAX *kernel* and raises ``TypeError``). HSSM applies its own controlled
-    jitter to the initial values (``initval_jitter``, default 0.01), so the sampler's
-    extra ``uniform(-1, 1)`` jitter is unwanted. Because ``pymc.sampling.mcmc`` resolves
-    the sampler as a module attribute at call time, temporarily replacing that attribute
-    with a wrapper that forces ``jitter=False`` is picked up by ``pm.sample``.
-
-    Parameters
-    ----------
-    active
-        When ``False`` the context manager is a no-op (used for the non-JAX samplers).
-        This lets callers wrap the ``fit`` call unconditionally without importing
-        ``contextlib`` themselves. Defaults to ``True``.
-
-    Notes
-    -----
-    If a future PyMC release removes or renames ``sample_jax_nuts``, the context manager
-    degrades to a no-op instead of raising.
-    """
-    if not active:
-        yield
-        return
-
-    try:
-        import pymc.sampling.jax as pymc_jax
-    except ImportError:  # pragma: no cover - jax extras always present in HSSM
-        yield
-        return
-
-    original = getattr(pymc_jax, "sample_jax_nuts", None)
-    if original is None:  # pragma: no cover - guards a future pymc refactor
-        yield
-        return
-
-    @functools.wraps(original)
-    def _no_jitter_sample_jax_nuts(*args, **kwargs):
-        kwargs["jitter"] = False
-        return original(*args, **kwargs)
-
-    pymc_jax.sample_jax_nuts = _no_jitter_sample_jax_nuts
-    try:
-        yield
-    finally:
-        pymc_jax.sample_jax_nuts = original
 
 
 def annotate_function(**kwargs):
