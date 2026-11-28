@@ -23,6 +23,8 @@ reference journey, not a required step in the first-user path.
   connect an experimental design to parameter formulas.
 - [Choice-only models](../tutorials/choice_only_models.ipynb) cover decisions
   without response times.
+- [Circular diffusion](../tutorials/circular_diffusion.ipynb) fits response
+  time and a continuously reported direction, then checks both with a single plot.
 - [Poisson race models](../tutorials/poisson_race.ipynb) introduce a
   multi-accumulator model.
 - [HMMs with DDM emissions](../tutorials/hmm_ddm_regime_switching.ipynb) model
