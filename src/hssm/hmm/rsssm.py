@@ -31,6 +31,7 @@ from ..base import HSSMBase
 from ..config import BaseModelConfig, _resolve_response_domains
 from ..defaults import INITVAL_SETTINGS
 from ..modelconfig import get_default_model_config
+from ..param.utils import _clamp_default_initval_to_bounds
 from .config import RSSSMConfig
 from .likelihoods.builder import make_hmm_logp_op
 from .likelihoods.emissions import resolve_emission_dist
@@ -490,11 +491,21 @@ class RSSSM(HSSMBase):
         choices: Sequence[int] | None = None
         if isinstance(model_name, str):
             try:
-                choices = get_default_model_config(cast("SupportedModels", model_name))[
-                    "choices"
-                ]
+                entry: dict[str, Any] = dict(
+                    get_default_model_config(cast("SupportedModels", model_name))
+                )
             except Exception:  # custom / unregistered model name
-                choices = None
+                entry = {}
+            domains = entry.get("response_domains") or {}
+            other = {
+                c: d["kind"] for c, d in domains.items() if d["kind"] != "categorical"
+            }
+            if other:
+                raise NotImplementedError(
+                    f"RSSSM supports emissions with categorical choices only; "
+                    f"model {model_name!r} declares {other}."
+                )
+            choices = entry.get("choices")
         if choices is None:
             choices = (
                 model.choices if isinstance(model, BaseModelConfig) else cfg.choices
@@ -859,6 +870,16 @@ class RSSSM(HSSMBase):
 
         # Inferred: resolve the prior (explicit dict/Prior, else default).
         prior = spec if isinstance(spec, (dict, bmb.Prior)) else None
+        # Such a prior keeps its distribution in `dist` and leaves `args` empty,
+        # so building from the name alone would silently use that distribution's
+        # defaults.
+        if isinstance(prior, bmb.Prior) and prior.dist is not None:
+            raise NotImplementedError(
+                f"The prior for {name!r} has bounds or a custom `dist`, which "
+                "RSSSM does not support yet. Use a distribution that carries its "
+                'own bounds, for example {"name": "TruncatedNormal", "mu": ..., '
+                '"sigma": ..., "lower": ..., "upper": ...}.'
+            )
         if prior is None:
             if name == "p_outlier":
                 # Weakly-informative small-lapse default (mean ~0.06).
@@ -939,6 +960,9 @@ class RSSSM(HSSMBase):
         val = INITVAL_SETTINGS.get(None, {}).get(name)
         if val is None:
             return None
+        # The shared defaults can lie outside a model's bounds (t = 0.025 against
+        # a network trained on t >= 0.25), where the log-probability is NaN.
+        val = _clamp_default_initval_to_bounds(float(val), name, self.bounds.get(name))
         if shape is None:
             return float(val)
         return pm.pytensorf.floatX(np.full(shape, float(val)))
@@ -1370,6 +1394,7 @@ class RSSSM(HSSMBase):
             Index of the participant to plot.
         true_regimes
             Optional ground-truth regime sequence to overlay as a step line.
+            Regime ``k`` is drawn at ``k / (K - 1)``.
         ax
             Optional matplotlib axis; created when ``None``.
         n_draws, seed
@@ -1400,13 +1425,15 @@ class RSSSM(HSSMBase):
             alpha=0.8,
         )
         if true_regimes is not None:
+            # Regime k is drawn at k / (K - 1), so that every regime lies on the
+            # [0, 1] probability axis (unchanged for K = 2).
             ax.step(
                 trials,
-                np.asarray(true_regimes)[:n_real],
+                np.asarray(true_regimes)[:n_real] / (self.K - 1),
                 where="mid",
                 color="black",
                 lw=1.0,
-                label="true regime",
+                label="true regime" if self.K == 2 else "true regime / (K - 1)",
             )
         ax.set_xlabel("trial")
         ax.set_ylabel("P(regime | data)")

@@ -83,7 +83,9 @@ def pad_and_align_to_T_max(
     # Participant rows must be contiguous; the forward recursion reshapes by
     # row position, so interleaved rows would mix subjects.
     pid = data[participant_col]
-    n_runs = int((pid != pid.shift()).sum())
+    # fillna: with a nullable dtype (Int64, string) the first comparison, against
+    # the shifted-in missing value, is NA and would not count as a run.
+    n_runs = int((pid != pid.shift()).fillna(True).sum())
     n_unique = int(pid.nunique())
     if n_runs != n_unique:
         raise ValueError(
