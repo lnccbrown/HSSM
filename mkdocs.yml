@@ -19,6 +19,7 @@ not_in_nav: |
   tutorials/attentional_ddm.py
   tutorials/centered_vs_noncentered_basic_logic.py
   tutorials/choice_only_models.py
+  tutorials/circular_diffusion.py
   tutorials/main_tutorial.py
   tutorials/main_tutorial_scenic_route.py
   tutorials/link_functions.py
@@ -48,6 +49,7 @@ nav:
       - Model walkthroughs:
           - Hierarchical DDM regressions: tutorials/ddm_hierarchical_tutorial.ipynb
           - Choice-only models: tutorials/choice_only_models.ipynb
+          - Circular diffusion: tutorials/circular_diffusion.ipynb
           - Poisson race models: tutorials/poisson_race.ipynb
           - HMM with DDM emissions: tutorials/hmm_ddm_regime_switching.ipynb
           - Regime-switching SSMs (RSSSM), two regimes: tutorials/rsssm_regime_switching.ipynb
@@ -157,6 +159,7 @@ plugins:
         - tutorials/attentional_ddm.py
         - tutorials/centered_vs_noncentered_basic_logic.py
         - tutorials/choice_only_models.py
+        - tutorials/circular_diffusion.py
         - tutorials/main_tutorial.py
         - tutorials/main_tutorial_scenic_route.py
         - tutorials/link_functions.py
@@ -179,6 +182,7 @@ plugins:
         - tutorials/hsgp_regression.ipynb
         - tutorials/ddm_hierarchical_tutorial.ipynb
         - tutorials/choice_only_models.ipynb
+        - tutorials/circular_diffusion.ipynb
         - tutorials/choice_only_rlssm.ipynb
         - tutorials/variational_inference.ipynb
         - tutorials/centered_vs_noncentered_basic_logic.ipynb

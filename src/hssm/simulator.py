@@ -5,6 +5,15 @@ import pandas as pd
 from numpy.typing import ArrayLike
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import get_model_registry
+from ssms.hssm_support import decorate_atomic_simulator
+
+
+@decorate_atomic_simulator("circular_diffusion", choices=[], obs_dim=2)
+def _sample_circular_diffusion(theta, random_state, n_replicas):
+    """Draw uncensored RT/angle pairs for the model's predictive distribution."""
+    from ssms.basic_simulators.circular_diffusion import sample_circular_diffusion
+
+    return sample_circular_diffusion(theta, random_state, n_replicas)
 
 
 def simulate_data(
@@ -59,6 +68,17 @@ def simulate_data(
     # explicitly requests otherwise.
     if model == "poisson_race" and "smooth_unif" not in kwargs:
         kwargs["smooth_unif"] = False
+
+    if model == "circular_diffusion" and isinstance(theta, dict):
+        # HSSM names the Cartesian components v_x/v_y; ssms uses vx/vy.
+        theta = theta.copy()
+        for public, internal in (("v_x", "vx"), ("v_y", "vy")):
+            if public in theta:
+                if internal in theta:
+                    raise ValueError(
+                        f"Specify only one of {public!r} and {internal!r}."
+                    )
+                theta[internal] = theta.pop(public)
 
     sims = simulator(
         theta,

@@ -3,6 +3,9 @@
 import jax.numpy as jnp
 from scipy.special import j1, jn_zeros
 
+# Coordinate convention supported by this standalone analytical density.
+_ANGLE_SUPPORT = (-jnp.pi, jnp.pi)
+
 # Positive zeros of J0. Compute once in SciPy; the model parameters never enter
 # this calculation. Factor the slowest exponential out before taking the log.
 _ROOTS = jn_zeros(0, 16)
@@ -53,8 +56,8 @@ def logp_circular_diffusion(data, v_x, v_y, a, t):
     valid = (
         jnp.isfinite(rt)
         & (rt > t)
-        & (theta >= -jnp.pi)
-        & (theta < jnp.pi)
+        & (theta >= _ANGLE_SUPPORT[0])
+        & (theta < _ANGLE_SUPPORT[1])
         & jnp.isfinite(v_x)
         & jnp.isfinite(v_y)
         & jnp.isfinite(a)

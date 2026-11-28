@@ -47,7 +47,8 @@ def test_invalid_responses(data_ddm):
     data_ddm_miscoded["response"] = data_ddm_miscoded["response"].replace({-1.0: 0.0})
     with pytest.raises(
         ValueError,
-        match=r"Invalid responses found in your dataset: \[0\]",
+        match=r"Invalid responses found in your dataset: \[0\]\. "
+        r"The model's choices are \[-1, 1\]\.",
     ):
         hssm.HSSM(data=data_ddm_miscoded, model="ddm")
 

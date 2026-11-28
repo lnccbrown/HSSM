@@ -62,13 +62,14 @@ def _xarray_to_df(
     # Rename the columns
     stacked.columns = response_str.split(",")
 
-    # `.to_pandas()` above is typed DataFrame | Series; with a list selector
-    # `.loc` always yields a DataFrame here.
-    return cast("pd.DataFrame", stacked.loc[:, ["rt", "response"]])
+    return cast("pd.DataFrame", stacked)
 
 
 def _process_data(
-    data: pd.DataFrame, extra_dims: list[str], quantile_by_dims: list[str] | None = None
+    data: pd.DataFrame,
+    extra_dims: list[str],
+    quantile_by_dims: list[str] | None = None,
+    response_column: str = "response",
 ) -> pd.DataFrame:
     """Extract the relevant columns from the data and apply the right index.
 
@@ -80,6 +81,8 @@ def _process_data(
         Extra dimensions to be extracted from the dataframe.
     quantile_by_dims
         Extra dimensions to be used for quantiles.
+    response_column
+        Physical column paired with RT in the model's observations.
 
     Returns
     -------
@@ -96,12 +99,8 @@ def _process_data(
         elif not all(isinstance(item, str) for item in quantile_by_dims):
             raise ValueError("All elements in `quantile_by_dims` must be strings.")
 
-    if quantile_by_dims is not None:
-        data = data.reset_index(drop=True).loc[
-            :, ["rt", "response"] + extra_dims + quantile_by_dims
-        ]
-    else:
-        data = data.reset_index(drop=True).loc[:, ["rt", "response"] + extra_dims]
+    columns = ["rt", response_column, *extra_dims, *(quantile_by_dims or [])]
+    data = data.reset_index(drop=True).loc[:, columns]
 
     # Makes sure that data has similar index to posterior
     data.index = pd.MultiIndex.from_product(
@@ -259,18 +258,23 @@ def _get_plotting_df(
         raise ValueError("Either dt or data must be provided.")
 
     extra_dims = [] if extra_dims is None else extra_dims
+    # Deadline metadata can follow the two physical predictive coordinates.
+    response_columns = response_str.split(",")
+    response_column = response_columns[1] if len(response_columns) > 1 else "response"
 
     if dt is None:
         if data is None:
             raise ValueError("`data` must be provided when `dt` is not provided.")
-        data = _process_data(data, extra_dims, quantile_by_dims)
+        data = _process_data(data, extra_dims, quantile_by_dims, response_column)
 
         data.insert(0, "observed", "observed")
         return data
 
     # get the posterior samples
     idata_predictive = cast("xr.DataArray", dt[predictive_group][response_str])
-    predictive = _xarray_to_df(idata_predictive, n_samples=n_samples, rng=rng)
+    predictive = _xarray_to_df(
+        idata_predictive, n_samples, response_str=f"rt,{response_column}", rng=rng
+    )
 
     if data is None:
         if extra_dims:
@@ -291,7 +295,7 @@ def _get_plotting_df(
         )
     # AD-TODO: Seems like depending on which branch is executed here
     # we are running _process_data twice.
-    data = _process_data(data, extra_dims, quantile_by_dims)
+    data = _process_data(data, extra_dims, quantile_by_dims, response_column)
 
     # merge the posterior samples with the data
     if extra_dims:
