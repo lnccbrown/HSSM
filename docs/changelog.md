@@ -118,6 +118,24 @@ This version includes the following changes:
 
 57. **`plot_model_cartoon` simulates its predicted RT histograms at the simulator's default time step** (closes #1413; by @AxelNoun). The histograms were simulated at `delta_t_model=0.01`, ten times coarser than the step the posterior predictive uses. A coarse step misses boundary crossings between grid points, so the plotted response times were too slow (about 7% on the mean upper-boundary RT in the gallery's default call). `delta_t_model` now applies only to the drawn geometry and the example trajectories. Plotted values change for a given `random_state`, and the renderer takes about a third longer.
 
+58. **`racing_diffusion_3` simulates from its parameters in the right order** (closes #1370; by @AxelNoun). The model declared its parameters as `A, b, v0, v1, v2, t`, while ssm-simulators reads them as `v0, v1, v2, A, b, t`. Fits were unaffected, but every prior and posterior predictive draw was simulated from permuted parameters, without an error. `list_params` and the signature of `logp_rdm3` now follow the simulator's order. A new test compares the parameter order and the choices of every model that has a simulator with the ssm-simulators registry.
+
+59. **`choices` accepts an integer** (closes #932; by @krishnbera). `HSSM(choices=n)` was documented, but an integer raised `TypeError` for custom models. It now expands to `(-1, 1)` for 2 and to `(0, …, n - 1)` for more; a value below 2 raises `ValueError`. For custom models, `choices` set in `model_config` now takes precedence over the argument and over the ssm-simulators fallback, as the log message already said.
+
+60. **`plot_quantile_probability` accepts `marker=` and, with `groups=`, plots each group's own data** (closes #1401 and #1402; by @fmuia). `marker="o"` raised `KeyError`, because the value was looked up as a data column. With `groups=`, every per-group figure showed all groups.
+
+61. **Initial values set on bounded priors are kept** (closes #959; by @fmuia). An `initval` on a prior with bounds, or on a parent parameter without a regression (e.g. `v`), was replaced by HSSM's default start. It now takes effect, so a value outside the support gives a `NaN` start. A regression prior dict without an `Intercept` key no longer raises `KeyError: 'Intercept'` when the model is built.
+
+62. **A custom JAX likelihood that returns the wrong shape fails with a clear error** (closes #1092; by @fmuia). A wrapped JAX function that did not return one value per trial, for example because it summed over trials, gave garbage values on PyTensor's default backend and a bare `AssertionError` on the JAX backend. The shape is now checked where the function is wrapped, and the error says what was returned and what is expected.
+
+63. **The row-order error of `RLSSM` suggests a stable sort** (closes #1410; by @AxelNoun). The message suggested `data.sort_values('participant_id')`. pandas' default sort is not stable, so this grouped the rows by participant but could scramble each participant's trial order, which the learning process reads from row order; the result passed validation. The message now suggests sorting by participant and trial column with `kind='stable'`.
+
+64. **Documentation: fixing `ddm_st` and `ddm_normal_st` fits that won't converge** (closes #1496; by @EItanm1999). A how-to under "Sampling and diagnostics" walks through five symptoms on simulated data: responses faster than `t`, negative simulated response times, group means pulled to the middle of the bounds by the default group prior, a lapse term the data do not have, and the different meaning of `st` in the two models.
+
+65. **Documentation: `beta` and the logits of the softmax models are identified only as products** (#1459; by @kalyani137). The models reference explains why `softmax_inv_temperature_<n>` cannot separate `beta` from its logits in a plain choice-only fit and recommends fixing `beta` there; the model descriptions say so too.
+
+66. **Documentation: the PyMC tutorial shows how to add a hierarchy** (#370; by @kiante-fernandez). A short section builds a hierarchical model directly on HSSM's `DDM` random variable in PyMC.
+
 #### Breaking changes that require migration:
 
 1. **Choice-only models accept only the uniform lapse** (#1416). The lapse of a choice-only model, `RLSSM` included, is `1 / n_choices`; any other number, dict or `bmb.Prior` passed as `lapse` now raises `ValueError`. On 0.5.0, `RLSSM` accepted a scalar lapse in (0, 1], which does not sum to one over choices unless it equals `1 / n_choices`. Omit `lapse`.
@@ -150,9 +168,17 @@ This version includes the following changes:
    still accepted and is then invoked as `f(None, *params)`. No CPN artifact was ever published on
    the `franklab/HSSM` Hub repository, so only user-trained networks are affected.
 
+6. **`racing_diffusion_3`: the parameter order is `v0, v1, v2, A, b, t`** (#1370). Nothing changes for parameters passed by name. Code that relies on the position of a parameter, by indexing `list_params` or by calling `logp_rdm3` with positional arguments, must use the new order. Fits need no refit; rerun prior and posterior predictive draws made with an earlier version (item 58).
+
 #### Dependency changes:
 
 1. **`ssm-simulators` floor raised to `>=0.17.0`**. 0.16.0 brought the `softmax_inv_temperature_{2,3,4}` simulators (lnccbrown/ssm-simulators#421), which replace HSSM's own adapter (#1416); 0.17.0 calls the gamma shape of `gamma_drift` and `gamma_drift_angle` `k` (#1456), gives `angle` the `v` range (-6, 6) of its network (#1529), and adds the `circular_diffusion` simulator (#1518).
+
+2. **`pymc>=6.3.0` is declared** (#1389). HSSM imports PyMC directly but only received it through Bambi, which accepts 6.0. PyMC 6.3.0 passes the JAX samplers' options through `nuts={...}`, which replaces the patch HSSM applied to `pymc.sampling.jax` on 6.0 to 6.2.
+
+3. **Sampler options go into `nuts={...}`**. From PyMC 6.4.0, `model.sample(sampler="numpyro", chain_method="vectorized")` raises `TypeError: Unexpected keyword arguments for numpyro`; write `nuts={"chain_method": "vectorized"}`, which HSSM forwards on PyMC 6.3 as well. The plotting tutorial is updated.
+
+4. **Bambi is capped below 0.22** (item 56).
 
 ### 0.5.0
 
