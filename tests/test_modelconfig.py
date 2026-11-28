@@ -203,6 +203,14 @@ def test_angle_extended_is_a_deprecated_name_for_angle():
     assert config == get_default_model_config("angle")
 
 
+@pytest.mark.parametrize("loglik_kind", [None, "approx_differentiable"])
+def test_config_from_defaults_resolves_the_deprecated_angle_name(loglik_kind):
+    with pytest.warns(FutureWarning, match="'angle_extended' is deprecated"):
+        config = Config.from_defaults("angle_extended", loglik_kind)
+    assert config.model_name == "angle"
+    assert config.loglik == "angle_extended.onnx"
+
+
 @pytest.mark.parametrize("model", hssm.list_models())
 def test_load_all_supported_model_configs(model):
     assert isinstance(get_default_model_config(model), dict)
